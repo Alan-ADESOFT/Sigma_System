@@ -1,0 +1,37 @@
+/* ============================================================
+   Login Module CSS — Estilos exclusivos da página de login.
+   Importado apenas por pages/login.js.
+   ============================================================ */
+
+/* ── Wrapper principal da página de login ── */
+.page {
+  min-height: 100vh;
+  background-color: #050505;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Tela de boot (animação pós-login) ── */
+.bootScreen {
+  min-height: 100vh;
+  background: #050505;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  padding: 2rem;
+  position: relative;
+}
+
+/* ── Card de login (complementa glass-card global) ── */
+.card {
+  width: 100%;
+  max-width: 420px;
+  padding: 2rem 2rem 1.75rem;
+  position: relative;
+  z-index: 10;
+}

@@ -1,0 +1,809 @@
+/* ============================================================
+   Instagram Dashboard — globals.css
+   Estilos globais compartilhados por todas as páginas.
+   Sem Tailwind — CSS Puro.
+   Importado em pages/_app.js.
+   ============================================================ */
+
+/* ── Reset ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Design Tokens (CSS Variables) ── */
+:root {
+  /* Brand — Vermelho Primário */
+  --brand-50:  #fff0f3;
+  --brand-100: #ffe0e6;
+  --brand-200: #ffc0cc;
+  --brand-300: #ff6680;
+  --brand-400: #ff1a4d;
+  --brand-500: #ff0033;
+  --brand-600: #cc0029;
+  --brand-700: #99001f;
+  --brand-800: #660014;
+  --brand-900: #33000a;
+  --brand-950: #1a0005;
+
+  /* Dark Scale — Neutros */
+  --dark-50:  #f0f0f0;
+  --dark-100: #e0e0e0;
+  --dark-200: #d4d4d4;
+  --dark-300: #a3a3a3;
+  --dark-400: #737373;
+  --dark-500: #525252;
+  --dark-600: #2a2a2a;
+  --dark-700: #1a1a1a;
+  --dark-800: #111111;
+  --dark-900: #0a0a0a;
+  --dark-950: #050505;
+
+  /* Tokens Semânticos — Superfícies */
+  --surface-base:      #050505;
+  --surface-elevated:  #0a0a0a;
+  --surface-card:      #111111;
+
+  /* Tokens Semânticos — Bordas */
+  --border-default:    rgba(255, 255, 255, 0.04);
+  --border-subtle:     rgba(255, 255, 255, 0.07);
+  --border-accent:     rgba(255, 0, 51, 0.15);
+  --border-hover:      rgba(255, 0, 51, 0.25);
+
+  /* Tokens Semânticos — Texto */
+  --text-primary:      #f0f0f0;
+  --text-secondary:    #a3a3a3;
+  --text-muted:        #525252;
+
+  /* Tokens Semânticos — Ação */
+  --action-primary:    #ff0033;
+  --action-hover:      #ff1a4d;
+
+  /* Status */
+  --success: #22c55e;
+  --error:   #ff1a4d;
+  --warning: #f97316;
+  --info:    #3b82f6;
+
+  /* Fontes */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+}
+
+/* ── Base HTML ── */
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--surface-base);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Scrollbar customizada ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--dark-700); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--brand-500); }
+
+/* ── Seleção de texto ── */
+::selection { background: rgba(255, 0, 51, 0.25); color: #fff; }
+
+/* ── Links ── */
+a {
+  color: var(--brand-300);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--brand-400);
+}
+
+/* ============================================================
+   TIPOGRAFIA
+   ============================================================ */
+
+/* Label ultra-micro — metadados, tags de seção */
+.label-micro {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Label pequeno — rótulos de campos, cabeçalhos secundários */
+.label-sm {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Título de seção — uppercase dentro de cards */
+.section-title {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Título de página — heading principal */
+.page-title {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+/* Subtítulo de página */
+.page-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* Gradiente de texto vermelho */
+.text-gradient {
+  background: linear-gradient(135deg, #ff0033, #ff6680);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow neon vermelho */
+.neon-red   { text-shadow: 0 0 4px rgba(255, 0, 51, 0.4), 0 0 12px rgba(255, 0, 51, 0.15); }
+
+/* Glow neon verde */
+.neon-green { text-shadow: 0 0 4px rgba(34, 197, 94, 0.4), 0 0 12px rgba(34, 197, 94, 0.15); }
+
+/* ============================================================
+   CABEÇALHO DE PÁGINA (compartilhado entre todas as páginas)
+   ============================================================ */
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+/* ============================================================
+   CARDS
+   ============================================================ */
+
+/* Glass card — container base de todos os componentes */
+.glass-card {
+  background: linear-gradient(145deg, rgba(17, 17, 17, 0.95), rgba(10, 10, 10, 0.98));
+  border: 1px solid var(--border-default);
+  border-radius: 0.75rem; /* 12px */
+  position: relative;
+  overflow: hidden;
+}
+
+/* Linha de brilho sutil no topo do card */
+.glass-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 0, 51, 0.2), transparent);
+}
+
+/* Variante com hover interativo */
+.glass-card-hover {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.glass-card-hover:hover {
+  border-color: rgba(255, 0, 51, 0.18);
+  box-shadow:
+    0 0 30px rgba(255, 0, 51, 0.08),
+    0 0 60px rgba(255, 0, 51, 0.03),
+    0 8px 32px rgba(0, 0, 0, 0.5);
+  transform: translateY(-3px);
+}
+
+/* Card padrão (sem glassmorphism) */
+.card {
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+/* Subcomponentes de card */
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.card-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ============================================================
+   KPI GRID — Cards de métricas (usado em index, publish, ads)
+   ============================================================ */
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.kpi-card {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  gap: 8px;
+}
+
+.kpi-label {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.kpi-value {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.kpi-change {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.kpi-change.positive { color: var(--success); }
+.kpi-change.negative { color: var(--error); }
+
+/* ============================================================
+   BOTÕES
+   ============================================================ */
+
+/* Base de botão */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Botão primário SIGMA */
+.sigma-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #cc0029, #ff0033);
+  border: 1px solid rgba(255, 0, 51, 0.4);
+  color: #fff;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sigma-btn-primary:hover {
+  box-shadow: 0 0 20px rgba(255, 0, 51, 0.3);
+  transform: translateY(-1px);
+}
+
+/* Botão secundário */
+.btn-secondary {
+  background: rgba(17, 17, 17, 0.9);
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+
+.btn-secondary:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+/* Botão destrutivo */
+.btn-danger {
+  background: rgba(255, 0, 51, 0.08);
+  border-color: rgba(255, 0, 51, 0.2);
+  color: #ff1a4d;
+}
+
+.btn-danger:hover {
+  background: rgba(255, 0, 51, 0.15);
+}
+
+/* Botão Instagram (gradiente) */
+.btn-instagram {
+  background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+  color: white;
+  font-weight: 600;
+  border: none;
+}
+
+.btn-instagram:hover {
+  opacity: 0.9;
+}
+
+/* Modificadores de tamanho */
+.btn-sm    { padding: 6px 12px; font-size: 13px; }
+.btn-icon  { padding: 8px; width: 36px; height: 36px; }
+
+/* ============================================================
+   INPUTS
+   ============================================================ */
+
+/* Input padrão SIGMA */
+.sigma-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sigma-input:focus {
+  border-color: rgba(255, 0, 51, 0.5);
+  box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.08), inset 0 0 8px rgba(255, 0, 51, 0.015);
+}
+
+.sigma-input::placeholder {
+  color: #3a3a3a;
+}
+
+/* Label de campo */
+.label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+/* Textarea */
+.textarea {
+  width: 100%;
+  padding: 10px 14px;
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: var(--font-sans);
+  outline: none;
+  resize: vertical;
+  min-height: 80px;
+  transition: border-color 0.2s;
+}
+
+.textarea:focus {
+  border-color: rgba(255, 0, 51, 0.5);
+}
+
+/* Select */
+.select {
+  width: 100%;
+  padding: 10px 14px;
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  cursor: pointer;
+}
+
+/* ============================================================
+   TABELAS
+   ============================================================ */
+
+.table-container {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+thead {
+  background: rgba(10, 10, 10, 0.8);
+}
+
+th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-default);
+}
+
+td {
+  padding: 12px 16px;
+  font-size: 14px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-default);
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+tr:hover {
+  background: rgba(255, 255, 255, 0.01);
+}
+
+/* ============================================================
+   BADGES
+   ============================================================ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.badge-active {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  color: #22c55e;
+}
+
+.badge-paused {
+  background: rgba(249, 115, 22, 0.1);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  color: #f97316;
+}
+
+.badge-error {
+  background: rgba(255, 0, 51, 0.1);
+  border: 1px solid rgba(255, 0, 51, 0.25);
+  color: #ff1a4d;
+}
+
+.badge-info {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: #3b82f6;
+}
+
+/* ============================================================
+   ELEMENTOS SIGMA ESPECIAIS
+   ============================================================ */
+
+/* Grade de circuito no fundo (login + dashboard) */
+.circuit-grid {
+  background-image:
+    linear-gradient(rgba(255, 0, 51, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 0, 51, 0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Linhas de scanline CRT (overlay fixo) */
+.hud-scanlines {
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px, rgba(0, 0, 0, 0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+  animation: crtFlicker 8s infinite;
+}
+
+/* Vignette radial nas bordas */
+.hud-vignette {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.55) 100%);
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* Divisor animado (sweep vermelho) */
+.divider-sweep {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 0, 51, 0.4) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: dividerSweep 4s linear infinite;
+}
+
+/* ============================================================
+   SKELETON / LOADING
+   ============================================================ */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #111 0%, #1a1a1a 40%,
+    rgba(255, 0, 51, 0.06) 50%,
+    #1a1a1a 60%, #111 100%
+  );
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.8s infinite;
+  border-radius: 0.25rem;
+}
+
+/* ── Spinner de carregamento ── */
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-top-color: var(--brand-500);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ============================================================
+   ANIMAÇÕES (keyframes + classes)
+   ============================================================ */
+
+/* Cursor piscando */
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.animate-cursor-blink { animation: cursorBlink 1s step-end infinite; }
+
+/* Pulso de glow */
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(255, 0, 51, 0.3); }
+  50% { box-shadow: 0 0 16px rgba(255, 0, 51, 0.6), 0 0 32px rgba(255, 0, 51, 0.2); }
+}
+.animate-glow-pulse { animation: glowPulse 3s infinite; }
+
+/* Pulso de radar (escala + fade) */
+@keyframes radarPulse {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+.animate-radar-pulse { animation: radarPulse 2s ease-out infinite; }
+
+/* Pulso do logo */
+@keyframes logoPulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(255, 0, 51, 0.3), 0 0 24px rgba(255, 0, 51, 0.1); }
+  50% { box-shadow: 0 0 20px rgba(255, 0, 51, 0.6), 0 0 40px rgba(255, 0, 51, 0.2); }
+}
+.animate-logo-pulse { animation: logoPulse 4s infinite; }
+
+/* Flicker CRT */
+@keyframes crtFlicker {
+  0%, 92%, 94%, 96%, 100% { opacity: 1; }
+  93% { opacity: 0.97; }
+  95% { opacity: 0.95; }
+}
+
+/* Varredura de linha CRT */
+@keyframes lineScan {
+  0%   { top: -2px; opacity: 0.8; }
+  100% { top: 100%; opacity: 0; }
+}
+.animate-line-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255, 0, 51, 0.25);
+  animation: lineScan 4s linear infinite;
+  pointer-events: none;
+}
+
+/* Ping de glow */
+@keyframes glowPing {
+  0%   { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(3.5); opacity: 0; }
+}
+.animate-glow-ping { animation: glowPing 2s cubic-bezier(0, 0, 0.2, 1) infinite; }
+
+/* Barras de waveform */
+@keyframes waveBar {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+.animate-wave { animation: waveBar 1.2s ease-in-out infinite; }
+
+/* Sweep do divisor */
+@keyframes dividerSweep {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+
+/* Fade in + subida */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up { animation: fadeInUp 0.4s ease-out both; }
+
+/* Scale in (modal/card de entrada) */
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-scale-in { animation: scaleIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* Glow de nav item ativo */
+@keyframes navGlowPulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(255, 0, 51, 0.3); }
+  50%       { box-shadow: 0 0 12px rgba(255, 0, 51, 0.6); }
+}
+.animate-nav-glow { animation: navGlowPulse 2s infinite; }
+
+/* Pulso sincronizado (indicador LIVE) */
+@keyframes syncPulse {
+  0%, 100% { opacity: 0.3; }
+  50%       { opacity: 1; }
+}
+.animate-sync-pulse { animation: syncPulse 2s infinite; }
+
+/* Shimmer do skeleton */
+@keyframes skeletonShimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Spinner de carregamento */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Stagger helpers para sequenciar animações */
+.stagger-1 { animation-delay: 50ms; }
+.stagger-2 { animation-delay: 100ms; }
+.stagger-3 { animation-delay: 150ms; }
+.stagger-4 { animation-delay: 200ms; }
+
+/* ============================================================
+   UTILITÁRIOS GLOBAIS
+   ============================================================ */
+
+/* Cores de texto semântico */
+.text-success    { color: var(--success); }
+.text-danger     { color: var(--error); }
+.text-primary    { color: var(--text-primary); }
+.text-warning    { color: var(--warning); }
+.text-muted      { color: var(--text-muted); }
+.text-brand-500  { color: var(--brand-500); }
+
+/* Tamanhos de fonte utilitários */
+.text-sm  { font-size: 0.875rem; }
+.text-xs  { font-size: 0.75rem; }
+
+/* Fontes */
+.font-mono { font-family: var(--font-mono); }
+.font-sans { font-family: var(--font-sans); }
+
+/* Formatação */
+.tracking-widest { letter-spacing: 0.1em; }
+.uppercase       { text-transform: uppercase; }
+.truncate        { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Fundo */
+.bg-surface-elevated { background-color: var(--surface-elevated); }
+.bg-brand-500        { background-color: var(--brand-500); }
+
+/* Layout */
+.flex            { display: flex; }
+.flex-col        { flex-direction: column; }
+.flex-1          { flex: 1; }
+.hidden          { display: none; }
+.items-center    { align-items: center; }
+.justify-center  { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.relative        { position: relative; }
+.overflow-hidden { overflow: hidden; }
+.z-10            { z-index: 10; }
+.w-full          { width: 100%; }
+
+/* Espaçamento */
+.mt-4  { margin-top: 1rem; }
+.mt-6  { margin-top: 1.5rem; }
+.mb-2  { margin-bottom: 0.5rem; }
+.mb-4  { margin-bottom: 1rem; }
+.mb-6  { margin-bottom: 1.5rem; }
+.mb-8  { margin-bottom: 2rem; }
+.p-2   { padding: 0.5rem; }
+.p-4   { padding: 1rem; }
+.p-5   { padding: 1.25rem; }
+.p-6   { padding: 1.5rem; }
+.p-8   { padding: 2rem; }
+.pb-2  { padding-bottom: 0.5rem; }
+.gap-1 { gap: 0.25rem; }
+.gap-2 { gap: 0.5rem; }
+.gap-3 { gap: 0.75rem; }
+.gap-4 { gap: 1rem; }
+.gap-6 { gap: 1.5rem; }
+
+/* Dimensões seletivas */
+.w-1   { width: 0.25rem; }
+.h-1   { height: 0.25rem; }
+.w-1\.5  { width: 0.375rem; }
+.h-1\.5  { height: 0.375rem; }
+.w-12  { width: 3rem; }
+.h-12  { height: 3rem; }
+
+/* Border radius */
+.rounded-full { border-radius: 9999px; }
+
+/* Alinhamento de texto */
+.text-center { text-align: center; }
+
+/* Grids de layout */
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+/* ============================================================
+   RESPONSIVO
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .grid-2, .grid-3, .grid-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
