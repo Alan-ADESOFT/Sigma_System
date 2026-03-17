@@ -80,6 +80,41 @@ CREATE INDEX IF NOT EXISTS idx_contents_status ON contents(status);
 CREATE INDEX IF NOT EXISTS idx_contents_scheduled ON contents(status, scheduled_at);
 
 -- ============================================================
+-- PASTAS DE PLANEJAMENTO (semanas, por conta)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS content_folders (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    account_id  TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    description TEXT,
+    color       TEXT NOT NULL DEFAULT '#ff0033',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_folders_tenant  ON content_folders(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_folders_account ON content_folders(account_id);
+
+-- Coluna folder_id em contents (pode ser nula para conteúdos avulsos)
+ALTER TABLE contents ADD COLUMN IF NOT EXISTS folder_id TEXT REFERENCES content_folders(id) ON DELETE SET NULL;
+
+-- ============================================================
+-- PERMISSOES: usuario <-> conta Instagram
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_account_permissions (
+    id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(user_id, account_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_uap_user    ON user_account_permissions(user_id);
+CREATE INDEX IF NOT EXISTS idx_uap_account ON user_account_permissions(account_id);
+
+-- ============================================================
 -- COLECOES / CAMPANHAS
 -- ============================================================
 CREATE TABLE IF NOT EXISTS collections (
@@ -150,7 +185,7 @@ DO $$
 DECLARE
     t TEXT;
 BEGIN
-    FOR t IN SELECT unnest(ARRAY['tenants','accounts','contents','collections','settings','analytics'])
+    FOR t IN SELECT unnest(ARRAY['tenants','accounts','contents','collections','settings','analytics','content_folders'])
     LOOP
         EXECUTE format('
             DROP TRIGGER IF EXISTS trg_%s_updated_at ON %s;
