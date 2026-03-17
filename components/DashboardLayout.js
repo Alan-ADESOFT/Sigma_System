@@ -41,31 +41,37 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    category: 'FINANÇAS',
+    items: [
+      { href: '/dashboard/financeiro',       label: 'Financeiro',             tag: '02', icon: 'chart'        },
+    ],
+  },
+  {
     category: 'DADOS',
     items: [
-      { href: '/dashboard/form',             label: 'Forms Dados',            tag: '02', icon: 'clipboard'    },
-      { href: '/dashboard/database',         label: 'Base de Dados',          tag: '03', icon: 'database'     },
+      { href: '/dashboard/clients',          label: 'Clientes',               tag: '03', icon: 'users'        },
+      { href: '/dashboard/database',         label: 'Base de Dados',          tag: '04', icon: 'database'     },
     ],
   },
   {
     category: 'SOCIAL MEDIA',
     items: [
-      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '04', icon: 'barChart'     },
-      { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '05', icon: 'edit'         },
-      { href: '/dashboard/content-plan',     label: 'Planejamento de Conteúdo', tag: '06', icon: 'list'      },
-      { href: '/dashboard/publish',          label: 'Publicação',             tag: '07', icon: 'send'         },
+      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '05', icon: 'barChart'     },
+      { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '06', icon: 'edit'         },
+      { href: '/dashboard/content-plan',     label: 'Planejamento de Conteúdo', tag: '07', icon: 'list'      },
+      { href: '/dashboard/publish',          label: 'Publicação',             tag: '08', icon: 'send'         },
     ],
   },
   {
     category: 'TRÁFEGO',
     items: [
-      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '08', icon: 'megaphone'    },
+      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '09', icon: 'megaphone'    },
     ],
   },
   {
     category: 'SISTEMA',
     items: [
-      { href: '/dashboard/settings',         label: 'Configurações',          tag: '09', icon: 'settings'     },
+      { href: '/dashboard/settings',         label: 'Configurações',          tag: '10', icon: 'settings'     },
     ],
   },
 ];
@@ -147,6 +153,14 @@ const ICONS = {
       <ellipse cx="12" cy="5" rx="9" ry="3" />
       <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
       <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+    </svg>
+  ),
+  users: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
   ),
   /* Ícone do botão de colapso — chevron esquerdo */

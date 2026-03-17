@@ -185,7 +185,7 @@ DO $$
 DECLARE
     t TEXT;
 BEGIN
-    FOR t IN SELECT unnest(ARRAY['tenants','accounts','contents','collections','settings','analytics','content_folders'])
+    FOR t IN SELECT unnest(ARRAY['tenants','accounts','contents','collections','settings','analytics','content_folders','marketing_clients','marketing_stages'])
     LOOP
         EXECUTE format('
             DROP TRIGGER IF EXISTS trg_%s_updated_at ON %s;
@@ -195,3 +195,149 @@ BEGIN
         ', t, t, t, t);
     END LOOP;
 END $$;
+
+-- ============================================================
+-- MARKETING CLIENTS (clientes cadastrados por tenant)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS marketing_clients (
+    id                   TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id            TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    company_name         TEXT NOT NULL,
+    niche                TEXT,
+    main_product         TEXT,
+    product_description  TEXT,
+    transformation       TEXT,
+    main_problem         TEXT,
+    avg_ticket           TEXT,
+    region               TEXT,
+    comm_objective       TEXT,   -- 'sales' | 'leads' | 'authority' | 'other'
+    comm_objective_other TEXT,
+    email                TEXT,
+    phone                TEXT,
+    status               TEXT NOT NULL DEFAULT 'prospect', -- 'prospect' | 'active' | 'inactive'
+    extra_data           JSONB,  -- campos adicionais livres
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Colunas adicionadas via ALTER (idempotente para bases já existentes)
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS comm_objective_other TEXT;
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS extra_data           JSONB;
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS email                TEXT;
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS phone                TEXT;
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS status               TEXT NOT NULL DEFAULT 'prospect';
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS logo_url             TEXT;
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS observations         TEXT;
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS important_links      JSONB DEFAULT '[]';
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS services             JSONB DEFAULT '[]';
+
+CREATE INDEX IF NOT EXISTS idx_mkt_clients_tenant ON marketing_clients(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_mkt_clients_status ON marketing_clients(status);
+
+-- ============================================================
+-- MARKETING STAGES (etapas por cliente)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS marketing_stages (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    client_id   TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    stage_key   TEXT NOT NULL,
+    -- 'diagnosis' | 'competitors' | 'audience' | 'avatar' | 'positioning' | 'offer'
+    status      TEXT NOT NULL DEFAULT 'pending',
+    -- 'pending' | 'in_progress' | 'done'
+    data        JSONB,   -- output salvo da etapa (gerado pelos agentes)
+    notes       TEXT,    -- anotacoes manuais do operador
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(client_id, stage_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mkt_stages_client ON marketing_stages(client_id);
+
+-- ============================================================
+-- CLIENT TASKS (afazeres por cliente)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS client_tasks (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    client_id   TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    done        BOOLEAN NOT NULL DEFAULT false,
+    priority    TEXT NOT NULL DEFAULT 'normal', -- 'low' | 'normal' | 'high'
+    due_date    DATE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_client_tasks_client ON client_tasks(client_id);
+
+-- ============================================================
+-- CLIENT ATTACHMENTS (anexos por cliente)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS client_attachments (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    client_id   TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    description TEXT,
+    file_url    TEXT NOT NULL,
+    file_name   TEXT NOT NULL,
+    file_size   INTEGER,
+    mime_type   TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_client_attachments_client ON client_attachments(client_id);
+
+-- ============================================================
+-- CLIENT OBSERVATIONS (múltiplas observações por cliente)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS client_observations (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    client_id   TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    text        TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_client_observations_client ON client_observations(client_id);
+
+-- ============================================================
+-- CLIENT CONTRACTS (contrato financeiro por cliente)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS client_contracts (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    client_id       TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    contract_value  NUMERIC(12,2) NOT NULL,
+    frequency       TEXT NOT NULL DEFAULT 'monthly',
+    -- 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'one_time'
+    period_months   INTEGER NOT NULL DEFAULT 12,
+    due_day         INTEGER NOT NULL DEFAULT 10,   -- dia do mês (1-31)
+    start_date      DATE NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'active',
+    -- 'active' | 'completed' | 'cancelled'
+    notes           TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_client_contracts_client ON client_contracts(client_id);
+
+-- ============================================================
+-- CLIENT INSTALLMENTS (parcelas geradas pelo contrato)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS client_installments (
+    id                  TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    contract_id         TEXT NOT NULL REFERENCES client_contracts(id) ON DELETE CASCADE,
+    client_id           TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    installment_number  INTEGER NOT NULL,
+    due_date            DATE NOT NULL,
+    value               NUMERIC(12,2) NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'pending',
+    -- 'pending' | 'paid' | 'overdue'
+    paid_at             TIMESTAMPTZ,
+    notes               TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_client_installments_client   ON client_installments(client_id);
+CREATE INDEX IF NOT EXISTS idx_client_installments_contract ON client_installments(contract_id);
+CREATE INDEX IF NOT EXISTS idx_client_installments_due      ON client_installments(due_date);
