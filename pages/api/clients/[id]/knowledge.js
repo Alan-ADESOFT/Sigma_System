@@ -60,15 +60,26 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: 'value é obrigatório' });
       }
 
-      const row = await queryOne(
-        `INSERT INTO ai_knowledge_base (tenant_id, client_id, category, key, value, metadata)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (tenant_id, category, key)
-            WHERE client_id = $2
-         DO UPDATE SET value = EXCLUDED.value, metadata = EXCLUDED.metadata, updated_at = now()
-         RETURNING *`,
-        [tenantId, clientId, category, key.trim(), String(value), JSON.stringify(metadata)]
+      // Verifica se já existe para decidir INSERT ou UPDATE
+      const existing = await queryOne(
+        `SELECT id FROM ai_knowledge_base WHERE tenant_id = $1 AND client_id = $2 AND category = $3 AND key = $4`,
+        [tenantId, clientId, category, key.trim()]
       );
+
+      let row;
+      if (existing) {
+        row = await queryOne(
+          `UPDATE ai_knowledge_base SET value = $1, metadata = $2, updated_at = now()
+           WHERE id = $3 RETURNING *`,
+          [String(value), JSON.stringify(metadata), existing.id]
+        );
+      } else {
+        row = await queryOne(
+          `INSERT INTO ai_knowledge_base (tenant_id, client_id, category, key, value, metadata)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+          [tenantId, clientId, category, key.trim(), String(value), JSON.stringify(metadata)]
+        );
+      }
 
       console.log('[SUCESSO][API:/api/clients/:id/knowledge] Item salvo', { clientId, category, key });
       return res.status(201).json({ success: true, data: row });
