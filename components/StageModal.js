@@ -128,6 +128,8 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
   const [viewingHistoryItem, setViewingHistoryItem] = useState(null);
   const [showUseConfirm, setShowUseConfirm] = useState(false);
   const [improving, setImproving] = useState(false);
+  const [additionalPrompt, setAdditionalPrompt] = useState('');
+  const [showTooltip, setShowTooltip] = useState(null);
 
   const agents = AGENTS[meta.key] || [];
 
@@ -164,9 +166,13 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
 
   function toggleHighlight() {
     editorRef.current?.focus();
-    const current = document.queryCommandValue('backColor');
-    const isOn = current && current !== 'transparent' && current !== 'rgba(0, 0, 0, 0)' && current !== '';
-    document.execCommand('backColor', false, isOn ? 'transparent' : '#3a1515');
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) { notify('Selecione um texto para destacar', 'warning'); return; }
+    // hiliteColor funciona melhor que backColor na maioria dos browsers
+    const cmd = document.queryCommandSupported('hiliteColor') ? 'hiliteColor' : 'backColor';
+    const current = document.queryCommandValue(cmd);
+    const isOn = current && current !== 'transparent' && current !== 'rgba(0, 0, 0, 0)' && current !== '' && current !== 'inherit';
+    document.execCommand(cmd, false, isOn ? 'transparent' : '#3a1515');
     setHighlighted(!isOn);
   }
 
@@ -243,8 +249,10 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
     if (!clientId) return;
     setLoadingHistory(true);
     try {
-      // Busca histórico de agentes filtrado pelos agentes desta etapa
+      // Busca histórico excluindo agentes de pesquisa (a2a, a4a) que alimentam automaticamente o principal
+      const SEARCH_AGENT_IDS = ['a2a', 'a4a', 'a6p'];
       const agentNames = agents
+        .filter(a => !SEARCH_AGENT_IDS.includes(a.id))
         .map(a => AGENT_NAME_MAP[a.id])
         .filter(Boolean);
 
@@ -435,12 +443,25 @@ REGRAS OBRIGATÓRIAS:
         observacoes:        clientData.observations,
       }, null, 2) : 'Dados do cliente não disponíveis';
 
+      // Monta o prompt final: base (editado ou padrão) + adicional
+      let finalPrompt = isPromptEdited ? customPrompt : undefined;
+      if (additionalPrompt.trim()) {
+        const extra = `\n\n─────────────────────────────────────\nINSTRUÇÕES ADICIONAIS DO OPERADOR\n─────────────────────────────────────\n${additionalPrompt.trim()}`;
+        finalPrompt = finalPrompt ? finalPrompt + extra : undefined;
+        // Se não editou o prompt base, passa o adicional como parte do context
+        if (!finalPrompt) {
+          // Força carregar o prompt base para concatenar
+        }
+      }
+
       const body = {
         agentName,
         clientId,
         modelLevel,
-        customPrompt: isPromptEdited ? customPrompt : undefined,
-        userInput: clientJson,
+        customPrompt: finalPrompt,
+        userInput: additionalPrompt.trim() && !finalPrompt
+          ? `${clientJson}\n\n─── INSTRUÇÕES ADICIONAIS ───\n${additionalPrompt.trim()}`
+          : clientJson,
         context: { '{DADOS_CLIENTE}': clientJson },
         complements: refLink ? { links: [refLink] } : {},
       };
@@ -609,23 +630,41 @@ REGRAS OBRIGATÓRIAS:
                   </svg>
                 </button>
                 <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.07)', margin: '0 3px' }} />
-                <button
-                  title="Melhorar Escrita (selecione texto ou aplica em tudo)"
-                  onClick={handleImproveText}
-                  disabled={improving || generating}
-                  style={{
-                    ...btnStyle(improving),
-                    width: 'auto', padding: '0 8px', gap: 4,
-                    color: improving ? '#a855f7' : 'var(--text-muted)',
-                    background: improving ? 'rgba(168,85,247,0.12)' : 'transparent',
-                    fontSize: '0.58rem', cursor: improving ? 'not-allowed' : 'pointer',
-                  }}
+                <div style={{ position: 'relative', display: 'inline-flex' }}
+                  onMouseEnter={() => setShowTooltip('improve')}
+                  onMouseLeave={() => setShowTooltip(null)}
                 >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                  </svg>
-                  {improving ? 'Melhorando...' : 'Melhorar'}
-                </button>
+                  <button
+                    onClick={handleImproveText}
+                    disabled={improving || generating}
+                    style={{
+                      ...btnStyle(improving),
+                      width: 'auto', padding: '0 8px', gap: 4,
+                      color: improving ? '#a855f7' : 'var(--text-muted)',
+                      background: improving ? 'rgba(168,85,247,0.12)' : 'transparent',
+                      fontSize: '0.58rem', cursor: improving ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                    </svg>
+                    {improving ? 'Melhorando...' : 'Melhorar'}
+                  </button>
+                  {showTooltip === 'improve' && (
+                    <div style={{
+                      position: 'absolute', top: '100%', right: 0, marginTop: 6,
+                      padding: '8px 12px', borderRadius: 6, width: 220,
+                      background: 'rgba(10,10,10,0.98)', border: '1px solid rgba(168,85,247,0.2)',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.5)', zIndex: 10,
+                      fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-secondary)', lineHeight: 1.5,
+                    }}>
+                      <div style={{ color: '#a855f7', fontWeight: 700, marginBottom: 4 }}>Melhorar Escrita</div>
+                      Corrige gramática, ortografia e melhora a clareza do texto sem alterar o significado.
+                      <br/><br/>
+                      <span style={{ color: 'var(--text-muted)' }}>Selecione um trecho para melhorar apenas ele, ou clique sem seleção para melhorar tudo.</span>
+                    </div>
+                  )}
+                </div>
                 <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.07)', margin: '0 3px' }} />
                 <button onClick={() => saveNotes()} disabled={savingN} style={{
                   padding: '3px 10px', borderRadius: 5,
@@ -749,16 +788,19 @@ REGRAS OBRIGATÓRIAS:
             {/* ── Histórico (condicional) ── */}
             {showHistory ? (
               <div style={{ flex: 1, overflow: 'auto', padding: '14px 18px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                  <SectionLabel>Histórico de Gerações</SectionLabel>
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <SectionLabel>Histórico de Gerações</SectionLabel>
                   <button
                     onClick={() => setShowHistory(false)}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}
                   >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
-                    </svg>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                   </button>
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: '#2a2a2a', marginTop: 4 }}>
+                    Clique em uma geração para visualizar. Agentes de pesquisa não aparecem aqui.
+                  </div>
                 </div>
 
                 {loadingHistory && (
@@ -850,6 +892,9 @@ REGRAS OBRIGATÓRIAS:
                       background: 'rgba(255,0,51,0.03)', border: '1px solid rgba(255,0,51,0.08)',
                     }}>
                       <SectionLabel>Dados do Cliente</SectionLabel>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: '#2a2a2a', marginBottom: 4, marginTop: -4 }}>
+                        Informações extraídas do cadastro — injetadas automaticamente no prompt
+                      </div>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
                         <div><strong style={{ color: 'var(--text-primary)' }}>{clientData.company_name}</strong></div>
                         {clientData.niche && <div>Nicho: {clientData.niche}</div>}
@@ -861,6 +906,9 @@ REGRAS OBRIGATÓRIAS:
 
                   <div>
                     <SectionLabel>Referência — Link</SectionLabel>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: '#2a2a2a', marginBottom: 4, marginTop: -4 }}>
+                      URL de referência que o agente usará como complemento na geração
+                    </div>
                     <input
                       type="url" placeholder="https://..."
                       value={refLink} onChange={e => setRefLink(e.target.value)}
@@ -875,6 +923,9 @@ REGRAS OBRIGATÓRIAS:
 
                   <div>
                     <SectionLabel>Referências — Imagens / Arquivos</SectionLabel>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: '#2a2a2a', marginBottom: 4, marginTop: -4 }}>
+                      Arquivos complementares que enriquecem o conteúdo gerado
+                    </div>
                     <div style={{
                       border: '1px dashed rgba(255,255,255,0.08)', borderRadius: 8, padding: '18px',
                       textAlign: 'center', cursor: 'pointer', background: 'rgba(255,255,255,0.01)',
@@ -886,6 +937,26 @@ REGRAS OBRIGATÓRIAS:
                         PNG · JPG · PDF · DOCX
                       </div>
                     </div>
+                  </div>
+
+                  {/* Prompt Adicional */}
+                  <div>
+                    <SectionLabel>Prompt Adicional</SectionLabel>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: '#2a2a2a', marginBottom: 4, marginTop: -4 }}>
+                      Instruções extras: tom de voz, objetivo da copy, estilo de comunicação
+                    </div>
+                    <textarea
+                      value={additionalPrompt}
+                      onChange={e => setAdditionalPrompt(e.target.value)}
+                      placeholder="Ex: Use tom informal e direto. O objetivo é gerar leads para Instagram. Foque nas dores do público..."
+                      rows={3}
+                      style={{
+                        width: '100%', boxSizing: 'border-box', padding: '8px 12px',
+                        background: 'rgba(10,10,10,0.8)', border: '1px solid rgba(255,255,255,0.06)',
+                        borderRadius: 8, color: 'var(--text-secondary)', fontSize: '0.68rem',
+                        fontFamily: 'var(--font-mono)', lineHeight: 1.6, outline: 'none', resize: 'vertical',
+                      }}
+                    />
                   </div>
 
                   {/* Prompt base editável */}
@@ -952,9 +1023,9 @@ REGRAS OBRIGATÓRIAS:
                       <div style={{
                         padding: '8px 12px', borderRadius: 8,
                         background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)',
-                        fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: '#2a2a2a',
+                        fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: '#2a2a2a', lineHeight: 1.5,
                       }}>
-                        Clique em "Editar Prompt" para visualizar e customizar
+                        Prompt principal do agente — clique em "Editar Prompt" para customizar. Alterações são temporárias e não afetam o prompt original.
                       </div>
                     )}
                   </div>
@@ -962,6 +1033,9 @@ REGRAS OBRIGATÓRIAS:
                   {/* Seletor de Modelo */}
                   <div>
                     <SectionLabel>Modelo de IA</SectionLabel>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: '#2a2a2a', marginBottom: 4, marginTop: -4 }}>
+                      Padrão é mais rápido e econômico. Premium gera conteúdo de maior qualidade.
+                    </div>
                     <div style={{ display: 'flex', gap: 6 }}>
                       {[
                         { value: 'medium', label: 'Padrão', desc: 'GPT-4o — rápido e econômico', color: '#3b82f6' },
