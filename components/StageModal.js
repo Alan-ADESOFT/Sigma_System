@@ -120,6 +120,7 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
   const [showHistory, setShowHistory]   = useState(false);
   const [historyData, setHistoryData]   = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [modelLevel, setModelLevel]     = useState('medium');
 
   const agents = AGENTS[meta.key] || [];
 
@@ -322,6 +323,7 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
       const body = {
         agentName,
         clientId,
+        modelLevel,
         userInput: clientJson,
         context: { '{DADOS_CLIENTE}': clientJson },
         complements: refLink ? { links: [refLink] } : {},
@@ -749,6 +751,42 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: '#2a2a2a', marginTop: 3 }}>
                         PNG · JPG · PDF · DOCX
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Seletor de Modelo */}
+                  <div>
+                    <SectionLabel>Modelo de IA</SectionLabel>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {[
+                        { value: 'medium', label: 'Padrão', desc: 'GPT-4o — rápido e econômico', color: '#3b82f6' },
+                        { value: 'strong', label: 'Premium', desc: 'Opus 4.6 — máxima qualidade', color: '#a855f7' },
+                      ].map(m => (
+                        <button
+                          key={m.value}
+                          onClick={() => setModelLevel(m.value)}
+                          style={{
+                            flex: 1, padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
+                            background: modelLevel === m.value ? `${m.color}10` : 'rgba(255,255,255,0.01)',
+                            border: `1px solid ${modelLevel === m.value ? `${m.color}44` : 'rgba(255,255,255,0.06)'}`,
+                            textAlign: 'left', transition: 'all 0.15s',
+                          }}
+                        >
+                          <div style={{
+                            fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 700,
+                            color: modelLevel === m.value ? m.color : 'var(--text-muted)',
+                            marginBottom: 2,
+                          }}>
+                            {m.label}
+                          </div>
+                          <div style={{
+                            fontFamily: 'var(--font-mono)', fontSize: '0.52rem',
+                            color: modelLevel === m.value ? 'var(--text-secondary)' : '#2a2a2a',
+                          }}>
+                            {m.desc}
+                          </div>
+                        </button>
+                      ))}
                     </div>
                   </div>
 
