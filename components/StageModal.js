@@ -127,6 +127,7 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
   const [loadingPrompt, setLoadingPrompt] = useState(false);
   const [viewingHistoryItem, setViewingHistoryItem] = useState(null);
   const [showUseConfirm, setShowUseConfirm] = useState(false);
+  const [improving, setImproving] = useState(false);
 
   const agents = AGENTS[meta.key] || [];
 
@@ -294,6 +295,79 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
     setViewingHistoryItem(null);
     setShowUseConfirm(false);
     notify('Resultado carregado do histórico', 'info');
+  }
+
+  /* ── Melhorar escrita (texto selecionado ou todo o editor) ── */
+  async function handleImproveText() {
+    const selection = window.getSelection();
+    const selectedText = selection?.toString()?.trim();
+    const fullText = editorRef.current?.innerText?.trim();
+
+    const textToImprove = selectedText || fullText;
+    if (!textToImprove) { notify('Nenhum texto para melhorar', 'warning'); return; }
+
+    setImproving(true);
+    notify(selectedText ? 'Melhorando trecho selecionado...' : 'Melhorando texto completo...', 'info');
+
+    try {
+      console.log('[INFO][Frontend:StageModal] Melhorando escrita', { isSelection: !!selectedText, length: textToImprove.length });
+
+      const r = await fetch('/api/agentes/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentName: 'agente1',
+          modelLevel: 'medium',
+          userInput: textToImprove,
+          customPrompt: `Você é um editor de texto profissional. Melhore a escrita do texto abaixo.
+
+REGRAS OBRIGATÓRIAS:
+- Corrija erros de gramática, ortografia e pontuação
+- Melhore a clareza e fluidez sem mudar o significado ou a essência
+- Mantenha o tom de voz original
+- NÃO adicione informações novas
+- NÃO remova informações existentes
+- NÃO mude a estrutura (se tinha bullets, mantenha bullets)
+- Retorne APENAS o texto melhorado, sem explicações ou comentários`,
+        }),
+      });
+      const d = await r.json();
+
+      if (!d.success) throw new Error(d.error || 'Erro desconhecido');
+
+      console.log('[SUCESSO][Frontend:StageModal] Escrita melhorada', { responseLength: d.data.text.length });
+
+      if (selectedText && selection.rangeCount > 0) {
+        // Substitui apenas o trecho selecionado
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        const fragment = document.createDocumentFragment();
+        const span = document.createElement('span');
+        span.innerHTML = d.data.text.replace(/\n/g, '<br>');
+        fragment.appendChild(span);
+        range.insertNode(fragment);
+        selection.removeAllRanges();
+      } else {
+        // Substitui todo o editor
+        const html = d.data.text
+          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.+?)\*/g, '<em>$1</em>')
+          .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+          .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+          .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+          .replace(/^- (.+)$/gm, '• $1')
+          .replace(/\n/g, '<br>');
+        editorRef.current.innerHTML = html;
+      }
+
+      setSavedN(false);
+      notify('Escrita melhorada com sucesso!', 'success');
+    } catch (err) {
+      console.error('[ERRO][Frontend:StageModal] Falha ao melhorar escrita', { error: err.message });
+      notify('Erro ao melhorar escrita: ' + err.message, 'error');
+    } finally {
+      setImproving(false);
+    }
   }
 
   /* ── Carregar prompt base do agente ── */
@@ -533,6 +607,24 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
                     <rect x="3" y="14" width="18" height="4" rx="1"/>
                     <path d="M7 14V6l5 3 5-3v8" fill="none" stroke="currentColor" strokeWidth="2"/>
                   </svg>
+                </button>
+                <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.07)', margin: '0 3px' }} />
+                <button
+                  title="Melhorar Escrita (selecione texto ou aplica em tudo)"
+                  onClick={handleImproveText}
+                  disabled={improving || generating}
+                  style={{
+                    ...btnStyle(improving),
+                    width: 'auto', padding: '0 8px', gap: 4,
+                    color: improving ? '#a855f7' : 'var(--text-muted)',
+                    background: improving ? 'rgba(168,85,247,0.12)' : 'transparent',
+                    fontSize: '0.58rem', cursor: improving ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                  </svg>
+                  {improving ? 'Melhorando...' : 'Melhorar'}
                 </button>
                 <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.07)', margin: '0 3px' }} />
                 <button onClick={() => saveNotes()} disabled={savingN} style={{
