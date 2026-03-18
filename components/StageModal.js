@@ -125,6 +125,8 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
   const [customPrompt, setCustomPrompt] = useState('');
   const [isPromptEdited, setIsPromptEdited] = useState(false);
   const [loadingPrompt, setLoadingPrompt] = useState(false);
+  const [viewingHistoryItem, setViewingHistoryItem] = useState(null);
+  const [showUseConfirm, setShowUseConfirm] = useState(false);
 
   const agents = AGENTS[meta.key] || [];
 
@@ -274,22 +276,24 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
     if (showHistory) loadHistory();
   }, [showHistory, loadHistory]);
 
-  /* ── Usar item do histórico ── */
-  function useHistoryItem(item) {
-    if (editorRef.current && item.response_text) {
-      const html = item.response_text
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-        .replace(/^- (.+)$/gm, '• $1')
-        .replace(/\n/g, '<br>');
-      editorRef.current.innerHTML = html;
-      setSavedN(false);
-      setShowHistory(false);
-      notify('Resultado carregado do histórico', 'info');
-    }
+  /* ── Usar item do histórico (com confirmação) ── */
+  function confirmUseHistoryItem() {
+    const item = viewingHistoryItem;
+    if (!item || !editorRef.current) return;
+    const html = item.response_text
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      .replace(/^- (.+)$/gm, '• $1')
+      .replace(/\n/g, '<br>');
+    editorRef.current.innerHTML = html;
+    setSavedN(false);
+    setShowHistory(false);
+    setViewingHistoryItem(null);
+    setShowUseConfirm(false);
+    notify('Resultado carregado do histórico', 'info');
   }
 
   /* ── Carregar prompt base do agente ── */
@@ -680,7 +684,7 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
                 {historyData.map(item => (
                   <div
                     key={item.id}
-                    onClick={() => useHistoryItem(item)}
+                    onClick={() => setViewingHistoryItem(item)}
                     style={{
                       padding: '10px 12px', marginBottom: 8, borderRadius: 8, cursor: 'pointer',
                       background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.05)',
@@ -939,6 +943,149 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
           </div>
         </div>
       </div>
+
+      {/* ── Popup de visualização do histórico ── */}
+      {viewingHistoryItem && (
+        <div
+          onClick={() => { setViewingHistoryItem(null); setShowUseConfirm(false); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 400,
+            background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 30,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 800, maxHeight: '80vh',
+              background: 'linear-gradient(145deg, rgba(14,14,14,0.99), rgba(8,8,8,0.99))',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 14, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            }}
+          >
+            {/* Header do popup */}
+            <div style={{
+              padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
+            }}>
+              <div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 700, color: '#ff6680' }}>
+                  {viewingHistoryItem.agent_name}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                  {new Date(viewingHistoryItem.created_at).toLocaleString('pt-BR')}
+                  {viewingHistoryItem.model_used && ` — ${viewingHistoryItem.model_used}`}
+                </div>
+              </div>
+              <button
+                onClick={() => { setViewingHistoryItem(null); setShowUseConfirm(false); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 4 }}
+              >
+                {Ico.close}
+              </button>
+            </div>
+
+            {/* Input que foi enviado */}
+            {viewingHistoryItem.metadata && (
+              <div style={{
+                padding: '10px 20px', borderBottom: '1px solid rgba(255,255,255,0.03)',
+                background: 'rgba(255,255,255,0.01)',
+              }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+                  INPUT ENVIADO
+                </div>
+                <div style={{
+                  fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-secondary)',
+                  lineHeight: 1.5, maxHeight: 60, overflow: 'auto',
+                }}>
+                  {typeof viewingHistoryItem.metadata === 'string'
+                    ? JSON.parse(viewingHistoryItem.metadata)?.userInput?.substring(0, 300) || '—'
+                    : viewingHistoryItem.metadata?.userInput?.substring(0, 300) || '—'
+                  }
+                </div>
+              </div>
+            )}
+
+            {/* Resposta da IA */}
+            <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+                RESPOSTA DA IA
+              </div>
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-secondary)',
+                lineHeight: 1.75, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              }}>
+                {viewingHistoryItem.response_text}
+              </div>
+            </div>
+
+            {/* Footer com ações */}
+            <div style={{
+              padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.05)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
+              background: 'rgba(0,0,0,0.2)',
+            }}>
+              {showUseConfirm ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+                  <div style={{
+                    flex: 1, fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: '#f97316',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    Isso substituirá o texto atual do editor. Continuar?
+                  </div>
+                  <button
+                    onClick={() => setShowUseConfirm(false)}
+                    style={{
+                      padding: '5px 12px', borderRadius: 5,
+                      background: 'transparent', border: '1px solid rgba(255,255,255,0.08)',
+                      color: 'var(--text-muted)', cursor: 'pointer',
+                      fontFamily: 'var(--font-mono)', fontSize: '0.6rem',
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmUseHistoryItem}
+                    style={{
+                      padding: '5px 14px', borderRadius: 5,
+                      background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.25)',
+                      color: '#ff6680', cursor: 'pointer',
+                      fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
+                    }}
+                  >
+                    Sim, substituir
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(viewingHistoryItem.response_text);
+                        notify('Copiado!', 'success');
+                      } catch { notify('Erro ao copiar', 'error'); }
+                    }}
+                    style={footerBtnStyle('var(--text-muted)', 'transparent', 'rgba(255,255,255,0.08)')}
+                  >
+                    {Ico.copy} Copiar Texto
+                  </button>
+                  <button
+                    onClick={() => setShowUseConfirm(true)}
+                    style={footerBtnStyle('#ff6680', 'rgba(255,0,51,0.06)', 'rgba(255,0,51,0.2)')}
+                  >
+                    {Ico.save} Usar esta resposta
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
