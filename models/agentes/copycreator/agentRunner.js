@@ -92,9 +92,18 @@ function injectComplements(prompt, complements = {}) {
     parts.push(`\nLINKS DE REFERÊNCIA:\n${complements.links.map((l) => `- ${l}`).join('\n')}`);
   }
   if (complements.images?.length) {
-    parts.push(`\nIMAGENS DE REFERÊNCIA:\n${complements.images.map((i) => `- ${i}`).join('\n')}`);
+    parts.push(`\nIMAGENS/ARQUIVOS DE REFERÊNCIA:\n${complements.images.map((i) => `- ${i}`).join('\n')}`);
   }
-  return parts.length ? `${prompt}\n${parts.join('\n')}` : prompt;
+  if (parts.length) {
+    return `${prompt}\n\n─────────────────────────────────────
+MATERIAIS COMPLEMENTARES
+─────────────────────────────────────
+Utilize os materiais abaixo como complemento na geração do conteúdo.
+Extraia insights, dados e informações relevantes destes materiais
+para enriquecer sua resposta, mas sem copiar literalmente.
+${parts.join('\n')}`;
+  }
+  return prompt;
 }
 
 // ─── Salvar no histórico ──────────────────────────────────────────────────────
