@@ -2,13 +2,24 @@
  * components/StageModal.js
  * ─────────────────────────────────────────────────────────────────────────────
  * Modal de etapa reutilizável — usado em Base de Dados e em Info Cliente.
- * Esquerda : rich-text editor (Bold · Italic · Highlight toggle · Link)
- * Direita  : painel do agente (tabs por agente, prompt, referências)
+ * Esquerda : rich-text editor (Bold · Italic · Highlight)
+ * Direita  : painel do agente (tabs por agente, execução, referências)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { useState, useEffect, useRef } from 'react';
 import { useNotification } from '../context/NotificationContext';
+
+/* ── Mapa de IDs internos → nomes dos agentes no backend ── */
+const AGENT_NAME_MAP = {
+  'a1':  'agente1',
+  'a2a': 'agente2a',
+  'a2b': 'agente2b',
+  'a3':  'agente3',
+  'a4a': 'agente4a',
+  'a4b': 'agente4b',
+  'a5':  'agente5',
+};
 
 /* ── Constantes de agentes por etapa ── */
 const AGENTS = {
@@ -29,6 +40,16 @@ const AGENTS = {
     { id: 'a6b', label: 'Agente 6B — Página',       hint: 'Gera copy da landing page / página de vendas' },
   ],
 };
+
+const LOADING_MESSAGES = [
+  'Iniciando agente...',
+  'Processando dados...',
+  'Pesquisando na web...',
+  'Analisando fontes...',
+  'Gerando conteúdo...',
+  'Refinando resposta...',
+  'Quase pronto...',
+];
 
 const STATUS_CFG = {
   pending:     { label: 'Pendente',     color: '#525252', bg: 'rgba(82,82,82,0.12)',   border: 'rgba(82,82,82,0.3)'   },
@@ -67,10 +88,11 @@ function SectionLabel({ children }) {
  * @param {{ key, index, label, desc }} props.meta
  * @param {object|null} props.stage  — row from marketing_stages
  * @param {string} props.clientId
+ * @param {object} [props.clientData] — dados do cliente (marketing_clients row)
  * @param {function} props.onClose
  * @param {function} props.onSaved  — called with (updatedStage) after any save
  */
-export default function StageModal({ meta, stage, clientId, onClose, onSaved }) {
+export default function StageModal({ meta, stage, clientId, clientData, onClose, onSaved }) {
   const { notify } = useNotification();
   const editorRef  = useRef(null);
   const [agentTab, setAgentTab  ] = useState(0);
@@ -79,6 +101,8 @@ export default function StageModal({ meta, stage, clientId, onClose, onSaved }) 
   const [savingN,  setSavingN   ] = useState(false);
   const [savedN,   setSavedN    ] = useState(false);
   const [highlighted, setHighlighted] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState('');
   const agents = AGENTS[meta.key] || [];
 
   useEffect(() => {
@@ -92,6 +116,18 @@ export default function StageModal({ meta, stage, clientId, onClose, onSaved }) 
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
+
+  // Rotação de mensagens de loading
+  useEffect(() => {
+    if (!generating) return;
+    let i = 0;
+    setLoadingMsg(LOADING_MESSAGES[0]);
+    const id = setInterval(() => {
+      i = (i + 1) % LOADING_MESSAGES.length;
+      setLoadingMsg(LOADING_MESSAGES[i]);
+    }, 2200);
+    return () => clearInterval(id);
+  }, [generating]);
 
   function exec(cmd, value) {
     editorRef.current?.focus();
@@ -149,6 +185,99 @@ export default function StageModal({ meta, stage, clientId, onClose, onSaved }) 
     }
   }
 
+  /* ── Executar Agente ── */
+  async function handleRunAgent() {
+    const currentAgent = agents[agentTab];
+    if (!currentAgent) return;
+
+    const agentName = AGENT_NAME_MAP[currentAgent.id];
+    if (!agentName) {
+      notify('Agente ainda não implementado', 'warning');
+      return;
+    }
+
+    setGenerating(true);
+    notify(`Executando ${currentAgent.label}...`, 'info');
+
+    try {
+      // Monta dados do cliente como JSON para o placeholder {DADOS_CLIENTE}
+      const clientJson = clientData ? JSON.stringify({
+        empresa:            clientData.company_name,
+        nicho:              clientData.niche,
+        produto_principal:  clientData.main_product,
+        descricao_produto:  clientData.product_description,
+        transformacao:      clientData.transformation,
+        principal_problema: clientData.main_problem,
+        ticket_medio:       clientData.avg_ticket,
+        regiao:             clientData.region,
+        objetivo:           clientData.comm_objective,
+        email:              clientData.email,
+        telefone:           clientData.phone,
+        links:              clientData.important_links,
+        servicos:           clientData.services,
+        observacoes:        clientData.observations,
+      }, null, 2) : 'Dados do cliente não disponíveis';
+
+      const body = {
+        agentName,
+        clientId,
+        userInput: clientJson,
+        context: { '{DADOS_CLIENTE}': clientJson },
+        complements: refLink ? { links: [refLink] } : {},
+      };
+
+      console.log('[INFO][Frontend:StageModal] Executando agente', { agentName, clientId, stage: meta.key });
+
+      const r = await fetch('/api/agentes/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json();
+
+      if (!d.success) throw new Error(d.error || 'Erro desconhecido');
+
+      console.log('[SUCESSO][Frontend:StageModal] Agente executado', { agentName, responseLength: d.data.text.length });
+
+      // Insere resultado no editor
+      if (editorRef.current) {
+        // Converte markdown básico para HTML
+        const html = d.data.text
+          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.+?)\*/g, '<em>$1</em>')
+          .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+          .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+          .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+          .replace(/^- (.+)$/gm, '• $1')
+          .replace(/\n/g, '<br>');
+
+        editorRef.current.innerHTML = html;
+        setSavedN(false);
+      }
+
+      notify('Conteúdo gerado com sucesso!', 'success');
+
+      // Auto-save no stage
+      await fetch(`/api/clients/${clientId}/stages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stage_key: meta.key,
+          data: { agentOutput: d.data.text, agentName, generatedAt: new Date().toISOString() },
+          status: 'in_progress',
+        }),
+      });
+      setStageStatus('in_progress');
+      onSaved?.({ ...stage, status: 'in_progress', data: { agentOutput: d.data.text } });
+
+    } catch (err) {
+      console.error('[ERRO][Frontend:StageModal] Falha ao executar agente', { error: err.message });
+      notify('Erro: ' + err.message, 'error');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   const btnStyle = (active) => ({
     width: 28, height: 28, borderRadius: 5, border: 'none', cursor: 'pointer',
     background: active ? 'rgba(255,0,51,0.12)' : 'transparent',
@@ -157,6 +286,9 @@ export default function StageModal({ meta, stage, clientId, onClose, onSaved }) 
     fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 700,
     transition: 'all 0.15s',
   });
+
+  const currentAgent = agents[agentTab];
+  const canRun = currentAgent && AGENT_NAME_MAP[currentAgent.id];
 
   return (
     <div
@@ -171,7 +303,7 @@ export default function StageModal({ meta, stage, clientId, onClose, onSaved }) 
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 1100, height: '88vh',
+          width: '100%', maxWidth: 1300, height: '92vh',
           background: 'linear-gradient(145deg, rgba(14,14,14,0.99), rgba(8,8,8,0.99))',
           border: '1px solid rgba(255,255,255,0.06)',
           borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden',
@@ -196,6 +328,11 @@ export default function StageModal({ meta, stage, clientId, onClose, onSaved }) 
               </div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 1 }}>
                 {meta.desc}
+                {clientData?.company_name && (
+                  <span style={{ color: '#ff6680', marginLeft: 8 }}>
+                    — {clientData.company_name}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -248,15 +385,6 @@ export default function StageModal({ meta, stage, clientId, onClose, onSaved }) 
                     <path d="M7 14V6l5 3 5-3v8" fill="none" stroke="currentColor" strokeWidth="2"/>
                   </svg>
                 </button>
-                <button title="Inserir link" style={btnStyle(false)} onClick={() => {
-                  const url = prompt('URL do link:');
-                  if (url) exec('createLink', url);
-                }}>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                  </svg>
-                </button>
                 <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.07)', margin: '0 3px' }} />
                 <button onClick={saveNotes} disabled={savingN} style={{
                   padding: '3px 10px', borderRadius: 5,
@@ -273,16 +401,32 @@ export default function StageModal({ meta, stage, clientId, onClose, onSaved }) 
             {/* Editor */}
             <div
               ref={editorRef}
-              contentEditable
+              contentEditable={!generating}
               suppressContentEditableWarning
               onInput={() => setSavedN(false)}
-              data-placeholder="Escreva as notas desta etapa..."
+              data-placeholder="Escreva as notas desta etapa ou execute o agente..."
               style={{
                 flex: 1, padding: '18px 22px', outline: 'none', overflow: 'auto',
                 fontFamily: 'var(--font-mono)', fontSize: '0.82rem', lineHeight: 1.8,
                 color: 'var(--text-secondary)', caretColor: '#ff0033',
+                opacity: generating ? 0.4 : 1, transition: 'opacity 0.3s',
               }}
             />
+            {generating && (
+              <div style={{
+                position: 'absolute', left: 0, right: '42%', top: '50%', transform: 'translateY(-50%)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+                pointerEvents: 'none',
+              }}>
+                <div style={{
+                  width: 32, height: 32, border: '2px solid rgba(255,0,51,0.15)', borderTopColor: '#ff0033',
+                  borderRadius: '50%', animation: 'spin 0.8s linear infinite',
+                }} />
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#ff6680' }}>
+                  {loadingMsg}
+                </div>
+              </div>
+            )}
             <style>{`
               [contenteditable][data-placeholder]:empty:before {
                 content: attr(data-placeholder); color: #2a2a2a; pointer-events: none;
@@ -291,6 +435,7 @@ export default function StageModal({ meta, stage, clientId, onClose, onSaved }) 
               [contenteditable] i, [contenteditable] em { color: #ff6680; font-style: italic; }
               [contenteditable] a { color: #3b82f6; text-decoration: underline; }
               [contenteditable] span[style*="background"] { padding: 0 3px; border-radius: 2px; }
+              @keyframes spin { to { transform: rotate(360deg); } }
             `}</style>
           </div>
 
@@ -330,19 +475,21 @@ export default function StageModal({ meta, stage, clientId, onClose, onSaved }) 
                 </div>
               )}
 
-              <div>
-                <SectionLabel>Prompt do Agente</SectionLabel>
-                <textarea
-                  placeholder="O prompt template será carregado aqui automaticamente..."
-                  rows={8}
-                  style={{
-                    width: '100%', boxSizing: 'border-box', padding: '10px 12px',
-                    background: 'rgba(10,10,10,0.8)', border: '1px solid rgba(255,255,255,0.06)',
-                    borderRadius: 8, color: 'var(--text-secondary)', fontSize: '0.72rem',
-                    fontFamily: 'var(--font-mono)', lineHeight: 1.7, outline: 'none', resize: 'vertical',
-                  }}
-                />
-              </div>
+              {/* Info do cliente (resumo) */}
+              {clientData && (
+                <div style={{
+                  padding: '10px 12px', borderRadius: 8,
+                  background: 'rgba(255,0,51,0.03)', border: '1px solid rgba(255,0,51,0.08)',
+                }}>
+                  <SectionLabel>Dados do Cliente</SectionLabel>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                    <div><strong style={{ color: 'var(--text-primary)' }}>{clientData.company_name}</strong></div>
+                    {clientData.niche && <div>Nicho: {clientData.niche}</div>}
+                    {clientData.main_product && <div>Produto: {clientData.main_product}</div>}
+                    {clientData.avg_ticket && <div>Ticket: {clientData.avg_ticket}</div>}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <SectionLabel>Referência — Link</SectionLabel>
@@ -373,13 +520,39 @@ export default function StageModal({ meta, stage, clientId, onClose, onSaved }) 
                 </div>
               </div>
 
-              <button disabled style={{
-                width: '100%', padding: '10px', borderRadius: 8, marginTop: 'auto',
-                background: 'rgba(255,0,51,0.04)', border: '1px solid rgba(255,0,51,0.12)',
-                color: 'rgba(255,102,128,0.35)', fontFamily: 'var(--font-mono)', fontSize: '0.72rem',
-                fontWeight: 600, letterSpacing: '0.04em', cursor: 'not-allowed',
-              }}>
-                Executar Agente — em breve
+              {/* Botão Executar Agente */}
+              <button
+                onClick={handleRunAgent}
+                disabled={generating || !canRun}
+                style={{
+                  width: '100%', padding: '12px', borderRadius: 8, marginTop: 'auto',
+                  background: generating
+                    ? 'rgba(249,115,22,0.08)'
+                    : canRun
+                      ? 'linear-gradient(135deg, rgba(204,0,41,0.15), rgba(255,0,51,0.08))'
+                      : 'rgba(255,0,51,0.04)',
+                  border: generating
+                    ? '1px solid rgba(249,115,22,0.25)'
+                    : canRun
+                      ? '1px solid rgba(255,0,51,0.3)'
+                      : '1px solid rgba(255,0,51,0.12)',
+                  color: generating
+                    ? '#f97316'
+                    : canRun
+                      ? '#ff6680'
+                      : 'rgba(255,102,128,0.35)',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.72rem',
+                  fontWeight: 600, letterSpacing: '0.04em',
+                  cursor: generating || !canRun ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {generating
+                  ? `⟳ ${loadingMsg}`
+                  : canRun
+                    ? `▶ Executar ${currentAgent?.label?.split(' — ')[1] || 'Agente'}`
+                    : 'Agente não disponível'
+                }
               </button>
             </div>
           </div>

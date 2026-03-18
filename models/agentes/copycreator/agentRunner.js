@@ -27,15 +27,17 @@ const KB_PLACEHOLDER_MAP = {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Busca todos os dados da knowledge base de um tenant e retorna como objeto
+ * Busca dados da knowledge base (por cliente ou por tenant)
  * @param {string} tenantId
+ * @param {string} [clientId] - Se informado, busca KB do cliente
  * @returns {Promise<Record<string, Record<string, string>>>} { categoria: { key: value } }
  */
-async function loadKnowledgeBase(tenantId) {
-  const rows = await query(
-    'SELECT category, key, value FROM ai_knowledge_base WHERE tenant_id = $1',
-    [tenantId]
-  );
+async function loadKnowledgeBase(tenantId, clientId) {
+  const sql = clientId
+    ? 'SELECT category, key, value FROM ai_knowledge_base WHERE tenant_id = $1 AND client_id = $2'
+    : 'SELECT category, key, value FROM ai_knowledge_base WHERE tenant_id = $1 AND client_id IS NULL';
+  const params = clientId ? [tenantId, clientId] : [tenantId];
+  const rows = await query(sql, params);
   const kb = {};
   for (const row of rows) {
     if (!kb[row.category]) kb[row.category] = {};
@@ -131,6 +133,7 @@ async function saveSearchHistory(tenantId, agentName, searchQuery, resultText, c
  * @param {object} params
  * @param {string}  params.agentName    - Nome do agente (ex: 'agente1')
  * @param {string}  params.tenantId     - ID do tenant (multi-tenant)
+ * @param {string}  [params.clientId]   - ID do cliente (KB por cliente)
  * @param {string}  params.userInput    - Input do usuário
  * @param {string}  [params.modelLevel] - Override do nível (weak|medium|strong)
  * @param {string}  [params.customPrompt] - Prompt editado pelo usuário
@@ -149,6 +152,7 @@ async function saveSearchHistory(tenantId, agentName, searchQuery, resultText, c
 async function runAgent({
   agentName,
   tenantId,
+  clientId,
   userInput,
   modelLevel,
   customPrompt,
@@ -163,8 +167,8 @@ async function runAgent({
   const level = modelLevel || agentConfig.modelLevel;
   console.log('[INFO][AgentRunner] Carregando prompt', { agentName, isCustom: !!customPrompt, type: agentConfig.type, level });
 
-  // 2. Carrega knowledge base do tenant
-  const kb = await loadKnowledgeBase(tenantId);
+  // 2. Carrega knowledge base (por cliente ou tenant)
+  const kb = await loadKnowledgeBase(tenantId, clientId);
 
   // 3. Monta o prompt base (editado pelo usuário ou padrão)
   let systemPrompt = customPrompt || agentModule.getPrompt();

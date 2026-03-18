@@ -427,3 +427,11 @@ CREATE TABLE IF NOT EXISTS ai_knowledge_base (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_knowledge_base_tenant_cat ON ai_knowledge_base(tenant_id, category);
+
+-- Coluna client_id para KB por cliente (cada cliente tem sua própria base de conhecimento)
+ALTER TABLE ai_knowledge_base ADD COLUMN IF NOT EXISTS client_id TEXT REFERENCES marketing_clients(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_ai_knowledge_base_client ON ai_knowledge_base(client_id, category);
+
+-- Históricos de IA vinculados a clientes
+ALTER TABLE ai_search_history ADD COLUMN IF NOT EXISTS client_id TEXT REFERENCES marketing_clients(id) ON DELETE SET NULL;
+ALTER TABLE ai_agent_history  ADD COLUMN IF NOT EXISTS client_id TEXT REFERENCES marketing_clients(id) ON DELETE SET NULL;

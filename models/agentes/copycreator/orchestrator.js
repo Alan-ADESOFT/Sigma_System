@@ -33,6 +33,7 @@ const FEED_CONTEXT_KEY = {
  * @param {object} params
  * @param {string}  params.agentName     - Nome do agente a executar
  * @param {string}  params.tenantId      - Tenant ID (multi-tenant)
+ * @param {string}  [params.clientId]    - Client ID (KB por cliente)
  * @param {string}  params.userInput     - Input do usuário / consulta
  * @param {string}  [params.modelLevel]  - Override do nível do modelo
  * @param {string}  [params.customPrompt] - Prompt editado pelo usuário
@@ -51,6 +52,7 @@ const FEED_CONTEXT_KEY = {
 async function orchestrate({
   agentName,
   tenantId,
+  clientId,
   userInput,
   modelLevel,
   customPrompt,
@@ -70,6 +72,7 @@ async function orchestrate({
     const searchResult = await runAgent({
       agentName,
       tenantId,
+      clientId,
       userInput,
       modelLevel,
       customPrompt,
@@ -92,6 +95,7 @@ async function orchestrate({
     const textResult = await runAgent({
       agentName:    destAgentName,
       tenantId,
+      clientId,
       userInput:    `Analise os seguintes dados coletados:\n\n${searchResult.text}`,
       modelLevel:   destAgent.agentConfig.modelLevel,
       context:      destContext,
@@ -116,6 +120,7 @@ async function orchestrate({
   return runAgent({
     agentName,
     tenantId,
+    clientId,
     userInput,
     modelLevel,
     customPrompt,

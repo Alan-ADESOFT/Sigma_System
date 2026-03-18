@@ -32,6 +32,7 @@ export default async function handler(req, res) {
     userInput,
     modelLevel,
     customPrompt,
+    clientId,
     context     = {},
     complements = {},
   } = req.body;
@@ -53,6 +54,7 @@ export default async function handler(req, res) {
     const result = await orchestrate({
       agentName,
       tenantId,
+      clientId:     clientId || null,
       userInput:    userInput.trim(),
       modelLevel,
       customPrompt,

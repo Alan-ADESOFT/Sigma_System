@@ -600,6 +600,7 @@ function TabDatabase({ client, stages, onStageUpdated }) {
           meta={openMeta}
           stage={getStage(openMeta.key)}
           clientId={client.id}
+          clientData={client}
           onClose={() => setOpenMeta(null)}
           onSaved={(updated) => onStageUpdated(openMeta.key, updated)}
         />

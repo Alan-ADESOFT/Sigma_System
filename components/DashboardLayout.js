@@ -63,21 +63,15 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    category: 'AGENTES IA',
-    items: [
-      { href: '/dashboard/agentes',          label: 'CopyCreator IA',         tag: '09', icon: 'brain'        },
-    ],
-  },
-  {
     category: 'TRÁFEGO',
     items: [
-      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '10', icon: 'megaphone'    },
+      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '09', icon: 'megaphone'    },
     ],
   },
   {
     category: 'SISTEMA',
     items: [
-      { href: '/dashboard/settings',         label: 'Configurações',          tag: '11', icon: 'settings'     },
+      { href: '/dashboard/settings',         label: 'Configurações',          tag: '10', icon: 'settings'     },
     ],
   },
 ];

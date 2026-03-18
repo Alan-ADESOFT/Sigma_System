@@ -309,6 +309,7 @@ function ClientStagesPopup({ client, onClose, onStageUpdated }) {
           meta={openMeta}
           stage={getStage(openMeta.key)}
           clientId={client.id}
+          clientData={client}
           onClose={() => setOpenMeta(null)}
           onSaved={(updated) => onStageUpdated(client.id, openMeta.key, updated)}
         />
