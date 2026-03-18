@@ -9,11 +9,12 @@
  *   6. Retorna resultado formatado
  */
 
-const { runCompletion }   = require('../../ia/completion');
-const { deepSearch }      = require('../../ia/deepSearch');
-const { withMarkdown }    = require('../../ia/markdownHelper');
-const { getAgent }        = require('./prompts/index');
-const { query, queryOne } = require('../../../infra/db');
+const { runCompletion }     = require('../../ia/completion');
+const { deepSearch }       = require('../../ia/deepSearch');
+const { withMarkdown }     = require('../../ia/markdownHelper');
+const { getAgent }         = require('./prompts/index');
+const { query, queryOne }  = require('../../../infra/db');
+const { fetchMultipleUrls } = require('../../../infra/api/scraper');
 
 // ─── Placeholders dinâmicos suportados ───────────────────────────────────────
 // Mapeamento placeholder → categoria na ai_knowledge_base
@@ -86,14 +87,28 @@ function injectContext(prompt, context = {}) {
  * @param {{ links?: string[], images?: string[] }} complements
  * @returns {string}
  */
+/**
+ * Injeta complementos no prompt.
+ * Para links: busca o conteúdo real da URL via scraper (async).
+ * Para arquivos: lista os nomes (processamento futuro).
+ * @param {string} prompt
+ * @param {{ links?: string[], images?: string[], linkContents?: string }} complements
+ * @returns {string}
+ */
 function injectComplements(prompt, complements = {}) {
   const parts = [];
-  if (complements.links?.length) {
+
+  // Conteúdo real dos links (já buscado antes de chamar esta função)
+  if (complements.linkContents) {
+    parts.push(`\nCONTEÚDO DAS REFERÊNCIAS (extraído das URLs fornecidas):\n${complements.linkContents}`);
+  } else if (complements.links?.length) {
     parts.push(`\nLINKS DE REFERÊNCIA:\n${complements.links.map((l) => `- ${l}`).join('\n')}`);
   }
-  if (complements.images?.length) {
-    parts.push(`\nIMAGENS/ARQUIVOS DE REFERÊNCIA:\n${complements.images.map((i) => `- ${i}`).join('\n')}`);
+
+  if (complements.fileNames?.length) {
+    parts.push(`\nARQUIVOS ANEXADOS:\n${complements.fileNames.map((n) => `- ${n}`).join('\n')}`);
   }
+
   if (parts.length) {
     return `${prompt}\n\n─────────────────────────────────────
 MATERIAIS COMPLEMENTARES
@@ -187,7 +202,17 @@ async function runAgent({
   systemPrompt = injectKnowledgeBase(systemPrompt, kb);
   console.log('[DEBUG][AgentRunner] Placeholders substituídos', { placeholders: Object.keys({ ...context, ...KB_PLACEHOLDER_MAP }) });
 
-  // 5. Injeta complementos (links/imagens) se agente tipo text
+  // 5. Busca conteúdo real dos links de referência (web scraping)
+  if (complements.links?.length) {
+    console.log('[INFO][AgentRunner] Buscando conteúdo dos links de referência', { links: complements.links });
+    const linkContents = await fetchMultipleUrls(complements.links, 2000);
+    if (linkContents) {
+      complements.linkContents = linkContents;
+      console.log('[SUCESSO][AgentRunner] Conteúdo dos links extraído', { contentLength: linkContents.length });
+    }
+  }
+
+  // 6. Injeta complementos (links/arquivos) se agente tipo text
   if (agentConfig.type === 'text') {
     systemPrompt = injectComplements(systemPrompt, complements);
   }

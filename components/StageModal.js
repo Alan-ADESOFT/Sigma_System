@@ -514,27 +514,23 @@ REGRAS OBRIGATÓRIAS:
         observacoes:        clientData.observations,
       }, null, 2) : 'Dados do cliente não disponíveis';
 
-      // Monta o prompt final: base (editado ou padrão) + adicional
-      let finalPrompt = isPromptEdited ? customPrompt : undefined;
+      // Monta o userInput: dados do cliente + instruções adicionais (se houver)
+      let userMsg = clientJson;
       if (additionalPrompt.trim()) {
-        const extra = `\n\n─────────────────────────────────────\nINSTRUÇÕES ADICIONAIS DO OPERADOR\n─────────────────────────────────────\n${additionalPrompt.trim()}`;
-        finalPrompt = finalPrompt ? finalPrompt + extra : undefined;
-        // Se não editou o prompt base, passa o adicional como parte do context
-        if (!finalPrompt) {
-          // Força carregar o prompt base para concatenar
-        }
+        userMsg += `\n\n─────────────────────────────────────\nINSTRUÇÕES ADICIONAIS DO OPERADOR\n─────────────────────────────────────\n${additionalPrompt.trim()}`;
       }
 
       const body = {
         agentName,
         clientId,
         modelLevel,
-        customPrompt: finalPrompt,
-        userInput: additionalPrompt.trim() && !finalPrompt
-          ? `${clientJson}\n\n─── INSTRUÇÕES ADICIONAIS ───\n${additionalPrompt.trim()}`
-          : clientJson,
+        customPrompt: isPromptEdited ? customPrompt : undefined,
+        userInput: userMsg,
         context: { '{DADOS_CLIENTE}': clientJson },
-        complements: refLink ? { links: [refLink] } : {},
+        complements: {
+          ...(refLink ? { links: [refLink] } : {}),
+          ...(uploadedFiles.length ? { fileNames: uploadedFiles.map(f => f.name) } : {}),
+        },
       };
 
       console.log('[INFO][Frontend:StageModal] Executando agente', { agentName, clientId, stage: meta.key });
@@ -1076,17 +1072,19 @@ REGRAS OBRIGATÓRIAS:
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                       <SectionLabel>Prompt Base</SectionLabel>
                       <div style={{ display: 'flex', gap: 4 }}>
-                        {showPrompt && isPromptEdited && (
+                        {showPrompt && (
                           <button
                             onClick={handleResetPrompt}
                             style={{
                               padding: '2px 8px', borderRadius: 4,
-                              background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.2)',
-                              color: '#f97316', cursor: 'pointer',
+                              background: isPromptEdited ? 'rgba(249,115,22,0.1)' : 'rgba(255,255,255,0.02)',
+                              border: `1px solid ${isPromptEdited ? 'rgba(249,115,22,0.3)' : 'rgba(255,255,255,0.08)'}`,
+                              color: isPromptEdited ? '#f97316' : 'var(--text-muted)',
+                              cursor: 'pointer',
                               fontFamily: 'var(--font-mono)', fontSize: '0.52rem', fontWeight: 600,
                             }}
                           >
-                            Restaurar Padrão
+                            ↺ Restaurar Padrão
                           </button>
                         )}
                         <button
