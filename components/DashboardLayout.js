@@ -63,15 +63,21 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    category: 'AGENTES IA',
+    items: [
+      { href: '/dashboard/agentes',          label: 'CopyCreator IA',         tag: '09', icon: 'brain'        },
+    ],
+  },
+  {
     category: 'TRÁFEGO',
     items: [
-      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '09', icon: 'megaphone'    },
+      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '10', icon: 'megaphone'    },
     ],
   },
   {
     category: 'SISTEMA',
     items: [
-      { href: '/dashboard/settings',         label: 'Configurações',          tag: '10', icon: 'settings'     },
+      { href: '/dashboard/settings',         label: 'Configurações',          tag: '11', icon: 'settings'     },
     ],
   },
 ];
@@ -161,6 +167,13 @@ const ICONS = {
       <circle cx="9" cy="7" r="4" />
       <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
+  brain: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
+      <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
+      <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/><path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/><path d="M3.477 10.896a4 4 0 0 1 .585-.396"/><path d="M19.938 10.5a4 4 0 0 1 .585.396"/><path d="M6 18a4 4 0 0 1-1.967-.516"/><path d="M19.967 17.484A4 4 0 0 1 18 18"/>
     </svg>
   ),
   /* Ícone do botão de colapso — chevron esquerdo */
