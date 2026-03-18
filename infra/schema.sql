@@ -365,3 +365,65 @@ CREATE TABLE IF NOT EXISTS client_installments (
 CREATE INDEX IF NOT EXISTS idx_client_installments_client   ON client_installments(client_id);
 CREATE INDEX IF NOT EXISTS idx_client_installments_contract ON client_installments(contract_id);
 CREATE INDEX IF NOT EXISTS idx_client_installments_due      ON client_installments(due_date);
+
+-- ============================================================
+-- MÓDULO DE AGENTES IA — CopyCreator
+-- ============================================================
+
+-- Histórico de pesquisas web realizadas pelos agentes
+CREATE TABLE IF NOT EXISTS ai_search_history (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    query       TEXT NOT NULL,
+    result_text TEXT,
+    citations   JSONB NOT NULL DEFAULT '[]',
+    agent_name  VARCHAR(100),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_search_history_tenant ON ai_search_history(tenant_id, created_at DESC);
+
+-- Histórico de respostas geradas pelos agentes
+CREATE TABLE IF NOT EXISTS ai_agent_history (
+    id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id     TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    agent_name    VARCHAR(100) NOT NULL,
+    model_used    VARCHAR(100),
+    prompt_sent   TEXT,
+    response_text TEXT,
+    metadata      JSONB NOT NULL DEFAULT '{}',
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_agent_history_tenant ON ai_agent_history(tenant_id, created_at DESC);
+
+-- Rascunhos de conteúdo gerados pelos agentes
+CREATE TABLE IF NOT EXISTS ai_drafts (
+    id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id        TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    agent_name       VARCHAR(100),
+    title            VARCHAR(255),
+    content          TEXT,
+    original_content TEXT,                              -- backup antes de edições
+    status           VARCHAR(20) NOT NULL DEFAULT 'pendente', -- pendente | desenvolvendo | concluido
+    metadata         JSONB NOT NULL DEFAULT '{}',
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_drafts_tenant_status ON ai_drafts(tenant_id, status);
+
+-- Base de dados dinâmica (marca, produto, persona, etc.) por tenant
+CREATE TABLE IF NOT EXISTS ai_knowledge_base (
+    id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    category   VARCHAR(100) NOT NULL,  -- 'marca' | 'produto' | 'persona' | 'tom_de_voz' | 'concorrentes'
+    key        VARCHAR(255) NOT NULL,
+    value      TEXT NOT NULL,
+    metadata   JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(tenant_id, category, key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_knowledge_base_tenant_cat ON ai_knowledge_base(tenant_id, category);
