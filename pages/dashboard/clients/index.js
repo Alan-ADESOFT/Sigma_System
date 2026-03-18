@@ -158,15 +158,27 @@ function FieldErr({ msg }) {
 
 const FREQ_LABELS_MAP = { monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual', one_time: 'Único' };
 
+const DEFAULT_SERVICES = [
+  'Planejamento de campanha',
+  'Edição de foto',
+  'Edição de vídeo',
+  'Gerenciamento de rede social',
+  'Gerenciamento de tráfego pago',
+  'Arte digital',
+];
+
 function AddClientModal({ onClose }) {
   const router  = useRouter();
   const [tab,   setTab  ] = useState(0);
   const [done,  setDone ] = useState([false, false]); // tabs 0,1 completed
 
   const [info, setInfo] = useState({
-    company_name: '', niche: '', email: '', phone: '', region: '', status: 'active',
+    company_name: '', niche: '', email: '', phone: '', region: '', status: 'active', inactive_reason: '',
   });
-  const [services, setServices] = useState([]);
+  const [services, setServices] = useState(() =>
+    DEFAULT_SERVICES.map((name, i) => ({ id: i, name, selected: true }))
+  );
+  const [customSvc, setCustomSvc] = useState('');
   const [fin, setFin] = useState({
     contract_value: '', frequency: 'monthly', period_months: '12', due_day: '10', start_date: '',
   });
@@ -179,9 +191,14 @@ function AddClientModal({ onClose }) {
   function setFinField(f, v)  { setFin(p => ({ ...p, [f]: v })); setErrs(e => ({ ...e, [f]: undefined })); }
 
   /* Services */
-  const addSvc    = () => setServices(s => [...s, { id: Date.now(), name: '' }]);
-  const rmSvc     = i  => setServices(s => s.filter((_, j) => j !== i));
-  const updateSvc = (i, v) => setServices(s => s.map((x, j) => j === i ? { ...x, name: v } : x));
+  const toggleSvc   = i => setServices(s => s.map((x, j) => j === i ? { ...x, selected: !x.selected } : x));
+  const rmCustomSvc = i => setServices(s => s.filter((_, j) => j !== i));
+  function addCustomSvc() {
+    const name = customSvc.trim();
+    if (!name) return;
+    setServices(s => [...s, { id: Date.now(), name, selected: true }]);
+    setCustomSvc('');
+  }
 
   /* Tab 0 validation */
   function validateTab0() {
@@ -221,9 +238,14 @@ function AddClientModal({ onClose }) {
     if (!validateTab2()) return;
     setSaving(true); setError(null);
     try {
+      const selectedServices = services.filter(s => s.selected).map(s => ({ id: s.id, name: s.name }));
       const cRes  = await fetch('/api/clients', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...info, services }),
+        body: JSON.stringify({
+          ...info,
+          services: selectedServices,
+          extra_data: info.inactive_reason ? { inactive_reason: info.inactive_reason } : null,
+        }),
       });
       const cJson = await cRes.json();
       if (!cJson.success) throw new Error(cJson.error);
@@ -357,53 +379,63 @@ function AddClientModal({ onClose }) {
                   <option value="inactive">Inativo</option>
                 </select>
               </div>
+              {info.status === 'inactive' && (
+                <div style={{ gridColumn: '1/-1' }}>
+                  <Lbl>Motivo da Inativação</Lbl>
+                  <input
+                    value={info.inactive_reason}
+                    onChange={e => setInfoField('inactive_reason', e.target.value)}
+                    placeholder="Descreva o motivo da inativação..."
+                    style={INP_STYLE}
+                  />
+                </div>
+              )}
             </div>
           )}
 
           {/* Tab 1 — Serviços */}
           {tab === 1 && (
             <div>
-              <div style={{
-                padding: '10px 14px', borderRadius: 7, marginBottom: 16,
-                background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)',
-              }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                  Liste os serviços contratados pelo cliente (ex: Gestão de Tráfego, Social Media, Consultoria...).
-                  Esta aba é opcional — você pode adicionar serviços depois também.
-                </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10 }}>
+                Serviços Contratados
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                  {services.length} serviço{services.length !== 1 ? 's' : ''} adicionado{services.length !== 1 ? 's' : ''}
-                </span>
-                <button onClick={addSvc} style={{
-                  padding: '5px 12px', borderRadius: 5, cursor: 'pointer',
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                {services.map((sv, i) => (
+                  <button key={sv.id} onClick={() => toggleSvc(i)} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '6px 12px', borderRadius: 20, cursor: 'pointer',
+                    border: sv.selected ? '1px solid rgba(255,0,51,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                    background: sv.selected ? 'rgba(255,0,51,0.1)' : 'rgba(255,255,255,0.02)',
+                    color: sv.selected ? '#ff6680' : 'var(--text-muted)',
+                    fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: sv.selected ? 600 : 400,
+                    transition: 'all 0.15s',
+                  }}>
+                    {sv.selected && <span style={{ fontSize: '0.55rem' }}>✓</span>}
+                    {sv.name}
+                    {!DEFAULT_SERVICES.includes(sv.name) && (
+                      <span onClick={e => { e.stopPropagation(); rmCustomSvc(i); }} style={{ marginLeft: 2, opacity: 0.6, fontSize: '0.75rem', lineHeight: 1 }}>×</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  value={customSvc}
+                  onChange={e => setCustomSvc(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCustomSvc())}
+                  placeholder="Adicionar serviço personalizado..."
+                  style={{ ...INP_STYLE, flex: 1 }}
+                />
+                <button onClick={addCustomSvc} style={{
+                  padding: '8px 14px', borderRadius: 6, cursor: 'pointer', whiteSpace: 'nowrap',
                   border: '1px solid rgba(255,0,51,0.25)', background: 'rgba(255,0,51,0.06)',
-                  color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600,
+                  color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 600,
                 }}>
-                  + Serviço
+                  + Adicionar
                 </button>
               </div>
-              {services.length === 0 && (
-                <div style={{
-                  padding: '28px 0', textAlign: 'center',
-                  fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)',
-                }}>
-                  Nenhum serviço. Clique em "+ Serviço" para adicionar.
-                </div>
-              )}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                {services.map((sv, i) => (
-                  <div key={sv.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input value={sv.name} onChange={e => updateSvc(i, e.target.value)}
-                      placeholder={`Serviço ${i + 1}...`} style={{ ...INP_STYLE, flex: 1 }} autoFocus={i === services.length - 1} />
-                    <button onClick={() => rmSvc(i)} style={{
-                      width: 28, height: 28, borderRadius: 5, cursor: 'pointer', flexShrink: 0,
-                      border: '1px solid rgba(255,255,255,0.06)', background: 'transparent',
-                      color: 'var(--text-muted)', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>×</button>
-                  </div>
-                ))}
+              <div style={{ marginTop: 10, fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+                {services.filter(s => s.selected).length} serviço(s) selecionado(s)
               </div>
             </div>
           )}
@@ -556,13 +588,14 @@ function AddClientModal({ onClose }) {
 ───────────────────────────────────────────────────────── */
 function EditModal({ client, onClose, onSave }) {
   const [form, setForm] = useState({
-    company_name: client.company_name || '',
-    niche:        client.niche        || '',
-    email:        client.email        || '',
-    phone:        client.phone        || '',
-    avg_ticket:   client.avg_ticket   || '',
-    region:       client.region       || '',
-    status:       client.status === 'inactive' ? 'inactive' : 'active',
+    company_name:    client.company_name    || '',
+    niche:           client.niche           || '',
+    email:           client.email           || '',
+    phone:           client.phone           || '',
+    avg_ticket:      client.avg_ticket      || '',
+    region:          client.region          || '',
+    status:          client.status === 'inactive' ? 'inactive' : 'active',
+    inactive_reason: client.extra_data?.inactive_reason || '',
   });
   const [saving, setSaving] = useState(false);
   const [error,  setError ] = useState(null);
@@ -583,8 +616,17 @@ function EditModal({ client, onClose, onSave }) {
     if (!form.company_name.trim()) { setError('Nome obrigatório.'); return; }
     setSaving(true); setError(null);
     try {
+      // Preserve existing extra_data and update inactive_reason
+      const existingExtra = client.extra_data || {};
+      const extra_data = form.inactive_reason
+        ? { ...existingExtra, inactive_reason: form.inactive_reason }
+        : existingExtra.inactive_reason
+          ? { ...existingExtra } // keep old reason even when reactivated
+          : existingExtra;
+      const { inactive_reason, ...formWithoutReason } = form;
       const res  = await fetch(`/api/clients/${client.id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...formWithoutReason, extra_data }),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
@@ -648,6 +690,25 @@ function EditModal({ client, onClose, onSave }) {
                 <option value="inactive">Inativo</option>
               </select>
             </div>
+            {form.status === 'inactive' && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <Lbl>Motivo da Inativação</Lbl>
+                <input
+                  value={form.inactive_reason}
+                  onChange={h('inactive_reason')}
+                  placeholder="Descreva o motivo da inativação..."
+                  style={INP_STYLE}
+                />
+              </div>
+            )}
+            {form.status === 'active' && (client.extra_data?.inactive_reason || form.inactive_reason) && (
+              <div style={{ gridColumn: '1 / -1', padding: '8px 12px', borderRadius: 6, background: 'rgba(255,185,0,0.06)', border: '1px solid rgba(255,185,0,0.18)' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'rgba(255,185,0,0.7)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Motivo de inativação anterior</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'rgba(255,185,0,0.9)' }}>
+                  {form.inactive_reason || client.extra_data?.inactive_reason}
+                </div>
+              </div>
+            )}
           </div>
 
           {error && (
@@ -912,7 +973,7 @@ export default function ClientsPage() {
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return clients.filter(c => {
+    const list = clients.filter(c => {
       const matchSearch = !q ||
         c.company_name?.toLowerCase().includes(q) ||
         c.niche?.toLowerCase().includes(q) ||
@@ -920,6 +981,12 @@ export default function ClientsPage() {
         c.phone?.includes(q);
       const matchStatus = !statusF || c.status === statusF;
       return matchSearch && matchStatus;
+    });
+    // Inactive clients always at the bottom
+    return list.sort((a, b) => {
+      const aInactive = a.status === 'inactive' ? 1 : 0;
+      const bInactive = b.status === 'inactive' ? 1 : 0;
+      return aInactive - bInactive;
     });
   }, [clients, search, statusF]);
 

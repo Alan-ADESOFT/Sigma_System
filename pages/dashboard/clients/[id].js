@@ -133,23 +133,61 @@ const INP = {
   fontFamily: 'var(--font-mono)', outline: 'none',
 };
 
+const DEFAULT_SERVICES = [
+  'Planejamento de campanha',
+  'Edição de foto',
+  'Edição de vídeo',
+  'Gerenciamento de rede social',
+  'Gerenciamento de tráfego pago',
+  'Arte digital',
+];
+
 /* ═══════════════════════════════════════════════════════════
    TAB: INFORMAÇÕES GERAIS
 ═══════════════════════════════════════════════════════════ */
 function TabInfo({ client, onSave }) {
   const [form, setForm] = useState({
-    company_name:  client.company_name  || '',
-    niche:         client.niche         || '',
-    email:         client.email         || '',
-    phone:         client.phone         || '',
-    avg_ticket:    client.avg_ticket    || '',
-    region:        client.region        || '',
-    main_product:  client.main_product  || '',
-    status:        client.status        || 'active',
-    logo_url:      client.logo_url      || '',
+    company_name:    client.company_name  || '',
+    niche:           client.niche         || '',
+    email:           client.email         || '',
+    phone:           client.phone         || '',
+    avg_ticket:      client.avg_ticket    || '',
+    region:          client.region        || '',
+    main_product:    client.main_product  || '',
+    status:          client.status        || 'active',
+    logo_url:        client.logo_url      || '',
+    inactive_reason: client.extra_data?.inactive_reason || '',
   });
   const [links,    setLinks   ] = useState(client.important_links || []);
-  const [services, setServices] = useState(client.services        || []);
+
+  /* ── Serviços: toggle format ── */
+  const [customSvc, setCustomSvc] = useState('');
+  const [services, setServices] = useState(() => {
+    const existingNames = (client.services || []).map(s => typeof s === 'string' ? s : s.name);
+    const merged = DEFAULT_SERVICES.map((name, i) => ({ id: `svc-${i}`, name, selected: existingNames.includes(name) }));
+    existingNames.forEach((name, idx) => {
+      if (!DEFAULT_SERVICES.includes(name)) merged.push({ id: `custom-${idx}`, name, selected: true });
+    });
+    return merged;
+  });
+
+  /* ── Ticket médio derivado do contrato (soma de todos os contratos ativos) ── */
+  const [contractMonthly, setContractMonthly] = useState(null);
+  useEffect(() => {
+    fetch(`/api/clients/${client.id}/contracts`)
+      .then(r => r.json())
+      .then(j => {
+        if (j.success && j.contracts && j.contracts.length > 0) {
+          const total = j.contracts.reduce((sum, c) => {
+            const mv = parseFloat(c.monthly_value) || 0;
+            return sum + mv;
+          }, 0);
+          if (total > 0) setContractMonthly(total);
+        }
+      })
+      .catch(() => {});
+  }, [client.id]);
+
   const [saving,   setSaving  ] = useState(false);
   const [saved,    setSaved   ] = useState(false);
   const [err,      setErr     ] = useState(null);
@@ -189,16 +227,34 @@ function TabInfo({ client, onSave }) {
   function updateLink(i, f, v) { setLinks(l => l.map((x, j) => j === i ? { ...x, [f]: v } : x)); }
 
   /* ── Serviços ── */
-  function addService()          { setServices(s => [...s, { id: Date.now().toString(), name: '' }]); }
-  function removeService(i)      { setServices(s => s.filter((_, j) => j !== i)); }
-  function updateService(i, v)   { setServices(s => s.map((x, j) => j === i ? { ...x, name: v } : x)); }
+  function toggleService(i) { setServices(s => s.map((svc, j) => j === i ? { ...svc, selected: !svc.selected } : svc)); setSaved(false); }
+  function addCustomService() {
+    const name = customSvc.trim();
+    if (!name) return;
+    setServices(s => [...s, { id: `svc-${Date.now()}`, name, selected: true }]);
+    setCustomSvc('');
+    setSaved(false);
+  }
+  function removeCustomService(i) { setServices(s => s.filter((_, j) => j !== i)); setSaved(false); }
 
   async function handleSave() {
     setSaving(true); setErr(null);
     try {
+      const selectedServices = services.filter(s => s.selected).map(s => ({ id: s.id, name: s.name }));
+      const existingExtra = client.extra_data || {};
+      const extra_data = form.inactive_reason
+        ? { ...existingExtra, inactive_reason: form.inactive_reason }
+        : { ...existingExtra, inactive_reason: existingExtra.inactive_reason || '' };
+      const { inactive_reason, ...formWithoutReason } = form;
       const res  = await fetch(`/api/clients/${client.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, important_links: links, services }),
+        body: JSON.stringify({
+          ...formWithoutReason,
+          avg_ticket: contractMonthly !== null ? String(contractMonthly) : form.avg_ticket,
+          important_links: links,
+          services: selectedServices,
+          extra_data,
+        }),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
@@ -274,8 +330,15 @@ function TabInfo({ client, onSave }) {
           <input value={form.region} onChange={h('region')} placeholder="Brasil, Online..." style={INP} />
         </div>
         <div>
-          <Label>Ticket Médio</Label>
-          <input value={form.avg_ticket} onChange={h('avg_ticket')} placeholder="R$ 997" style={INP} />
+          <Label>Ticket Médio (contrato)</Label>
+          <input
+            value={contractMonthly !== null ? fmtBRL(contractMonthly) : (form.avg_ticket || '—')}
+            readOnly
+            style={{ ...INP, opacity: 0.55, cursor: 'default' }}
+          />
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginTop: 3 }}>
+            Derivado do valor mensal do contrato
+          </div>
         </div>
       </div>
 
@@ -296,6 +359,26 @@ function TabInfo({ client, onSave }) {
           </select>
         </div>
       </div>
+
+      {/* Motivo inativação — sempre visível se existir, editável quando inativo */}
+      {(form.status === 'inactive' || form.inactive_reason) && (
+        <div style={{ marginTop: 12 }}>
+          <Label>Motivo da Inativação</Label>
+          {form.status === 'inactive' ? (
+            <input
+              value={form.inactive_reason}
+              onChange={h('inactive_reason')}
+              placeholder="Descreva o motivo da inativação..."
+              style={INP}
+            />
+          ) : (
+            <div style={{ padding: '8px 12px', borderRadius: 6, background: 'rgba(255,185,0,0.06)', border: '1px solid rgba(255,185,0,0.18)' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'rgba(255,185,0,0.6)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Histórico — motivo de inativação anterior</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'rgba(255,185,0,0.85)' }}>{form.inactive_reason}</div>
+            </div>
+          )}
+        </div>
+      )}
 
       <Divider />
 
@@ -344,39 +427,51 @@ function TabInfo({ client, onSave }) {
       <Divider />
 
       {/* ── Serviços Fechados ── */}
-      <SectionTitle
-        action={
-          <button onClick={addService} style={{
-            padding: '4px 10px', borderRadius: 5, cursor: 'pointer',
-            border: '1px solid rgba(255,0,51,0.2)', background: 'rgba(255,0,51,0.05)',
-            color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
-          }}>
-            + Serviço
-          </button>
-        }
-      >
-        Serviços Fechados
-      </SectionTitle>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
-        {services.length === 0 && (
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)', padding: '12px 0' }}>
-            Nenhum serviço cadastrado.
-          </div>
-        )}
-        {services.map((sv, i) => (
-          <div key={sv.id || i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input
-              placeholder="Nome do serviço..."
-              value={sv.name}
-              onChange={e => updateService(i, e.target.value)}
-              style={{ ...INP, flex: 1 }}
-            />
-            <button onClick={() => removeService(i)} style={{
-              background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
-              fontSize: '1rem', padding: '0 4px', flexShrink: 0,
-            }}>×</button>
+      <SectionTitle>Serviços Fechados</SectionTitle>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+        {services.map((svc, i) => (
+          <div key={svc.id || i} style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px',
+            borderRadius: 8, cursor: 'pointer', transition: 'all 0.2s',
+            background: svc.selected ? 'rgba(255,0,51,0.1)' : 'rgba(17,17,17,0.6)',
+            border: svc.selected ? '1px solid rgba(255,0,51,0.4)' : '1px solid rgba(255,255,255,0.06)',
+          }} onClick={() => toggleService(i)}>
+            <div style={{
+              width: 14, height: 14, borderRadius: 4, flexShrink: 0, display: 'flex',
+              alignItems: 'center', justifyContent: 'center',
+              background: svc.selected ? 'rgba(255,0,51,0.25)' : 'transparent',
+              border: svc.selected ? '1.5px solid #ff0033' : '1.5px solid rgba(255,255,255,0.12)',
+            }}>
+              {svc.selected && (
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#ff6680" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </div>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: svc.selected ? '#ff6680' : 'var(--text-muted)' }}>
+              {svc.name}
+            </span>
+            {!DEFAULT_SERVICES.includes(svc.name) && (
+              <button type="button" onClick={e => { e.stopPropagation(); removeCustomService(i); }} style={{
+                background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer',
+                padding: 0, marginLeft: 2, fontSize: '0.8rem', lineHeight: 1,
+              }}>×</button>
+            )}
           </div>
         ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 24 }}>
+        <input
+          type="text" value={customSvc} onChange={e => setCustomSvc(e.target.value)}
+          placeholder="Adicionar serviço personalizado..."
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomService(); } }}
+          style={{ ...INP, flex: 1 }}
+        />
+        <button type="button" onClick={addCustomService} style={{
+          padding: '8px 14px', borderRadius: 7, cursor: 'pointer',
+          border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)',
+          color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
+        }}>+</button>
       </div>
 
       {/* ── Erro + Salvar ── */}
@@ -829,23 +924,8 @@ function TabObservacoes({ clientId }) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   TAB: FINANCEIRO
+   TAB: FINANCEIRO (múltiplos contratos, serviços vinculados)
 ═══════════════════════════════════════════════════════════ */
-const FREQ_LABELS = {
-  monthly:    'Mensal',
-  quarterly:  'Trimestral',
-  semiannual: 'Semestral',
-  annual:     'Anual',
-  one_time:   'Pagamento único',
-};
-const FREQ_OPTS = [
-  { value: 'monthly',    label: 'Mensal'           },
-  { value: 'quarterly',  label: 'Trimestral'       },
-  { value: 'semiannual', label: 'Semestral'        },
-  { value: 'annual',     label: 'Anual'            },
-  { value: 'one_time',   label: 'Pagamento único'  },
-];
-
 function fmtBRL(v) {
   const n = parseFloat(v) || 0;
   return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -853,26 +933,25 @@ function fmtBRL(v) {
 
 function fmtDate(d) {
   if (!d) return '—';
-  const [y, m, day] = d.split('-');
+  const s = typeof d === 'string' ? d.split('T')[0] : d;
+  const [y, m, day] = s.split('-');
   return `${day}/${m}/${y}`;
 }
 
-function numInstallments(frequency, periodMonths) {
-  const freqMap = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12, one_time: 9999 };
-  const fm = freqMap[frequency] ?? 1;
-  return frequency === 'one_time' ? 1 : Math.ceil(parseInt(periodMonths || 12) / fm);
-}
+function TabFinanceiro({ clientId, clientServices }) {
+  const [contracts, setContracts] = useState([]);
+  const [loading,   setLoading  ] = useState(true);
+  const [showForm,  setShowForm ] = useState(false);
+  const [saving,    setSaving   ] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
 
-function TabFinanceiro({ clientId }) {
-  const [contract,     setContract    ] = useState(null);
-  const [installments, setInstallments] = useState([]);
-  const [loading,      setLoading     ] = useState(true);
-  const [showForm,     setShowForm    ] = useState(false);
-  const [saving,       setSaving      ] = useState(false);
-  const [form, setForm] = useState({
-    contract_value: '', frequency: 'monthly', period_months: '12',
-    due_day: '10', start_date: '', notes: '',
-  });
+  const EMPTY_FORM = {
+    monthly_value: '', num_installments: '12',
+    due_day: '10', start_date: new Date().toISOString().split('T')[0],
+    notes: '', services: [],
+  };
+  const [form, setForm] = useState(EMPTY_FORM);
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
 
@@ -892,38 +971,100 @@ function TabFinanceiro({ clientId }) {
     setLoading(true);
     try {
       const j = await fetch(`/api/clients/${clientId}/contracts`).then(r => r.json());
-      if (j.success) { setContract(j.contract); setInstallments(j.installments || []); }
+      if (j.success) setContracts(j.contracts || []);
     } finally { setLoading(false); }
   }
 
   useEffect(() => { load(); }, [clientId]);
 
-  async function handleCreateContract(e) {
+  function handleValueMask(e) {
+    let raw = e.target.value.replace(/\D/g, '');
+    if (!raw) { setForm(f => ({ ...f, monthly_value: '' })); return; }
+    const cents = parseInt(raw);
+    const formatted = (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    setForm(f => ({ ...f, monthly_value: formatted }));
+  }
+
+  function toggleFormService(name) {
+    setForm(f => {
+      const has = f.services.includes(name);
+      return { ...f, services: has ? f.services.filter(s => s !== name) : [...f.services, name] };
+    });
+  }
+
+  function openNewForm() {
+    setForm({ ...EMPTY_FORM, services: (clientServices || []).map(s => s.name) });
+    setEditingId(null);
+    setShowForm(true);
+  }
+
+  function openEditForm(c) {
+    const mv = parseFloat(c.monthly_value) || parseFloat(c.contract_value) / (c.num_installments || 12);
+    setForm({
+      monthly_value: mv.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      num_installments: String(c.num_installments || 12),
+      due_day: String(c.due_day),
+      start_date: c.start_date ? c.start_date.split('T')[0] : '',
+      notes: c.notes || '',
+      services: Array.isArray(c.services) ? c.services : (typeof c.services === 'string' ? JSON.parse(c.services || '[]') : []),
+    });
+    setEditingId(c.id);
+    setShowForm(true);
+  }
+
+  async function handleSaveContract(e) {
     e.preventDefault();
-    if (!form.contract_value || !form.start_date) return alert('Valor e data de início são obrigatórios.');
+    const rawVal = parseFloat((form.monthly_value || '0').replace(/\./g, '').replace(',', '.')) || 0;
+    if (!rawVal || !form.start_date) return alert('Valor mensal e data de início são obrigatórios.');
     setSaving(true);
     try {
-      const res = await fetch(`/api/clients/${clientId}/contracts`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contract_value: parseFloat(form.contract_value.replace(/[^\d,]/g, '').replace(',', '.')),
-          frequency:      form.frequency,
-          period_months:  parseInt(form.period_months) || 12,
-          due_day:        parseInt(form.due_day) || 10,
-          start_date:     form.start_date,
-          notes:          form.notes || null,
-        }),
-      });
-      const j = await res.json();
-      if (!j.success) throw new Error(j.error);
-      setContract(j.contract);
-      setInstallments(j.installments || []);
+      const payload = {
+        monthly_value: rawVal,
+        num_installments: parseInt(form.num_installments) || 12,
+        due_day: parseInt(form.due_day) || 10,
+        start_date: form.start_date,
+        notes: form.notes || null,
+        services: form.services,
+      };
+
+      if (editingId) {
+        payload.contractId = editingId;
+        const res = await fetch(`/api/clients/${clientId}/contracts`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const j = await res.json();
+        if (!j.success) throw new Error(j.error);
+        setContracts(p => p.map(c => c.id === editingId ? j.contract : c));
+      } else {
+        const res = await fetch(`/api/clients/${clientId}/contracts`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const j = await res.json();
+        if (!j.success) throw new Error(j.error);
+        setContracts(p => [j.contract, ...p]);
+      }
       setShowForm(false);
+      setEditingId(null);
     } catch (err) { alert(err.message); }
     finally { setSaving(false); }
   }
 
-  async function toggleInstallment(inst) {
+  async function handleDeleteContract(contractId) {
+    if (!confirm('Tem certeza que deseja excluir este contrato e todas as suas parcelas?')) return;
+    try {
+      const res = await fetch(`/api/clients/${clientId}/contracts`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contractId }),
+      });
+      const j = await res.json();
+      if (!j.success) throw new Error(j.error);
+      setContracts(p => p.filter(c => c.id !== contractId));
+    } catch (err) { alert(err.message); }
+  }
+
+  async function toggleInstallment(contractId, inst) {
     const newStatus = inst.status === 'paid' ? 'pending' : 'paid';
     try {
       const res = await fetch(`/api/clients/${clientId}/installments`, {
@@ -932,16 +1073,11 @@ function TabFinanceiro({ clientId }) {
       });
       const j = await res.json();
       if (!j.success) throw new Error(j.error);
-      setInstallments(p => p.map(i => i.id === inst.id ? j.installment : i));
+      setContracts(p => p.map(c => {
+        if (c.id !== contractId) return c;
+        return { ...c, installments: c.installments.map(i => i.id === inst.id ? j.installment : i) };
+      }));
     } catch (err) { alert(err.message); }
-  }
-
-  function handleValueMask(e) {
-    let raw = e.target.value.replace(/\D/g, '');
-    if (!raw) { setForm(f => ({ ...f, contract_value: '' })); return; }
-    const cents = parseInt(raw);
-    const formatted = (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    setForm(f => ({ ...f, contract_value: formatted }));
   }
 
   if (loading) return (
@@ -950,115 +1086,147 @@ function TabFinanceiro({ clientId }) {
     </div>
   );
 
-  /* ── Info box (sempre visível) ── */
-  const InfoBox = () => (
-    <div style={{
-      padding: '12px 16px', borderRadius: 8, marginBottom: 22,
-      background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.15)',
-      maxWidth: 760,
-    }}>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.63rem', color: 'rgba(165,180,252,0.75)', lineHeight: 1.75 }}>
-        <strong style={{ color: 'rgba(165,180,252,0.95)', display: 'block', marginBottom: 4 }}>ℹ Como funciona o Financeiro</strong>
-        Ao criar um contrato, <strong>todas as parcelas são geradas automaticamente</strong> com base na frequência e duração definidas.
-        Cada parcela aparece aqui e pode ser marcada como <strong>Pago</strong> individualmente.
-        Parcelas com vencimento no passado e ainda não pagas são exibidas como <strong style={{ color: '#f97316' }}>Atrasadas</strong> automaticamente —
-        sem necessidade de ação manual. Para um relatório completo de todos os clientes, acesse <strong>Financeiro</strong> no menu lateral.
-      </div>
-    </div>
-  );
+  /* ── Preview do form ── */
+  const rawMonthly = parseFloat((form.monthly_value || '0').replace(/\./g, '').replace(',', '.')) || 0;
+  const numP = parseInt(form.num_installments) || 0;
+  const totalPreview = rawMonthly * numP;
 
-  /* ── KPIs ── */
-  const totalPaid    = installments.filter(i => i.status === 'paid').reduce((s, i) => s + parseFloat(i.value), 0);
-  const totalPending = installments.filter(i => i.status !== 'paid').reduce((s, i) => s + parseFloat(i.value), 0);
-  const totalContract = contract ? parseFloat(contract.contract_value) : 0;
-  const paidCount    = installments.filter(i => i.status === 'paid').length;
+  /* ── Available service names from client ── */
+  const availableServices = (clientServices || []).map(s => s.name);
 
-  const nextDue = installments
-    .filter(i => i.status !== 'paid')
-    .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))[0];
+  /* ── KPIs globais ── */
+  const allInstallments = contracts.flatMap(c => c.installments || []);
+  const totalPaid    = allInstallments.filter(i => i.status === 'paid').reduce((s, i) => s + parseFloat(i.value), 0);
+  const totalPending = allInstallments.filter(i => i.status !== 'paid').reduce((s, i) => s + parseFloat(i.value), 0);
+  const totalAll     = contracts.reduce((s, c) => s + parseFloat(c.contract_value || 0), 0);
+  const paidCount    = allInstallments.filter(i => i.status === 'paid').length;
 
-  /* ── Sem contrato ── */
-  if (!contract && !showForm) return (
-    <div style={{ maxWidth: 760 }}>
-      <InfoBox />
-      <div className="glass-card" style={{ padding: '36px 28px', textAlign: 'center' }}>
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 14 }}>
-          <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-        </svg>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 20 }}>
-          Nenhum contrato cadastrado para este cliente.
+  const kpiStyle = {
+    card: { padding: '14px 18px', borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', flex: 1, minWidth: 120 },
+    val:  { fontFamily: 'var(--font-mono)', fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 },
+    lbl:  { fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' },
+  };
+
+  return (
+    <div style={{ maxWidth: 820 }}>
+      {/* Info box */}
+      <div style={{
+        padding: '12px 16px', borderRadius: 8, marginBottom: 22,
+        background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.15)',
+      }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.63rem', color: 'rgba(165,180,252,0.75)', lineHeight: 1.75 }}>
+          <strong style={{ color: 'rgba(165,180,252,0.95)', display: 'block', marginBottom: 4 }}>Como funciona</strong>
+          Cada contrato é vinculado a serviços específicos. As parcelas são geradas automaticamente (valor mensal x quantidade).
+          Você pode ter múltiplos contratos por cliente. Parcelas vencidas são marcadas como <strong style={{ color: '#f97316' }}>Atrasadas</strong> automaticamente.
         </div>
-        <button onClick={() => setShowForm(true)} style={{
-          padding: '9px 22px', borderRadius: 7, cursor: 'pointer',
-          border: '1px solid rgba(255,0,51,0.35)', background: 'rgba(255,0,51,0.09)',
-          color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 600,
-        }}>
-          Cadastrar Contrato
-        </button>
       </div>
-    </div>
-  );
 
-  /* ── Formulário de criação ── */
-  if (!contract && showForm) {
-    const nParc = numInstallments(form.frequency, form.period_months);
-    const rawVal = parseFloat(form.contract_value.replace(/\./g, '').replace(',', '.')) || 0;
-    const perParc = nParc > 0 ? rawVal / nParc : 0;
-
-    return (
-      <div style={{ maxWidth: 760 }}>
-        <InfoBox />
-        <div className="glass-card" style={{ padding: '22px 24px' }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 20 }}>
-            Cadastrar Contrato
+      {/* KPIs */}
+      {contracts.length > 0 && (
+        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+          <div style={kpiStyle.card}>
+            <div style={{ ...kpiStyle.val, color: '#22c55e' }}>{fmtBRL(totalPaid)}</div>
+            <div style={kpiStyle.lbl}>Total Arrecadado</div>
           </div>
-          <form onSubmit={handleCreateContract}>
+          <div style={kpiStyle.card}>
+            <div style={{ ...kpiStyle.val, color: '#f97316' }}>{fmtBRL(totalPending)}</div>
+            <div style={kpiStyle.lbl}>A Receber</div>
+          </div>
+          <div style={kpiStyle.card}>
+            <div style={kpiStyle.val}>{fmtBRL(totalAll)}</div>
+            <div style={kpiStyle.lbl}>Total Contratos</div>
+          </div>
+          <div style={kpiStyle.card}>
+            <div style={{ ...kpiStyle.val, fontSize: '0.85rem' }}>{paidCount}/{allInstallments.length}</div>
+            <div style={kpiStyle.lbl}>Parcelas Pagas</div>
+          </div>
+        </div>
+      )}
+
+      {/* Botão novo contrato */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+          Contratos ({contracts.length})
+        </div>
+        {!showForm && (
+          <button onClick={openNewForm} style={{
+            padding: '7px 16px', borderRadius: 7, cursor: 'pointer',
+            border: '1px solid rgba(255,0,51,0.35)', background: 'rgba(255,0,51,0.09)',
+            color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 600,
+          }}>
+            + Novo Contrato
+          </button>
+        )}
+      </div>
+
+      {/* Formulário criar/editar */}
+      {showForm && (
+        <div className="glass-card" style={{ padding: '22px 24px', marginBottom: 20 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 18 }}>
+            {editingId ? 'Editar Contrato' : 'Novo Contrato'}
+          </div>
+          <form onSubmit={handleSaveContract}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px', marginBottom: 14 }}>
-              <div style={{ gridColumn: '1/-1' }}>
-                <Label>Valor do Contrato (R$)</Label>
-                <input value={form.contract_value} onChange={handleValueMask} placeholder="0,00"
-                  style={INP} />
+              <div>
+                <Label>Valor Mensal (R$)</Label>
+                <input value={form.monthly_value} onChange={handleValueMask} placeholder="0,00" style={INP} />
               </div>
               <div>
-                <Label>Frequência</Label>
-                <select value={form.frequency} onChange={e => setForm(f => ({ ...f, frequency: e.target.value }))}
-                  style={{ ...INP }}>
-                  {FREQ_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <Label>Período (meses)</Label>
-                <input type="number" min="1" max="120" value={form.period_months}
-                  onChange={e => setForm(f => ({ ...f, period_months: e.target.value }))}
-                  style={INP} disabled={form.frequency === 'one_time'} />
+                <Label>Quantidade de Parcelas</Label>
+                <input type="number" min="1" max="120" value={form.num_installments}
+                  onChange={e => setForm(f => ({ ...f, num_installments: e.target.value }))} style={INP} />
               </div>
               <div>
                 <Label>Dia de Vencimento</Label>
                 <input type="number" min="1" max="31" value={form.due_day}
-                  onChange={e => setForm(f => ({ ...f, due_day: e.target.value }))}
-                  style={INP} />
+                  onChange={e => setForm(f => ({ ...f, due_day: e.target.value }))} style={INP} />
               </div>
               <div>
                 <Label>Data de Início</Label>
                 <input type="date" value={form.start_date}
-                  onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))}
-                  style={INP} />
-              </div>
-              <div style={{ gridColumn: '1/-1' }}>
-                <Label>Observações</Label>
-                <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                  rows={2} style={{ ...INP, resize: 'vertical' }} />
+                  onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} style={INP} />
               </div>
             </div>
 
-            {rawVal > 0 && form.start_date && (
+            {/* Serviços vinculados */}
+            <div style={{ marginBottom: 14 }}>
+              <Label>Serviços Vinculados</Label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                {availableServices.map(name => {
+                  const sel = form.services.includes(name);
+                  return (
+                    <button key={name} type="button" onClick={() => toggleFormService(name)} style={{
+                      padding: '5px 10px', borderRadius: 6, cursor: 'pointer', transition: 'all 0.2s',
+                      background: sel ? 'rgba(255,0,51,0.1)' : 'rgba(17,17,17,0.6)',
+                      border: sel ? '1px solid rgba(255,0,51,0.4)' : '1px solid var(--border-default)',
+                      color: sel ? '#ff6680' : 'var(--text-muted)',
+                      fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+                    }}>
+                      {sel ? '✓ ' : ''}{name}
+                    </button>
+                  );
+                })}
+                {availableServices.length === 0 && (
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)' }}>
+                    Nenhum serviço cadastrado na aba Informações.
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <Label>Observações</Label>
+              <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                rows={2} style={{ ...INP, resize: 'vertical' }} />
+            </div>
+
+            {rawMonthly > 0 && numP > 0 && (
               <div style={{
                 padding: '10px 14px', marginBottom: 16, borderRadius: 7,
                 background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)',
               }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: '#22c55e' }}>
-                  {nParc}× {fmtBRL(perParc)} = {fmtBRL(rawVal)}
-                  {form.frequency !== 'one_time' && ` · vence dia ${form.due_day} · ${FREQ_LABELS[form.frequency]}`}
+                  {numP}x de {fmtBRL(rawMonthly)} = {fmtBRL(totalPreview)} · vence dia {form.due_day}
                 </span>
               </div>
             )}
@@ -1069,9 +1237,9 @@ function TabFinanceiro({ clientId }) {
                 border: '1px solid rgba(255,0,51,0.35)', background: 'rgba(255,0,51,0.09)',
                 color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 600,
               }}>
-                {saving ? 'Salvando...' : 'Salvar Contrato'}
+                {saving ? 'Salvando...' : editingId ? 'Atualizar Contrato' : 'Salvar Contrato'}
               </button>
-              <button type="button" onClick={() => setShowForm(false)} style={{
+              <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} style={{
                 padding: '8px 16px', borderRadius: 7, cursor: 'pointer',
                 border: '1px solid rgba(255,255,255,0.06)', background: 'transparent',
                 color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
@@ -1081,162 +1249,190 @@ function TabFinanceiro({ clientId }) {
             </div>
           </form>
         </div>
-      </div>
-    );
-  }
+      )}
 
-  /* ── Contrato existente ── */
-  const kpiStyle = {
-    card: { padding: '14px 18px', borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', flex: 1, minWidth: 120 },
-    val:  { fontFamily: 'var(--font-mono)', fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 },
-    lbl:  { fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' },
-  };
-
-  return (
-    <div style={{ maxWidth: 760 }}>
-      <InfoBox />
-      {/* Resumo do contrato */}
-      <div className="glass-card" style={{ padding: '16px 20px', marginBottom: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-            Contrato Ativo
+      {/* Lista de contratos */}
+      {contracts.length === 0 && !showForm && (
+        <div className="glass-card" style={{ padding: '36px 28px', textAlign: 'center' }}>
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 14 }}>
+            <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+          </svg>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+            Nenhum contrato cadastrado para este cliente.
           </div>
-          <span style={{
-            padding: '2px 9px', borderRadius: 20, fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
-            letterSpacing: '0.06em', textTransform: 'uppercase',
-            background: contract.status === 'active' ? 'rgba(34,197,94,0.08)' : 'rgba(82,82,82,0.1)',
-            border: contract.status === 'active' ? '1px solid rgba(34,197,94,0.25)' : '1px solid rgba(82,82,82,0.25)',
-            color: contract.status === 'active' ? '#22c55e' : '#525252',
-          }}>
-            {contract.status === 'active' ? 'Ativo' : contract.status === 'completed' ? 'Concluído' : 'Cancelado'}
-          </span>
         </div>
-        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-          {[
-            ['Valor Total',   fmtBRL(contract.contract_value)],
-            ['Frequência',    FREQ_LABELS[contract.frequency] || contract.frequency],
-            ['Período',       `${contract.period_months} meses`],
-            ['Dia Vencimento',`Dia ${contract.due_day}`],
-            ['Início',        fmtDate(contract.start_date ? contract.start_date.split('T')[0] : null)],
-          ].map(([l, v]) => (
-            <div key={l}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>{l}</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>{v}</div>
+      )}
+
+      {contracts.map(c => {
+        const svcs = Array.isArray(c.services) ? c.services : (typeof c.services === 'string' ? JSON.parse(c.services || '[]') : []);
+        const insts = c.installments || [];
+        const cPaid = insts.filter(i => i.status === 'paid').reduce((s, i) => s + parseFloat(i.value), 0);
+        const cPending = insts.filter(i => i.status !== 'paid').reduce((s, i) => s + parseFloat(i.value), 0);
+        const expanded = expandedId === c.id;
+        const mv = parseFloat(c.monthly_value) || parseFloat(c.contract_value) / (c.num_installments || insts.length || 1);
+
+        return (
+          <div key={c.id} className="glass-card" style={{ padding: 0, marginBottom: 14, overflow: 'hidden' }}>
+            {/* Header do contrato */}
+            <div style={{
+              padding: '14px 18px', cursor: 'pointer',
+              borderBottom: expanded ? '1px solid rgba(255,255,255,0.04)' : 'none',
+            }} onClick={() => setExpandedId(expanded ? null : c.id)}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={expanded ? '#ff6680' : 'var(--text-muted)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    style={{ transition: 'transform 0.2s', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                    <polyline points="9,18 15,12 9,6" />
+                  </svg>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {fmtBRL(mv)}/mês · {c.num_installments || insts.length}x
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                      Total: {fmtBRL(c.contract_value)} · Início: {fmtDate(c.start_date)} · Dia {c.due_day}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    padding: '2px 8px', borderRadius: 20, fontFamily: 'var(--font-mono)', fontSize: '0.55rem', fontWeight: 600,
+                    letterSpacing: '0.06em', textTransform: 'uppercase',
+                    background: c.status === 'active' ? 'rgba(34,197,94,0.08)' : 'rgba(82,82,82,0.1)',
+                    border: c.status === 'active' ? '1px solid rgba(34,197,94,0.25)' : '1px solid rgba(82,82,82,0.25)',
+                    color: c.status === 'active' ? '#22c55e' : '#525252',
+                  }}>
+                    {c.status === 'active' ? 'Ativo' : c.status === 'completed' ? 'Concluído' : 'Cancelado'}
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: '#22c55e' }}>
+                    {fmtBRL(cPaid)}
+                  </span>
+                  {cPending > 0 && (
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: '#f97316' }}>
+                      / {fmtBRL(cPending)}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {/* Tags de serviço */}
+              {svcs.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8, marginLeft: 24 }}>
+                  {svcs.map((s, i) => (
+                    <span key={i} style={{
+                      padding: '2px 7px', borderRadius: 4,
+                      background: 'rgba(255,0,51,0.06)', border: '1px solid rgba(255,0,51,0.15)',
+                      fontFamily: 'var(--font-mono)', fontSize: '0.55rem', color: '#ff6680',
+                    }}>
+                      {typeof s === 'string' ? s : s.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-          ))}
-        </div>
-        {contract.notes && (
-          <div style={{ marginTop: 12, fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)', borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: 10 }}>
-            {contract.notes}
-          </div>
-        )}
-      </div>
 
-      {/* KPIs */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        <div style={kpiStyle.card}>
-          <div style={{ ...kpiStyle.val, color: '#22c55e' }}>{fmtBRL(totalPaid)}</div>
-          <div style={kpiStyle.lbl}>Total Arrecadado</div>
-        </div>
-        <div style={kpiStyle.card}>
-          <div style={{ ...kpiStyle.val, color: '#f97316' }}>{fmtBRL(totalPending)}</div>
-          <div style={kpiStyle.lbl}>A Receber</div>
-        </div>
-        <div style={kpiStyle.card}>
-          <div style={kpiStyle.val}>{fmtBRL(totalContract)}</div>
-          <div style={kpiStyle.lbl}>Total Contrato</div>
-        </div>
-        <div style={kpiStyle.card}>
-          <div style={{ ...kpiStyle.val, fontSize: '0.85rem' }}>
-            {paidCount}/{installments.length}
-          </div>
-          <div style={kpiStyle.lbl}>Parcelas Pagas</div>
-        </div>
-        <div style={kpiStyle.card}>
-          <div style={{ ...kpiStyle.val, fontSize: '0.82rem' }}>
-            {nextDue ? fmtDate(nextDue.due_date.split('T')[0]) : '—'}
-          </div>
-          <div style={kpiStyle.lbl}>Próximo Vencimento</div>
-        </div>
-      </div>
+            {/* Conteúdo expandido */}
+            {expanded && (
+              <div>
+                {/* Ações */}
+                <div style={{ padding: '10px 18px', display: 'flex', gap: 8, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                  <button onClick={e => { e.stopPropagation(); openEditForm(c); }} style={{
+                    padding: '5px 12px', borderRadius: 5, cursor: 'pointer',
+                    border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.03)',
+                    color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+                  }}>
+                    Editar
+                  </button>
+                  <button onClick={e => { e.stopPropagation(); handleDeleteContract(c.id); }} style={{
+                    padding: '5px 12px', borderRadius: 5, cursor: 'pointer',
+                    border: '1px solid rgba(255,26,77,0.25)', background: 'rgba(255,26,77,0.05)',
+                    color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+                  }}>
+                    Excluir
+                  </button>
+                </div>
 
-      {/* Tabela de parcelas */}
-      <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(255,255,255,0.04)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-          Parcelas
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                {['#', 'Vencimento', 'Valor', 'Status', 'Pago em', ''].map(h => (
-                  <th key={h} style={{
-                    padding: '9px 14px', textAlign: h === '' ? 'right' : 'left',
-                    fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-muted)',
-                    textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600, whiteSpace: 'nowrap',
-                  }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {installments.map(inst => {
-                const eff = effectiveStatus(inst);
-                const cfg = instStatusCfg[eff];
-                return (
-                  <tr key={inst.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                    <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                      {inst.installment_number}
-                    </td>
-                    <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                      {fmtDate(inst.due_date.split('T')[0])}
-                    </td>
-                    <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-primary)', fontWeight: 600 }}>
-                      {fmtBRL(inst.value)}
-                    </td>
-                    <td style={{ padding: '10px 14px' }}>
-                      <span style={{
-                        display: 'inline-block', padding: '2px 9px', borderRadius: 20,
-                        fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
-                        letterSpacing: '0.05em', textTransform: 'uppercase',
-                        background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.color,
-                      }}>
-                        {cfg.label}
-                      </span>
-                    </td>
-                    <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                      {inst.paid_at ? new Date(inst.paid_at).toLocaleDateString('pt-BR') : '—'}
-                    </td>
-                    <td style={{ padding: '10px 14px', textAlign: 'right' }}>
-                      {inst.status !== 'paid' ? (
-                        <button onClick={() => toggleInstallment(inst)} style={{
-                          padding: '4px 11px', borderRadius: 5, cursor: 'pointer', whiteSpace: 'nowrap',
-                          border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)',
-                          color: '#22c55e', fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
-                        }}>
-                          Marcar Pago
-                        </button>
-                      ) : (
-                        <button onClick={() => toggleInstallment(inst)} style={{
-                          padding: '4px 11px', borderRadius: 5, cursor: 'pointer', whiteSpace: 'nowrap',
-                          border: '1px solid rgba(255,255,255,0.07)', background: 'transparent',
-                          color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.6rem',
-                        }}>
-                          Desfazer
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {installments.length === 0 && (
-            <div style={{ padding: '24px 18px', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-              Nenhuma parcela gerada.
-            </div>
-          )}
-        </div>
-      </div>
+                {c.notes && (
+                  <div style={{ padding: '10px 18px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    {c.notes}
+                  </div>
+                )}
+
+                {/* Tabela de parcelas */}
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                        {['#', 'Vencimento', 'Valor', 'Status', 'Pago em', ''].map(h => (
+                          <th key={h} style={{
+                            padding: '8px 14px', textAlign: h === '' ? 'right' : 'left',
+                            fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)',
+                            textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600, whiteSpace: 'nowrap',
+                          }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {insts.map(inst => {
+                        const eff = effectiveStatus(inst);
+                        const cfg = instStatusCfg[eff];
+                        return (
+                          <tr key={inst.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                            <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                              {inst.installment_number}
+                            </td>
+                            <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                              {fmtDate(inst.due_date)}
+                            </td>
+                            <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.73rem', color: 'var(--text-primary)', fontWeight: 600 }}>
+                              {fmtBRL(inst.value)}
+                            </td>
+                            <td style={{ padding: '9px 14px' }}>
+                              <span style={{
+                                display: 'inline-block', padding: '2px 8px', borderRadius: 20,
+                                fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
+                                letterSpacing: '0.05em', textTransform: 'uppercase',
+                                background: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.color,
+                              }}>
+                                {cfg.label}
+                              </span>
+                            </td>
+                            <td style={{ padding: '9px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                              {inst.paid_at ? new Date(inst.paid_at).toLocaleDateString('pt-BR') : '—'}
+                            </td>
+                            <td style={{ padding: '9px 14px', textAlign: 'right' }}>
+                              {inst.status !== 'paid' ? (
+                                <button onClick={() => toggleInstallment(c.id, inst)} style={{
+                                  padding: '3px 10px', borderRadius: 5, cursor: 'pointer', whiteSpace: 'nowrap',
+                                  border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)',
+                                  color: '#22c55e', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
+                                }}>
+                                  Marcar Pago
+                                </button>
+                              ) : (
+                                <button onClick={() => toggleInstallment(c.id, inst)} style={{
+                                  padding: '3px 10px', borderRadius: 5, cursor: 'pointer', whiteSpace: 'nowrap',
+                                  border: '1px solid rgba(255,255,255,0.07)', background: 'transparent',
+                                  color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.58rem',
+                                }}>
+                                  Desfazer
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {insts.length === 0 && (
+                    <div style={{ padding: '20px 18px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                      Nenhuma parcela gerada.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1385,7 +1581,7 @@ export default function ClientInfoPage() {
         )}
         {activeTab === 'afazeres'   && <PlaceholderTab label="Afazeres" />}
         {activeTab === 'anexos'     && <TabAnexos clientId={client.id} />}
-        {activeTab === 'financeiro' && <TabFinanceiro clientId={client.id} />}
+        {activeTab === 'financeiro' && <TabFinanceiro clientId={client.id} clientServices={client.services || []} />}
         {activeTab === 'observacoes'&& <TabObservacoes clientId={client.id} />}
         {activeTab === 'respostas'  && <PlaceholderTab label="Respostas" />}
       </div>

@@ -1,7 +1,7 @@
 /**
  * pages/api/financeiro/index.js
- * GET → retorna todas as parcelas (com info do cliente) + KPIs do tenant
- * PUT → delega para /api/clients/[id]/installments (toggle pago/pendente)
+ * GET → retorna todas as parcelas (com info do cliente e serviços do contrato) + KPIs
+ * PUT → toggle pago/pendente de uma parcela
  */
 
 import { query, queryOne } from '../../../infra/db';
@@ -12,7 +12,6 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      /* Todas as parcelas de todos os clientes ativos do tenant */
       const installments = await query(
         `SELECT
            i.id,
@@ -28,19 +27,21 @@ export default async function handler(req, res) {
            mc.logo_url,
            cc.frequency,
            cc.contract_value AS total_contract_value,
+           cc.monthly_value,
+           cc.num_installments,
+           cc.services    AS contract_services,
            cc.status      AS contract_status
          FROM client_installments i
          JOIN marketing_clients mc ON mc.id = i.client_id
          JOIN client_contracts  cc ON cc.id = i.contract_id
          WHERE mc.tenant_id = $1
-         ORDER BY i.due_date ASC`,
+         ORDER BY i.due_date DESC`,
         [tenantId]
       );
 
       return res.json({ success: true, installments });
     }
 
-    /* PUT — toggle status de uma parcela */
     if (req.method === 'PUT') {
       const { installmentId, clientId, status } = req.body;
       if (!installmentId || !clientId || !status) {

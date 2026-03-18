@@ -305,18 +305,42 @@ CREATE INDEX IF NOT EXISTS idx_client_observations_client ON client_observations
 CREATE TABLE IF NOT EXISTS client_contracts (
     id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     client_id       TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
-    contract_value  NUMERIC(12,2) NOT NULL,
+    contract_value  NUMERIC(12,2) NOT NULL,       -- valor total (monthly_value * num_installments)
+    monthly_value   NUMERIC(12,2),                -- valor mensal
+    num_installments INTEGER NOT NULL DEFAULT 12,  -- quantidade de parcelas
     frequency       TEXT NOT NULL DEFAULT 'monthly',
-    -- 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'one_time'
     period_months   INTEGER NOT NULL DEFAULT 12,
-    due_day         INTEGER NOT NULL DEFAULT 10,   -- dia do mês (1-31)
+    due_day         INTEGER NOT NULL DEFAULT 10,
     start_date      DATE NOT NULL,
     status          TEXT NOT NULL DEFAULT 'active',
-    -- 'active' | 'completed' | 'cancelled'
+    services        JSONB DEFAULT '[]',            -- serviços vinculados ao contrato
     notes           TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE client_contracts ADD COLUMN IF NOT EXISTS monthly_value    NUMERIC(12,2);
+ALTER TABLE client_contracts ADD COLUMN IF NOT EXISTS num_installments INTEGER NOT NULL DEFAULT 12;
+ALTER TABLE client_contracts ADD COLUMN IF NOT EXISTS services         JSONB DEFAULT '[]';
+
+-- ============================================================
+-- COMPANY FINANCES (custos e ganhos da empresa)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS company_finances (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    type        TEXT NOT NULL,  -- 'income' | 'expense'
+    category    TEXT,
+    description TEXT NOT NULL,
+    value       NUMERIC(12,2) NOT NULL,
+    date        DATE NOT NULL,
+    notes       TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_company_finances_tenant ON company_finances(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_company_finances_date   ON company_finances(date);
 
 CREATE INDEX IF NOT EXISTS idx_client_contracts_client ON client_contracts(client_id);
 
