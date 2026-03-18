@@ -27,12 +27,12 @@ const TABS = [
 ];
 
 const STAGES_META = [
-  { key: 'diagnosis',   index: 1, label: 'Diagnóstico do Negócio',  desc: 'Base estratégica — dados do formulário + interpretação.' },
-  { key: 'competitors', index: 2, label: 'Análise de Concorrentes',  desc: 'Mapeamento de concorrentes e lacunas do mercado.' },
-  { key: 'audience',    index: 3, label: 'Público-Alvo',            desc: 'Perfil demográfico, psicográfico e comportamental.' },
-  { key: 'avatar',      index: 4, label: 'Construção do Avatar',    desc: 'Avatar completo com dores, desejos e objeções.' },
-  { key: 'positioning', index: 5, label: 'Posicionamento da Marca', desc: 'Declaração de posicionamento e vantagem competitiva.' },
-  { key: 'offer',       index: 6, label: 'Definição da Oferta',     desc: 'Referências de oferta, anúncios e landing page.' },
+  { key: 'diagnosis',   index: 1, label: 'Diagnóstico do Negócio',  desc: 'Organiza os dados do cadastro e gera uma análise estratégica do negócio, produto e mercado.' },
+  { key: 'competitors', index: 2, label: 'Análise de Concorrentes',  desc: 'Pesquisa e analisa os principais concorrentes: preço, posicionamento, pontos fortes e fracos.' },
+  { key: 'audience',    index: 3, label: 'Público-Alvo',            desc: 'Define o perfil do público: demográfico, psicográfico, comportamental e nível de consciência.' },
+  { key: 'avatar',      index: 4, label: 'Construção do Avatar',    desc: 'Constrói o cliente ideal com dores reais, desejos, objeções e linguagem que ele usa.' },
+  { key: 'positioning', index: 5, label: 'Posicionamento da Marca', desc: 'Define como a marca se diferencia: proposta de valor, vantagem competitiva e promessa.' },
+  { key: 'offer',       index: 6, label: 'Definição da Oferta',     desc: 'Estrutura a oferta completa: headlines, copy de anúncios, argumentos de venda e landing page.' },
 ];
 
 const STATUS_CFG = {

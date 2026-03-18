@@ -130,6 +130,8 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
   const [improving, setImproving] = useState(false);
   const [additionalPrompt, setAdditionalPrompt] = useState('');
   const [showTooltip, setShowTooltip] = useState(null);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const fileInputRef = useRef(null);
 
   const agents = AGENTS[meta.key] || [];
 
@@ -168,12 +170,81 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
     editorRef.current?.focus();
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed) { notify('Selecione um texto para destacar', 'warning'); return; }
-    // hiliteColor funciona melhor que backColor na maioria dos browsers
-    const cmd = document.queryCommandSupported('hiliteColor') ? 'hiliteColor' : 'backColor';
-    const current = document.queryCommandValue(cmd);
-    const isOn = current && current !== 'transparent' && current !== 'rgba(0, 0, 0, 0)' && current !== '' && current !== 'inherit';
-    document.execCommand(cmd, false, isOn ? 'transparent' : '#3a1515');
-    setHighlighted(!isOn);
+
+    // Verifica se já tem highlight checando o elemento pai da seleção
+    const parent = sel.anchorNode?.parentElement;
+    const hasBg = parent?.style?.backgroundColor && parent.style.backgroundColor !== 'transparent' && parent.style.backgroundColor !== '';
+
+    // Remove se já tem, aplica se não tem
+    document.execCommand('removeFormat', false, null); // limpa formatação anterior de cor
+    if (!hasBg) {
+      document.execCommand('hiliteColor', false, '#3a1515');
+    }
+  }
+
+  /* ── Markdown inline: converte **bold** e *italic* ao digitar ── */
+  function handleEditorInput() {
+    setSavedN(false);
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+
+    // Pega o nó de texto atual onde o cursor está
+    const node = sel.anchorNode;
+    if (!node || node.nodeType !== 3) return; // só texto puro
+    const text = node.textContent;
+
+    // Bold: **texto**
+    const boldMatch = text.match(/\*\*(.+?)\*\*/);
+    if (boldMatch) {
+      const before = text.substring(0, boldMatch.index);
+      const inner  = boldMatch[1];
+      const after  = text.substring(boldMatch.index + boldMatch[0].length);
+
+      const parent = node.parentNode;
+      const frag = document.createDocumentFragment();
+      if (before) frag.appendChild(document.createTextNode(before));
+      const b = document.createElement('strong');
+      b.textContent = inner;
+      frag.appendChild(b);
+      const afterNode = document.createTextNode(after || '\u200B');
+      frag.appendChild(afterNode);
+      parent.replaceChild(frag, node);
+
+      // Move cursor para depois do bold
+      const range = document.createRange();
+      range.setStartAfter(afterNode.previousSibling || afterNode);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return;
+    }
+
+    // Italic: *texto* (mas não **texto**)
+    const italicMatch = text.match(/(?<!\*)\*([^*]+?)\*(?!\*)/);
+    if (italicMatch) {
+      const before = text.substring(0, italicMatch.index);
+      const inner  = italicMatch[1];
+      const after  = text.substring(italicMatch.index + italicMatch[0].length);
+
+      const parent = node.parentNode;
+      const frag = document.createDocumentFragment();
+      if (before) frag.appendChild(document.createTextNode(before));
+      const em = document.createElement('em');
+      em.textContent = inner;
+      frag.appendChild(em);
+      const afterNode = document.createTextNode(after || '\u200B');
+      frag.appendChild(afterNode);
+      parent.replaceChild(frag, node);
+
+      const range = document.createRange();
+      range.setStartAfter(afterNode.previousSibling || afterNode);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
   }
 
   /* ── Salvar notas ── */
@@ -574,10 +645,10 @@ REGRAS OBRIGATÓRIAS:
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                 {meta.label}
               </div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: 1 }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
                 {meta.desc}
                 {clientData?.company_name && (
-                  <span style={{ color: '#ff6680', marginLeft: 8 }}>— {clientData.company_name}</span>
+                  <span style={{ color: '#ff6680', marginLeft: 8, fontWeight: 600 }}>— {clientData.company_name}</span>
                 )}
               </div>
             </div>
@@ -684,7 +755,7 @@ REGRAS OBRIGATÓRIAS:
                 ref={editorRef}
                 contentEditable={!generating}
                 suppressContentEditableWarning
-                onInput={() => setSavedN(false)}
+                onInput={handleEditorInput}
                 data-placeholder="Escreva as notas desta etapa ou execute o agente..."
                 style={{
                   width: '100%', height: '100%', padding: '18px 22px', outline: 'none', overflow: 'auto',
@@ -798,7 +869,7 @@ REGRAS OBRIGATÓRIAS:
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                   </button>
                   </div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: '#2a2a2a', marginTop: 4 }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: 'rgba(255,102,128,0.4)', marginTop: 4 }}>
                     Clique em uma geração para visualizar. Agentes de pesquisa não aparecem aqui.
                   </div>
                 </div>
@@ -810,7 +881,7 @@ REGRAS OBRIGATÓRIAS:
                 )}
 
                 {!loadingHistory && historyData.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: 30, color: '#2a2a2a', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
+                  <div style={{ textAlign: 'center', padding: 30, color: 'rgba(255,102,128,0.4)', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
                     Nenhuma geração anterior encontrada
                   </div>
                 )}
@@ -892,7 +963,7 @@ REGRAS OBRIGATÓRIAS:
                       background: 'rgba(255,0,51,0.03)', border: '1px solid rgba(255,0,51,0.08)',
                     }}>
                       <SectionLabel>Dados do Cliente</SectionLabel>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: '#2a2a2a', marginBottom: 4, marginTop: -4 }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: 'rgba(255,102,128,0.4)', marginBottom: 4, marginTop: -4 }}>
                         Informações extraídas do cadastro — injetadas automaticamente no prompt
                       </div>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
@@ -906,7 +977,7 @@ REGRAS OBRIGATÓRIAS:
 
                   <div>
                     <SectionLabel>Referência — Link</SectionLabel>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: '#2a2a2a', marginBottom: 4, marginTop: -4 }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: 'rgba(255,102,128,0.4)', marginBottom: 4, marginTop: -4 }}>
                       URL de referência que o agente usará como complemento na geração
                     </div>
                     <input
@@ -923,26 +994,67 @@ REGRAS OBRIGATÓRIAS:
 
                   <div>
                     <SectionLabel>Referências — Imagens / Arquivos</SectionLabel>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: '#2a2a2a', marginBottom: 4, marginTop: -4 }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: 'rgba(255,102,128,0.4)', marginBottom: 4, marginTop: -4 }}>
                       Arquivos complementares que enriquecem o conteúdo gerado
                     </div>
-                    <div style={{
-                      border: '1px dashed rgba(255,255,255,0.08)', borderRadius: 8, padding: '18px',
-                      textAlign: 'center', cursor: 'pointer', background: 'rgba(255,255,255,0.01)',
-                    }}>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept=".png,.jpg,.jpeg,.pdf,.doc,.docx"
+                      style={{ display: 'none' }}
+                      onChange={e => {
+                        const files = Array.from(e.target.files || []);
+                        const valid = files.filter(f => /\.(png|jpe?g|pdf|docx?)$/i.test(f.name));
+                        if (valid.length < files.length) notify('Alguns arquivos ignorados — aceito: PNG, JPG, PDF, DOCX', 'warning');
+                        setUploadedFiles(prev => [...prev, ...valid.map(f => ({ name: f.name, size: f.size, file: f }))]);
+                        e.target.value = '';
+                      }}
+                    />
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      style={{
+                        border: '1px dashed rgba(255,255,255,0.08)', borderRadius: 8, padding: '14px',
+                        textAlign: 'center', cursor: 'pointer', background: 'rgba(255,255,255,0.01)',
+                        transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,0,51,0.2)'; e.currentTarget.style.background = 'rgba(255,0,51,0.02)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.background = 'rgba(255,255,255,0.01)'; }}
+                    >
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.63rem', color: 'var(--text-muted)' }}>
-                        Arraste arquivos ou clique para selecionar
+                        Clique para selecionar arquivos
                       </div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: '#2a2a2a', marginTop: 3 }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', color: 'rgba(255,102,128,0.4)', marginTop: 3 }}>
                         PNG · JPG · PDF · DOCX
                       </div>
                     </div>
+                    {uploadedFiles.length > 0 && (
+                      <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {uploadedFiles.map((f, i) => (
+                          <div key={i} style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '4px 8px', borderRadius: 5,
+                            background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)',
+                          }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>
+                              {f.name}
+                            </span>
+                            <button
+                              onClick={() => setUploadedFiles(prev => prev.filter((_, j) => j !== i))}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 2 }}
+                            >
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Prompt Adicional */}
                   <div>
                     <SectionLabel>Prompt Adicional</SectionLabel>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: '#2a2a2a', marginBottom: 4, marginTop: -4 }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: 'rgba(255,102,128,0.4)', marginBottom: 4, marginTop: -4 }}>
                       Instruções extras: tom de voz, objetivo da copy, estilo de comunicação
                     </div>
                     <textarea
@@ -1023,7 +1135,7 @@ REGRAS OBRIGATÓRIAS:
                       <div style={{
                         padding: '8px 12px', borderRadius: 8,
                         background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)',
-                        fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: '#2a2a2a', lineHeight: 1.5,
+                        fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'rgba(255,102,128,0.4)', lineHeight: 1.5,
                       }}>
                         Prompt principal do agente — clique em "Editar Prompt" para customizar. Alterações são temporárias e não afetam o prompt original.
                       </div>
@@ -1033,7 +1145,7 @@ REGRAS OBRIGATÓRIAS:
                   {/* Seletor de Modelo */}
                   <div>
                     <SectionLabel>Modelo de IA</SectionLabel>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: '#2a2a2a', marginBottom: 4, marginTop: -4 }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: 'rgba(255,102,128,0.4)', marginBottom: 4, marginTop: -4 }}>
                       Padrão é mais rápido e econômico. Premium gera conteúdo de maior qualidade.
                     </div>
                     <div style={{ display: 'flex', gap: 6 }}>
