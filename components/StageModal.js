@@ -8,6 +8,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { useNotification } from '../context/NotificationContext';
 
 /* ── Constantes de agentes por etapa ── */
 const AGENTS = {
@@ -70,6 +71,7 @@ function SectionLabel({ children }) {
  * @param {function} props.onSaved  — called with (updatedStage) after any save
  */
 export default function StageModal({ meta, stage, clientId, onClose, onSaved }) {
+  const { notify } = useNotification();
   const editorRef  = useRef(null);
   const [agentTab, setAgentTab  ] = useState(0);
   const [refLink,  setRefLink   ] = useState('');
@@ -108,26 +110,43 @@ export default function StageModal({ meta, stage, clientId, onClose, onSaved }) 
     const html = editorRef.current?.innerHTML || '';
     setSavingN(true);
     try {
+      console.log('[INFO][Frontend:StageModal] Salvando notas', { clientId, stage_key: meta.key });
       const res  = await fetch(`/api/clients/${clientId}/stages`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stage_key: meta.key, notes: html }),
       });
       const json = await res.json();
-      if (json.success) { setSavedN(true); onSaved?.({ ...stage, notes: html }); }
-    } catch (e) { console.error(e); }
+      if (json.success) {
+        setSavedN(true);
+        onSaved?.({ ...stage, notes: html });
+        console.log('[SUCESSO][Frontend:StageModal] Notas salvas', { clientId, stage_key: meta.key });
+        notify('Notas salvas com sucesso', 'success');
+      }
+    } catch (e) {
+      console.error('[ERRO][Frontend:StageModal] Erro ao salvar notas', { error: e.message });
+      notify('Erro ao salvar notas', 'error');
+    }
     finally { setSavingN(false); }
   }
 
   async function changeStatus(s) {
     setStageStatus(s);
     try {
+      console.log('[INFO][Frontend:StageModal] Alterando status da etapa', { clientId, stage_key: meta.key, status: s });
       const res  = await fetch(`/api/clients/${clientId}/stages`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stage_key: meta.key, status: s }),
       });
       const json = await res.json();
-      if (json.success) onSaved?.({ ...stage, status: s });
-    } catch (e) { console.error(e); }
+      if (json.success) {
+        onSaved?.({ ...stage, status: s });
+        console.log('[SUCESSO][Frontend:StageModal] Status da etapa alterado', { clientId, stage_key: meta.key, status: s });
+        notify('Status da etapa atualizado', 'success');
+      }
+    } catch (e) {
+      console.error('[ERRO][Frontend:StageModal] Erro ao alterar status', { error: e.message });
+      notify('Erro ao alterar status da etapa', 'error');
+    }
   }
 
   const btnStyle = (active) => ({

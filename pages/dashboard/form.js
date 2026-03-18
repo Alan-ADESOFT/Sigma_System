@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import DashboardLayout from '../../components/DashboardLayout';
+import { useNotification } from '../../context/NotificationContext';
 
 const DEFAULT_SERVICES = [
   'Planejamento de campanha',
@@ -35,8 +36,7 @@ const INITIAL = {
   /* contrato */
   monthly_value:        '',
   num_installments:     '12',
-  due_day:              '10',
-  start_date:           new Date().toISOString().split('T')[0],
+  first_due_date:       (() => { const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(1); return d.toISOString().split('T')[0]; })(),
   contract_notes:       '',
 };
 
@@ -74,6 +74,7 @@ function fmtBRL(v) {
 }
 
 export default function FormPage() {
+  const { notify } = useNotification();
   const router  = useRouter();
   const [form,   setForm  ] = useState(INITIAL);
   const [saving, setSaving] = useState(false);
@@ -123,9 +124,18 @@ export default function FormPage() {
 
     const selectedServices = services.filter(s => s.selected).map(s => ({ id: s.id, name: s.name }));
 
+    if (rawMonthly > 0 && numParcelas > 0 && !form.first_due_date) {
+      setError('Data da primeira parcela é obrigatória quando há contrato.');
+      return;
+    }
+
+    const firstDue    = form.first_due_date ? new Date(form.first_due_date + 'T12:00:00') : new Date();
+    const dueDay      = firstDue.getDate();
+
     setSaving(true);
     setError(null);
     try {
+      console.log('[INFO][Frontend:Form] Cadastrando novo cliente', { company_name: form.company_name });
       const res  = await fetch('/api/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -137,8 +147,8 @@ export default function FormPage() {
           contract: rawMonthly > 0 && numParcelas > 0 ? {
             monthly_value:    rawMonthly,
             num_installments: numParcelas,
-            due_day:          parseInt(form.due_day) || 10,
-            start_date:       form.start_date,
+            due_day:          dueDay,
+            start_date:       form.first_due_date,
             notes:            form.contract_notes || null,
             services:         selectedServices.map(s => s.name),
           } : null,
@@ -146,10 +156,14 @@ export default function FormPage() {
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
+      console.log('[SUCESSO][Frontend:Form] Cliente cadastrado', { clientId: json.client.id, company_name: form.company_name });
+      notify('Cliente cadastrado com sucesso!', 'success');
       router.push(`/dashboard/clients/${json.client.id}`);
     } catch (err) {
       setError(err.message);
       setSaving(false);
+      console.error('[ERRO][Frontend:Form] Erro ao cadastrar cliente', { error: err.message });
+      notify('Erro ao cadastrar cliente', 'error');
     }
   }
 
@@ -392,17 +406,10 @@ export default function FormPage() {
                   style={inputStyle}
                 />
               </Field>
-              <Field label="Dia de Vencimento">
+              <Field label="Data da Primeira Parcela" hint="As demais parcelas seguem o mesmo dia do mês">
                 <input
-                  type="number" min="1" max="31" value={form.due_day}
-                  onChange={e => setForm(f => ({ ...f, due_day: e.target.value }))}
-                  style={inputStyle}
-                />
-              </Field>
-              <Field label="Data de Início">
-                <input
-                  type="date" value={form.start_date}
-                  onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))}
+                  type="date" value={form.first_due_date}
+                  onChange={e => setForm(f => ({ ...f, first_due_date: e.target.value }))}
                   style={inputStyle}
                 />
               </Field>
@@ -423,7 +430,7 @@ export default function FormPage() {
               }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: '#22c55e' }}>
                   {numParcelas}x de {fmtBRL(rawMonthly)} = {fmtBRL(totalContract)}
-                  {` · vence dia ${form.due_day} · início ${form.start_date}`}
+                  {form.first_due_date ? ` · primeira parcela: ${form.first_due_date.split('-').reverse().join('/')}` : ''}
                 </span>
               </div>
             )}

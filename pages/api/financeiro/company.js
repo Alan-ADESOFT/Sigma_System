@@ -11,6 +11,7 @@ import { query, queryOne } from '../../../infra/db';
 import { resolveTenantId } from '../../../infra/get-tenant-id';
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/financeiro/company] Requisição recebida', { method: req.method, query: req.query });
   const tenantId = await resolveTenantId(req);
 
   try {
@@ -35,6 +36,7 @@ export default async function handler(req, res) {
 
       sql += ' ORDER BY date DESC, created_at DESC';
       const rows = await query(sql, params);
+      console.log('[SUCESSO][API:/api/financeiro/company] Resposta enviada', { count: rows.length });
       return res.json({ success: true, records: rows });
     }
 
@@ -52,6 +54,7 @@ export default async function handler(req, res) {
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
         [tenantId, type, category || null, description, parseFloat(value), date, notes || null]
       );
+      console.log('[SUCESSO][API:/api/financeiro/company] Registro criado', { recordId: row.id, type });
       return res.status(201).json({ success: true, record: row });
     }
 
@@ -73,6 +76,7 @@ export default async function handler(req, res) {
          value ? parseFloat(value) : null, date || null, notes !== undefined ? notes : null, tenantId]
       );
       if (!row) return res.status(404).json({ success: false, error: 'Registro não encontrado' });
+      console.log('[SUCESSO][API:/api/financeiro/company] Registro atualizado', { recordId: id });
       return res.json({ success: true, record: row });
     }
 
@@ -80,12 +84,13 @@ export default async function handler(req, res) {
       const { id } = req.body || {};
       if (!id) return res.status(400).json({ success: false, error: 'id é obrigatório' });
       await query(`DELETE FROM company_finances WHERE id = $1 AND tenant_id = $2`, [id, tenantId]);
+      console.log('[SUCESSO][API:/api/financeiro/company] Registro removido', { id });
       return res.json({ success: true });
     }
 
     return res.status(405).end();
   } catch (err) {
-    console.error('[/api/financeiro/company]', err);
+    console.error('[ERRO][API:/api/financeiro/company] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

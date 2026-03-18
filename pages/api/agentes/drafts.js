@@ -15,6 +15,8 @@ export default async function handler(req, res) {
   const tenantId = await resolveTenantId(req);
 
   try {
+    console.log('[INFO][API:/api/agentes/drafts] Requisição recebida', { method: req.method, query: req.query });
+
     // ── GET: lista rascunhos ──────────────────────────────────────────────────
     if (req.method === 'GET') {
       const { status, agentName, limit = '20', page = '1' } = req.query;
@@ -134,7 +136,7 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ success: false, error: 'Método não permitido' });
   } catch (err) {
-    console.error('[/api/agentes/drafts] Erro:', err);
+    console.error('[ERRO][API:/api/agentes/drafts] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

@@ -11,6 +11,8 @@ import { resolveTenantId } from '../../../infra/get-tenant-id';
 export const config = { api: { bodyParser: { sizeLimit: '4mb' } } };
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/clients/upload-logo] Requisição recebida', { method: req.method, query: req.query });
+
   if (req.method !== 'POST') return res.status(405).end();
   try {
     await resolveTenantId(req); // garante autenticação
@@ -30,9 +32,10 @@ export default async function handler(req, res) {
     const buffer = Buffer.from(raw, 'base64');
     await writeFile(path.join(uploadsDir, safeName), buffer);
 
+    console.log('[SUCESSO][API:/api/clients/upload-logo] Logo enviado', { safeName });
     return res.json({ success: true, url: `/uploads/logos/${safeName}` });
   } catch (err) {
-    console.error('[upload-logo]', err);
+    console.error('[ERRO][API:/api/clients/upload-logo] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

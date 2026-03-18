@@ -20,11 +20,13 @@ function buildInstallments(contractId, clientId, monthlyValue, numInstallments, 
 }
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/clients] Requisição recebida', { method: req.method, query: req.query });
   const tenantId = await resolveTenantId(req);
 
   try {
     if (req.method === 'GET') {
       const clients = await getClientsByTenant(tenantId);
+      console.log('[SUCESSO][API:/api/clients] Resposta enviada', { count: clients.length });
       return res.json({ success: true, clients });
     }
 
@@ -63,12 +65,13 @@ export default async function handler(req, res) {
         }
       }
 
+      console.log('[SUCESSO][API:/api/clients] Cliente criado', { clientId: client.id, company_name });
       return res.status(201).json({ success: true, client });
     }
 
     return res.status(405).json({ error: 'Metodo nao permitido' });
   } catch (err) {
-    console.error('[/api/clients] Erro:', err);
+    console.error('[ERRO][API:/api/clients] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

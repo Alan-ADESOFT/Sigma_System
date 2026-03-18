@@ -13,7 +13,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import DashboardLayout from '../../components/DashboardLayout';
-import styles from '../../style/social.module.css';
+import { useNotification } from '../../context/NotificationContext';
+import styles from '../../assets/style/social.module.css';
 
 /* ─── Paleta de cores para as pastas ─────────────────────────────────────── */
 const FOLDER_COLORS = [
@@ -246,6 +247,7 @@ function FolderCard({ folder, onClick }) {
    NewFolderModal — modal de criação de pasta
 ═══════════════════════════════════════════════════════════════════════════ */
 function NewFolderModal({ onClose, onCreated, accountId }) {
+  const { notify } = useNotification();
   const [name,        setName]        = useState('');
   const [description, setDescription] = useState('');
   const [color,       setColor]       = useState('#ff0033');
@@ -254,6 +256,7 @@ function NewFolderModal({ onClose, onCreated, accountId }) {
   async function handleCreate() {
     if (!name.trim()) return;
     setSaving(true);
+    console.log('[INFO][Frontend:Social] Criando nova pasta', { accountId, name: name.trim(), color });
     try {
       const res = await fetch('/api/social/folders', {
         method:  'POST',
@@ -262,9 +265,17 @@ function NewFolderModal({ onClose, onCreated, accountId }) {
       });
       const data = await res.json();
       if (data.success) {
+        console.log('[SUCESSO][Frontend:Social] Pasta criada com sucesso', { folder: data.folder });
+        notify('Pasta criada com sucesso!', 'success');
         onCreated(data.folder);
         onClose();
+      } else {
+        console.error('[ERRO][Frontend:Social] Falha ao criar pasta', { error: data.error || 'Resposta sem sucesso' });
+        notify('Erro ao criar pasta', 'error');
       }
+    } catch (err) {
+      console.error('[ERRO][Frontend:Social] Erro ao criar pasta', { error: err.message });
+      notify('Erro ao criar pasta: ' + err.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -347,6 +358,7 @@ function NewFolderModal({ onClose, onCreated, accountId }) {
    ContentEditorModal — editor split-pane (texto | AI)
 ═══════════════════════════════════════════════════════════════════════════ */
 function ContentEditorModal({ folder, account, onClose }) {
+  const { notify } = useNotification();
   const [contents,   setContents]   = useState([]);
   const [loadingC,   setLoadingC]   = useState(true);
   const [activeId,   setActiveId]   = useState(null);
@@ -363,13 +375,22 @@ function ContentEditorModal({ folder, account, onClose }) {
   useEffect(() => {
     if (!folder?.id) return;
     setLoadingC(true);
+    console.log('[INFO][Frontend:Social] Carregando conteúdos da pasta', { folderId: folder.id });
     fetch(`/api/social/contents?folderId=${folder.id}`)
       .then(r => r.json())
       .then(data => {
         if (data.success) {
+          console.log('[SUCESSO][Frontend:Social] Conteúdos carregados', { count: (data.contents || []).length });
           setContents(data.contents || []);
           if (data.contents?.length > 0) selectContent(data.contents[0]);
+        } else {
+          console.error('[ERRO][Frontend:Social] Falha ao carregar conteúdos', { error: data.error || 'Resposta sem sucesso' });
+          notify('Erro ao carregar conteúdos', 'error');
         }
+      })
+      .catch(err => {
+        console.error('[ERRO][Frontend:Social] Erro ao carregar conteúdos', { error: err.message });
+        notify('Erro ao carregar conteúdos', 'error');
       })
       .finally(() => setLoadingC(false));
   }, [folder?.id]);
@@ -402,6 +423,7 @@ function ContentEditorModal({ folder, account, onClose }) {
 
       if (activeId) {
         /* Atualizar */
+        console.log('[INFO][Frontend:Social] Atualizando conteúdo', { contentId: activeId, type, status });
         const res = await fetch(`/api/social/contents?id=${activeId}`, {
           method:  'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -409,10 +431,16 @@ function ContentEditorModal({ folder, account, onClose }) {
         });
         const data = await res.json();
         if (data.success) {
+          console.log('[SUCESSO][Frontend:Social] Conteúdo atualizado', { contentId: activeId });
+          notify('Conteúdo atualizado com sucesso!', 'success');
           setContents(prev => prev.map(c => c.id === activeId ? data.content : c));
+        } else {
+          console.error('[ERRO][Frontend:Social] Falha ao atualizar conteúdo', { error: data.error || 'Resposta sem sucesso' });
+          notify('Erro ao atualizar conteúdo', 'error');
         }
       } else {
         /* Criar */
+        console.log('[INFO][Frontend:Social] Criando novo conteúdo', { folderId: folder.id, type, status });
         const res = await fetch('/api/social/contents', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -423,10 +451,18 @@ function ContentEditorModal({ folder, account, onClose }) {
         });
         const data = await res.json();
         if (data.success) {
+          console.log('[SUCESSO][Frontend:Social] Conteúdo criado', { contentId: data.content.id });
+          notify('Conteúdo criado com sucesso!', 'success');
           setContents(prev => [data.content, ...prev]);
           setActiveId(data.content.id);
+        } else {
+          console.error('[ERRO][Frontend:Social] Falha ao criar conteúdo', { error: data.error || 'Resposta sem sucesso' });
+          notify('Erro ao criar conteúdo', 'error');
         }
       }
+    } catch (err) {
+      console.error('[ERRO][Frontend:Social] Erro ao salvar conteúdo', { error: err.message });
+      notify('Erro ao salvar conteúdo: ' + err.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -434,9 +470,23 @@ function ContentEditorModal({ folder, account, onClose }) {
 
   async function handleDelete(id) {
     if (!window.confirm('Remover este conteúdo?')) return;
-    await fetch(`/api/social/contents?id=${id}`, { method: 'DELETE' });
-    setContents(prev => prev.filter(c => c.id !== id));
-    if (activeId === id) newContent();
+    console.log('[INFO][Frontend:Social] Removendo conteúdo', { contentId: id });
+    try {
+      const res = await fetch(`/api/social/contents?id=${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success !== false) {
+        console.log('[SUCESSO][Frontend:Social] Conteúdo removido', { contentId: id });
+        notify('Conteúdo removido com sucesso!', 'success');
+        setContents(prev => prev.filter(c => c.id !== id));
+        if (activeId === id) newContent();
+      } else {
+        console.error('[ERRO][Frontend:Social] Falha ao remover conteúdo', { error: data.error || 'Resposta sem sucesso' });
+        notify('Erro ao remover conteúdo', 'error');
+      }
+    } catch (err) {
+      console.error('[ERRO][Frontend:Social] Erro ao remover conteúdo', { error: err.message });
+      notify('Erro ao remover conteúdo: ' + err.message, 'error');
+    }
   }
 
   const AI_AGENTS = [
@@ -705,6 +755,7 @@ function ContentEditorModal({ folder, account, onClose }) {
    SocialPage — página principal
 ═══════════════════════════════════════════════════════════════════════════ */
 export default function SocialPage() {
+  const { notify } = useNotification();
   const [accounts,       setAccounts]       = useState([]);
   const [selectedAccId,  setSelectedAccId]  = useState('');
   const [folders,        setFolders]        = useState([]);
@@ -717,14 +768,23 @@ export default function SocialPage() {
 
   /* Carrega contas */
   useEffect(() => {
+    console.log('[INFO][Frontend:Social] Carregando contas Instagram');
     fetch('/api/accounts')
       .then(r => r.json())
       .then(data => {
         if (data.success) {
           const accs = data.accounts || [];
+          console.log('[SUCESSO][Frontend:Social] Contas carregadas', { count: accs.length });
           setAccounts(accs);
           if (accs.length > 0) setSelectedAccId(accs[0].id);
+        } else {
+          console.error('[ERRO][Frontend:Social] Falha ao carregar contas', { error: data.error || 'Resposta sem sucesso' });
+          notify('Erro ao carregar contas', 'error');
         }
+      })
+      .catch(err => {
+        console.error('[ERRO][Frontend:Social] Erro ao carregar contas', { error: err.message });
+        notify('Erro ao carregar contas', 'error');
       })
       .finally(() => setLoadingAcc(false));
   }, []);
@@ -733,9 +793,22 @@ export default function SocialPage() {
   useEffect(() => {
     if (!selectedAccId) { setFolders([]); return; }
     setLoadingFolders(true);
+    console.log('[INFO][Frontend:Social] Carregando pastas da conta', { accountId: selectedAccId });
     fetch(`/api/social/folders?accountId=${selectedAccId}`)
       .then(r => r.json())
-      .then(data => { if (data.success) setFolders(data.folders || []); })
+      .then(data => {
+        if (data.success) {
+          console.log('[SUCESSO][Frontend:Social] Pastas carregadas', { count: (data.folders || []).length });
+          setFolders(data.folders || []);
+        } else {
+          console.error('[ERRO][Frontend:Social] Falha ao carregar pastas', { error: data.error || 'Resposta sem sucesso' });
+          notify('Erro ao carregar pastas', 'error');
+        }
+      })
+      .catch(err => {
+        console.error('[ERRO][Frontend:Social] Erro ao carregar pastas', { error: err.message });
+        notify('Erro ao carregar pastas', 'error');
+      })
       .finally(() => setLoadingFolders(false));
   }, [selectedAccId]);
 

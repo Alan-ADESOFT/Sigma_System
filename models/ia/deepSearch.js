@@ -13,7 +13,10 @@ const { webSearch } = require('../../infra/api/openai');
  * @returns {Promise<{text: string, citations: Array<{url: string, title: string}>}>}
  */
 async function deepSearch(query, instructions = '') {
-  return webSearch(query, instructions);
+  console.log('[INFO][DeepSearch] Iniciando pesquisa', { queryLength: query.length, hasInstructions: !!instructions });
+  const result = await webSearch(query, instructions);
+  console.log('[SUCESSO][DeepSearch] Pesquisa concluída', { resultLength: result.text.length, citationsCount: result.citations.length });
+  return result;
 }
 
 module.exports = { deepSearch };

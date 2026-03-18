@@ -8,6 +8,8 @@ const { getDb } = require('../../../infra/db');
 const { verifyPassword, generateToken } = require('../../../lib/auth');
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/auth/login] Requisição recebida', { method: req.method, query: req.query });
+
   if (req.method !== 'POST') return res.status(405).end();
 
   const { credential, password } = req.body || {};
@@ -57,6 +59,7 @@ export default async function handler(req, res) {
     ].join('; ');
     res.setHeader('Set-Cookie', cookieOpts);
 
+    console.log('[SUCESSO][API:/api/auth/login] Login realizado', { userId: user.id, email: user.email });
     return res.json({
       success: true,
       token,
@@ -70,7 +73,7 @@ export default async function handler(req, res) {
       },
     });
   } catch (err) {
-    console.error('[/api/auth/login]', err);
+    console.error('[ERRO][API:/api/auth/login] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: 'Erro interno do servidor.' });
   }
 }

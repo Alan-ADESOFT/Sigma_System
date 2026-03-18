@@ -7,6 +7,8 @@ const { getDb } = require('../../../infra/db');
 const { verifyToken } = require('../../../lib/auth');
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/auth/me] Requisição recebida', { method: req.method, query: req.query });
+
   if (req.method !== 'GET') return res.status(405).end();
 
   /* Lê token do cookie httpOnly */
@@ -31,6 +33,7 @@ export default async function handler(req, res) {
     }
 
     const u = rows[0];
+    console.log('[SUCESSO][API:/api/auth/me] Resposta enviada', { userId: u.id });
     return res.json({
       success: true,
       user: {
@@ -43,7 +46,7 @@ export default async function handler(req, res) {
       },
     });
   } catch (err) {
-    console.error('[/api/auth/me]', err);
+    console.error('[ERRO][API:/api/auth/me] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: 'Erro interno.' });
   }
 }

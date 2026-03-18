@@ -10,6 +10,7 @@ const { query, queryOne } = require('../../../infra/db');
 const { resolveTenantId }  = require('../../../infra/get-tenant-id');
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/social/contents] Requisição recebida', { method: req.method, query: req.query });
   const tenantId = await resolveTenantId(req);
 
   try {
@@ -26,6 +27,7 @@ export default async function handler(req, res) {
       );
 
       const contents = rows.map(mapContent);
+      console.log('[SUCESSO][API:/api/social/contents] Resposta enviada', { count: contents.length, folderId });
       return res.json({ success: true, contents });
     }
 
@@ -57,6 +59,7 @@ export default async function handler(req, res) {
         ]
       );
 
+      console.log('[SUCESSO][API:/api/social/contents] Conteúdo criado', { contentId: content.id, folderId });
       return res.status(201).json({ success: true, content: mapContent(content) });
     }
 
@@ -83,6 +86,7 @@ export default async function handler(req, res) {
       );
 
       if (!content) return res.status(404).json({ success: false, error: 'Conteudo nao encontrado' });
+      console.log('[SUCESSO][API:/api/social/contents] Conteúdo atualizado', { contentId: id });
       return res.json({ success: true, content: mapContent(content) });
     }
 
@@ -92,12 +96,13 @@ export default async function handler(req, res) {
       if (!id) return res.status(400).json({ success: false, error: 'id obrigatorio' });
 
       await query(`DELETE FROM contents WHERE id = $1 AND tenant_id = $2`, [id, tenantId]);
+      console.log('[SUCESSO][API:/api/social/contents] Conteúdo removido', { id });
       return res.json({ success: true });
     }
 
     return res.status(405).json({ error: 'Metodo nao permitido' });
   } catch (err) {
-    console.error('[/api/social/contents]', err);
+    console.error('[ERRO][API:/api/social/contents] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

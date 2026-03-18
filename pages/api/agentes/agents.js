@@ -13,10 +13,12 @@ export default async function handler(req, res) {
   }
 
   try {
+    console.log('[INFO][API:/api/agentes/agents] Listando agentes');
     const agents = listAgentConfigs();
+    console.log('[SUCESSO][API:/api/agentes/agents] Agentes listados', { count: agents.length });
     return res.json({ success: true, data: agents });
   } catch (err) {
-    console.error('[/api/agentes/agents] Erro:', err);
+    console.error('[ERRO][API:/api/agentes/agents] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

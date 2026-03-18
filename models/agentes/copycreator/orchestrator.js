@@ -61,9 +61,11 @@ async function orchestrate({
   if (!agentModule) throw new Error(`Agente "${agentName}" não encontrado`);
 
   const { agentConfig } = agentModule;
+  console.log('[INFO][Orchestrator] Executando agente', { agentName, type: agentConfig.type, modelLevel: modelLevel || agentConfig.modelLevel });
 
   // ── FLUXO DE PESQUISA: search → text ───────────────────────────────────────
   if (agentConfig.type === 'search' && agentConfig.feedsInto) {
+    console.log('[INFO][Orchestrator] Fluxo pesquisa → redação', { searchAgentName: agentName, writerAgentName: agentConfig.feedsInto });
     // Passo 1: executa o agente pesquisador
     const searchResult = await runAgent({
       agentName,
@@ -97,6 +99,7 @@ async function orchestrate({
     });
 
     // Retorna o resultado final (texto do agente de análise) + dados da pesquisa
+    console.log('[SUCESSO][Orchestrator] Fluxo pesquisa → redação concluído', { searchAgentName: agentName, writerAgentName: destAgentName, resultLength: textResult.text.length });
     return {
       ...textResult,
       citations:    searchResult.citations,   // citations vêm sempre da pesquisa
@@ -109,6 +112,7 @@ async function orchestrate({
   }
 
   // ── FLUXO DE TEXTO SIMPLES ──────────────────────────────────────────────────
+  console.log('[INFO][Orchestrator] Fluxo texto simples', { agentName });
   return runAgent({
     agentName,
     tenantId,

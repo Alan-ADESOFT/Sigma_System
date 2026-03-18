@@ -27,6 +27,8 @@ export default async function handler(req, res) {
   }
 
   try {
+    console.log('[INFO][API:/api/agentes/search] Requisição recebida', { queryLength: query.length, hasInstructions: !!instructions });
+
     const { text, citations } = await deepSearch(query.trim(), instructions);
 
     // Salva no histórico de buscas
@@ -36,12 +38,13 @@ export default async function handler(req, res) {
       [tenantId, query.trim(), text, JSON.stringify(citations)]
     );
 
+    console.log('[SUCESSO][API:/api/agentes/search] Resposta enviada', { historyId: row?.id, resultLength: text.length, citationsCount: citations.length });
     return res.json({
       success: true,
       data: { text, citations, historyId: row?.id },
     });
   } catch (err) {
-    console.error('[/api/agentes/search] Erro:', err);
+    console.error('[ERRO][API:/api/agentes/search] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

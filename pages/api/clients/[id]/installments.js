@@ -9,6 +9,7 @@ import { getClientById } from '../../../../models/client.model';
 import { resolveTenantId } from '../../../../infra/get-tenant-id';
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/clients/:id/installments] Requisição recebida', { method: req.method, query: req.query });
   const tenantId       = await resolveTenantId(req);
   const { id: clientId } = req.query;
 
@@ -33,12 +34,13 @@ export default async function handler(req, res) {
         [status, installmentId, clientId]
       );
       if (!row) return res.status(404).json({ success: false, error: 'Parcela não encontrada' });
+      console.log('[SUCESSO][API:/api/clients/:id/installments] Parcela atualizada', { clientId, installmentId: req.body.installmentId, status });
       return res.json({ success: true, installment: row });
     }
 
     return res.status(405).end();
   } catch (err) {
-    console.error(`[/api/clients/${clientId}/installments]`, err);
+    console.error('[ERRO][API:/api/clients/:id/installments] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

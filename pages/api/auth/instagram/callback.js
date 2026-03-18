@@ -2,6 +2,7 @@ const { upsertAccountFromOAuth } = require('../../../../models/account.model');
 const { getOrCreateAdmin } = require('../../../../models/tenant.model');
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/auth/instagram/callback] Requisição recebida', { method: req.method, query: { code: req.query.code ? '***' : undefined, error: req.query.error } });
   const { code, error } = req.query;
 
   if (error) {
@@ -95,13 +96,13 @@ export default async function handler(req, res) {
       picture: profile.profile_picture_url ?? '',
     });
 
-    console.log(`[Meta OAuth] @${profile.username} conectada ao tenant ${tenant.id}`);
+    console.log('[SUCESSO][API:/api/auth/instagram/callback] Conta conectada', { username: profile.username, tenantId: tenant.id });
 
     res.redirect(
       `/dashboard/settings?success=meta_connected&username=${encodeURIComponent(profile.username || '')}`
     );
   } catch (err) {
-    console.error('[Meta OAuth] Erro detalhado:', err.message);
+    console.error('[ERRO][API:/api/auth/instagram/callback] Erro no endpoint', { error: err.message, stack: err.stack });
     res.redirect('/dashboard/settings?error=auth_failed');
   }
 }

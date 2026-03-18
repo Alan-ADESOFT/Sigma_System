@@ -6,6 +6,7 @@ const VALID_STAGES = ['diagnosis', 'competitors', 'audience', 'avatar', 'positio
 const VALID_STATUS = ['pending', 'in_progress', 'done'];
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/clients/:id/stages] Requisição recebida', { method: req.method, query: req.query });
   const tenantId = await resolveTenantId(req);
   const { id: clientId } = req.query;
 
@@ -19,6 +20,7 @@ export default async function handler(req, res) {
     // GET /api/clients/[id]/stages → todas as etapas do cliente
     if (req.method === 'GET') {
       const stages = await getStagesByClient(clientId);
+      console.log('[SUCESSO][API:/api/clients/:id/stages] Resposta enviada', { clientId, stageCount: stages.length });
       return res.json({ success: true, stages });
     }
 
@@ -43,6 +45,7 @@ export default async function handler(req, res) {
       // Se apenas notes for passado, só atualiza as notes
       if (notes !== undefined && data === undefined && status === undefined) {
         const stage = await updateStageNotes(clientId, stage_key, notes);
+        console.log('[SUCESSO][API:/api/clients/:id/stages] Notes atualizadas', { clientId, stage_key });
         return res.json({ success: true, stage });
       }
 
@@ -53,12 +56,13 @@ export default async function handler(req, res) {
         status ?? 'in_progress',
         notes ?? null
       );
+      console.log('[SUCESSO][API:/api/clients/:id/stages] Etapa salva', { clientId, stage_key, status: status ?? 'in_progress' });
       return res.json({ success: true, stage });
     }
 
     return res.status(405).json({ error: 'Metodo nao permitido' });
   } catch (err) {
-    console.error(`[/api/clients/${clientId}/stages] Erro:`, err);
+    console.error('[ERRO][API:/api/clients/:id/stages] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

@@ -13,6 +13,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '../../components/DashboardLayout';
+import { useNotification } from '../../context/NotificationContext';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -132,6 +133,7 @@ const TABS = [
    MAIN PAGE
 ═══════════════════════════════════════════════════════════ */
 export default function FinanceiroDashboard() {
+  const { notify } = useNotification();
   const [activeTab, setActiveTab] = useState('dashboard');
 
   /* Parcelas data */
@@ -161,10 +163,16 @@ export default function FinanceiroDashboard() {
   async function loadInstallments() {
     setLoadingInst(true);
     try {
+      console.log('[INFO][Frontend:Financeiro] Buscando parcelas', { endpoint: '/api/financeiro' });
       const j = await fetch('/api/financeiro').then(r => r.json());
       if (!j.success) throw new Error(j.error);
+      console.log('[SUCESSO][Frontend:Financeiro] Parcelas carregadas', { total: (j.installments || []).length });
       setInstallments(j.installments || []);
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      console.error('[ERRO][Frontend:Financeiro] Falha ao carregar parcelas', { error: e.message });
+      notify('Erro ao carregar parcelas', 'error');
+      setError(e.message);
+    }
     finally { setLoadingInst(false); }
   }
 
@@ -173,10 +181,16 @@ export default function FinanceiroDashboard() {
     try {
       const params = new URLSearchParams();
       if (filterYear) params.set('year', filterYear);
+      console.log('[INFO][Frontend:Financeiro] Buscando registros da empresa', { endpoint: '/api/financeiro/company', filterYear });
       const j = await fetch(`/api/financeiro/company?${params}`).then(r => r.json());
       if (!j.success) throw new Error(j.error);
+      console.log('[SUCESSO][Frontend:Financeiro] Registros da empresa carregados', { total: (j.records || []).length });
       setCompanyRecords(j.records || []);
-    } catch (e) { setError(e.message); }
+    } catch (e) {
+      console.error('[ERRO][Frontend:Financeiro] Falha ao carregar registros da empresa', { error: e.message });
+      notify('Erro ao carregar registros financeiros', 'error');
+      setError(e.message);
+    }
     finally { setLoadingComp(false); }
   }
 
@@ -187,13 +201,19 @@ export default function FinanceiroDashboard() {
   async function toggleInst(inst) {
     const newStatus = inst.status === 'paid' ? 'pending' : 'paid';
     try {
+      console.log('[INFO][Frontend:Financeiro] Alterando status da parcela', { installmentId: inst.id, clientId: inst.client_id, newStatus });
       const j = await fetch('/api/financeiro', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ installmentId: inst.id, clientId: inst.client_id, status: newStatus }),
       }).then(r => r.json());
       if (!j.success) throw new Error(j.error);
+      console.log('[SUCESSO][Frontend:Financeiro] Status da parcela atualizado', { installmentId: inst.id, newStatus });
+      notify(newStatus === 'paid' ? 'Parcela marcada como paga' : 'Parcela marcada como pendente', 'success');
       setInstallments(p => p.map(i => i.id === inst.id ? { ...i, ...j.installment } : i));
-    } catch (e) { alert(e.message); }
+    } catch (e) {
+      console.error('[ERRO][Frontend:Financeiro] Falha ao alterar status da parcela', { error: e.message });
+      notify('Erro ao alterar status da parcela', 'error');
+    }
   }
 
   /* Company finance CRUD */
@@ -227,18 +247,25 @@ export default function FinanceiroDashboard() {
   async function handleSaveComp(e) {
     e.preventDefault();
     const rawVal = parseFloat((compForm.value || '0').replace(/\./g, '').replace(',', '.')) || 0;
-    if (!rawVal || !compForm.description || !compForm.date) return alert('Descrição, valor e data são obrigatórios.');
+    if (!rawVal || !compForm.description || !compForm.date) {
+      notify('Descrição, valor e data são obrigatórios.', 'error');
+      return;
+    }
     setSavingComp(true);
     try {
       const payload = { ...compForm, value: rawVal };
       if (editingComp) payload.id = editingComp;
+      const method = editingComp ? 'PUT' : 'POST';
+      console.log('[INFO][Frontend:Financeiro] Salvando registro financeiro', { method, payload });
       const res = await fetch('/api/financeiro/company', {
-        method: editingComp ? 'PUT' : 'POST',
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const j = await res.json();
       if (!j.success) throw new Error(j.error);
+      console.log('[SUCESSO][Frontend:Financeiro] Registro financeiro salvo', { id: j.record?.id, method });
+      notify(editingComp ? 'Registro atualizado com sucesso' : 'Registro criado com sucesso', 'success');
       if (editingComp) {
         setCompanyRecords(p => p.map(r => r.id === editingComp ? j.record : r));
       } else {
@@ -246,21 +273,30 @@ export default function FinanceiroDashboard() {
       }
       setShowCompForm(false);
       setEditingComp(null);
-    } catch (err) { alert(err.message); }
+    } catch (err) {
+      console.error('[ERRO][Frontend:Financeiro] Falha ao salvar registro financeiro', { error: err.message });
+      notify('Erro ao salvar registro financeiro', 'error');
+    }
     finally { setSavingComp(false); }
   }
 
   async function handleDeleteComp(id) {
     if (!confirm('Excluir este registro?')) return;
     try {
+      console.log('[INFO][Frontend:Financeiro] Excluindo registro financeiro', { id });
       const res = await fetch('/api/financeiro/company', {
         method: 'DELETE', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
       });
       const j = await res.json();
       if (!j.success) throw new Error(j.error);
+      console.log('[SUCESSO][Frontend:Financeiro] Registro financeiro excluído', { id });
+      notify('Registro excluído com sucesso', 'success');
       setCompanyRecords(p => p.filter(r => r.id !== id));
-    } catch (err) { alert(err.message); }
+    } catch (err) {
+      console.error('[ERRO][Frontend:Financeiro] Falha ao excluir registro financeiro', { error: err.message });
+      notify('Erro ao excluir registro financeiro', 'error');
+    }
   }
 
   /* ── Computed data ── */
@@ -360,7 +396,7 @@ export default function FinanceiroDashboard() {
       if (!map[k]) map[k] = [];
       map[k].push(inst);
     });
-    return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
+    return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
   }, [filtered]);
 
   /* Years available */

@@ -28,6 +28,8 @@ function getHeaders() {
  * @returns {Promise<string>} Texto gerado
  */
 async function generateCompletion(model, systemPrompt, userMessage, maxTokens = 2000) {
+  console.log('[INFO][OpenAI] Iniciando completion', { model, maxTokens, promptLength: systemPrompt.length });
+
   const response = await fetch(`${OPENAI_BASE}/chat/completions`, {
     method: 'POST',
     headers: getHeaders(),
@@ -43,11 +45,16 @@ async function generateCompletion(model, systemPrompt, userMessage, maxTokens = 
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
+    console.error('[ERRO][OpenAI] Falha na completion', { model, status: response.status, message: err?.error?.message });
     throw new Error(`OpenAI Completion Error ${response.status}: ${err?.error?.message || response.statusText}`);
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  const result = data.choices?.[0]?.message?.content || '';
+  const usage = data.usage || {};
+  console.log('[SUCESSO][OpenAI] Completion recebido', { model, responseLength: result.length, tokensUsed: usage });
+
+  return result;
 }
 
 /**
@@ -58,6 +65,7 @@ async function generateCompletion(model, systemPrompt, userMessage, maxTokens = 
  */
 async function webSearch(query, instructions = '') {
   const model = process.env.AI_MODEL_SEARCH || 'gpt-4o-mini';
+  console.log('[INFO][OpenAI:WebSearch] Iniciando pesquisa', { model, query: query.substring(0, 100) });
 
   const response = await fetch(`${OPENAI_BASE}/responses`, {
     method: 'POST',
@@ -72,6 +80,7 @@ async function webSearch(query, instructions = '') {
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
+    console.error('[ERRO][OpenAI:WebSearch] Falha na pesquisa', { model, status: response.status, message: err?.error?.message });
     throw new Error(`OpenAI Web Search Error ${response.status}: ${err?.error?.message || response.statusText}`);
   }
 
@@ -100,6 +109,9 @@ async function webSearch(query, instructions = '') {
       }
     }
   }
+
+  console.log('[SUCESSO][OpenAI:WebSearch] Pesquisa concluída', { citationsCount: citations.length, resultLength: text.length });
+  console.log('[DEBUG][OpenAI:WebSearch] Citations recebidas', { citations });
 
   return { text, citations };
 }

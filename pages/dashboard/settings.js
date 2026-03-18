@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import DashboardLayout from '../../components/DashboardLayout';
+import { useNotification } from '../../context/NotificationContext';
 
 export default function SettingsPage() {
+  const { notify } = useNotification();
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddAccount, setShowAddAccount] = useState(false);
@@ -28,11 +30,16 @@ export default function SettingsPage() {
 
   async function loadAccounts() {
     try {
+      console.log('[INFO][Frontend:Settings] Carregando contas...');
       const res = await fetch('/api/accounts');
       const data = await res.json();
-      if (data.success) setAccounts(data.accounts || []);
+      if (data.success) {
+        setAccounts(data.accounts || []);
+        console.log('[SUCESSO][Frontend:Settings] Contas carregadas', { total: (data.accounts || []).length });
+      }
     } catch (err) {
-      console.error('Erro:', err);
+      console.error('[ERRO][Frontend:Settings] Erro ao carregar contas', { error: err.message });
+      notify('Erro ao carregar contas', 'error');
     } finally {
       setLoading(false);
     }
@@ -47,6 +54,7 @@ export default function SettingsPage() {
     if (!accountForm.handle.trim()) return alert('Handle obrigatorio');
 
     try {
+      console.log('[INFO][Frontend:Settings] Salvando nova conta', { handle: accountForm.handle });
       const res = await fetch('/api/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -67,20 +75,30 @@ export default function SettingsPage() {
         setAccountForm({ name: '', handle: '', adsToken: '', adsAccountId: '' });
         loadAccounts();
         setMessage({ type: 'success', text: 'Conta adicionada! Agora conecte via Meta OAuth.' });
+        console.log('[SUCESSO][Frontend:Settings] Conta salva com sucesso', { handle: accountForm.handle });
+        notify('Conta adicionada com sucesso!', 'success');
       }
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
+      console.error('[ERRO][Frontend:Settings] Erro ao salvar conta', { error: err.message });
+      notify('Erro ao salvar conta', 'error');
     }
   }
 
   async function handleDeleteAccount(id) {
     if (!confirm('Tem certeza que deseja remover esta conta?')) return;
     try {
+      console.log('[INFO][Frontend:Settings] Removendo conta', { id });
       const res = await fetch(`/api/accounts?id=${id}`, { method: 'DELETE' });
       const data = await res.json();
-      if (data.success) loadAccounts();
+      if (data.success) {
+        loadAccounts();
+        console.log('[SUCESSO][Frontend:Settings] Conta removida', { id });
+        notify('Conta removida com sucesso', 'success');
+      }
     } catch (err) {
-      console.error('Erro:', err);
+      console.error('[ERRO][Frontend:Settings] Erro ao remover conta', { error: err.message });
+      notify('Erro ao remover conta', 'error');
     }
   }
 
@@ -89,6 +107,7 @@ export default function SettingsPage() {
       const account = accounts.find((a) => a.id === accountId);
       if (!account) return;
 
+      console.log('[INFO][Frontend:Settings] Atualizando configuracoes de Ads', { accountId });
       const res = await fetch('/api/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -102,9 +121,13 @@ export default function SettingsPage() {
       if (data.success) {
         loadAccounts();
         setMessage({ type: 'success', text: 'Configuracoes de Ads atualizadas!' });
+        console.log('[SUCESSO][Frontend:Settings] Configuracoes de Ads atualizadas', { accountId });
+        notify('Configuracoes de Ads atualizadas!', 'success');
       }
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
+      console.error('[ERRO][Frontend:Settings] Erro ao atualizar Ads', { error: err.message });
+      notify('Erro ao atualizar configuracoes de Ads', 'error');
     }
   }
 

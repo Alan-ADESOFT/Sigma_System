@@ -14,6 +14,7 @@ import { resolveTenantId } from '../../../../infra/get-tenant-id';
 export const config = { api: { bodyParser: { sizeLimit: '12mb' } } };
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/clients/:id/attachments] Requisição recebida', { method: req.method, query: req.query });
   const tenantId = await resolveTenantId(req);
   const { id: clientId, attachmentId } = req.query;
 
@@ -27,6 +28,7 @@ export default async function handler(req, res) {
         `SELECT * FROM client_attachments WHERE client_id = $1 ORDER BY created_at DESC`,
         [clientId]
       );
+      console.log('[SUCESSO][API:/api/clients/:id/attachments] Resposta enviada', { clientId, count: rows.length });
       return res.json({ success: true, attachments: rows });
     }
 
@@ -55,6 +57,7 @@ export default async function handler(req, res) {
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
         [clientId, title.trim(), description?.trim() || null, fileUrl, fileName, fileSize, mimeType || null]
       );
+      console.log('[SUCESSO][API:/api/clients/:id/attachments] Anexo criado', { clientId, attachmentId: row.id, fileName });
       return res.json({ success: true, attachment: row });
     }
 
@@ -71,12 +74,13 @@ export default async function handler(req, res) {
       const filePath = path.join(process.cwd(), 'public', row.file_url);
       unlink(filePath).catch(() => {});
 
+      console.log('[SUCESSO][API:/api/clients/:id/attachments] Anexo removido', { clientId, attachmentId });
       return res.json({ success: true, id: attachmentId });
     }
 
     return res.status(405).end();
   } catch (err) {
-    console.error(`[/api/clients/${clientId}/attachments]`, err);
+    console.error('[ERRO][API:/api/clients/:id/attachments] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

@@ -48,6 +48,8 @@ export default async function handler(req, res) {
   }
 
   try {
+    console.log('[INFO][API:/api/agentes/generate] Requisição recebida', { agentName, modelLevel, inputLength: userInput.length });
+
     const result = await orchestrate({
       agentName,
       tenantId,
@@ -58,9 +60,10 @@ export default async function handler(req, res) {
       complements,
     });
 
+    console.log('[SUCESSO][API:/api/agentes/generate] Resposta enviada', { agentName, historyId: result.historyId, responseLength: result.text.length });
     return res.json({ success: true, data: result });
   } catch (err) {
-    console.error('[/api/agentes/generate] Erro:', err);
+    console.error('[ERRO][API:/api/agentes/generate] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

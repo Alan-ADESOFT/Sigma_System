@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import styles from '../style/login.module.css';
+import styles from '../assets/style/login.module.css';
 import { useNotification } from '../context/NotificationContext';
 
 /* ── Mensagens flutuantes de fundo (estilo hacker) ── */
@@ -78,6 +78,7 @@ export default function Login() {
     setSubmitting(true);
 
     try {
+      console.log('[INFO][Frontend:Login] Enviando credenciais para /api/auth/login', { credential: credential.trim() });
       const res  = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -86,10 +87,13 @@ export default function Login() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
+        console.error('[ERRO][Frontend:Login] Falha na autenticação', { status: res.status, error: data.error });
         notify(data.error || 'Falha ao autenticar. Tente novamente.', 'error');
         setSubmitting(false);
         return;
       }
+
+      console.log('[SUCESSO][Frontend:Login] Login realizado com sucesso', { credential: credential.trim() });
 
       /* Login ok — inicia animação de boot */
       setLoading(true);
@@ -105,7 +109,8 @@ export default function Login() {
         }
       }, 700);
 
-    } catch {
+    } catch (err) {
+      console.error('[ERRO][Frontend:Login] Erro de conexão ao tentar login', { error: err.message });
       notify('Erro de conexão. Verifique sua rede.', 'error');
       setSubmitting(false);
     }

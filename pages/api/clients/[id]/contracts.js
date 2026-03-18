@@ -31,6 +31,7 @@ function buildInstallments(contractId, clientId, monthlyValue, numInstallments, 
 }
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/clients/:id/contracts] Requisição recebida', { method: req.method, query: req.query });
   const tenantId = await resolveTenantId(req);
   const { id: clientId } = req.query;
 
@@ -54,6 +55,7 @@ export default async function handler(req, res) {
         result.push({ ...c, installments });
       }
 
+      console.log('[SUCESSO][API:/api/clients/:id/contracts] Resposta enviada', { clientId, contractCount: result.length });
       return res.json({ success: true, contracts: result });
     }
 
@@ -90,6 +92,7 @@ export default async function handler(req, res) {
         `SELECT * FROM client_installments WHERE contract_id = $1 ORDER BY installment_number ASC`,
         [contract.id]
       );
+      console.log('[SUCESSO][API:/api/clients/:id/contracts] Contrato criado', { clientId, contractId: contract.id, installmentCount: installments.length });
       return res.json({ success: true, contract: { ...contract, installments } });
     }
 
@@ -148,6 +151,7 @@ export default async function handler(req, res) {
         `SELECT * FROM client_installments WHERE contract_id = $1 ORDER BY installment_number ASC`,
         [contractId]
       );
+      console.log('[SUCESSO][API:/api/clients/:id/contracts] Contrato atualizado', { clientId, contractId });
       return res.json({ success: true, contract: { ...contract, installments } });
     }
 
@@ -159,12 +163,13 @@ export default async function handler(req, res) {
       await query(`DELETE FROM client_installments WHERE contract_id = $1`, [contractId]);
       await query(`DELETE FROM client_contracts WHERE id = $1 AND client_id = $2`, [contractId, clientId]);
 
+      console.log('[SUCESSO][API:/api/clients/:id/contracts] Contrato removido', { clientId, contractId });
       return res.json({ success: true });
     }
 
     return res.status(405).end();
   } catch (err) {
-    console.error(`[/api/clients/${clientId}/contracts]`, err);
+    console.error('[ERRO][API:/api/clients/:id/contracts] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

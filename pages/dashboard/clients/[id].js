@@ -11,6 +11,7 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import DashboardLayout from '../../../components/DashboardLayout';
 import StageModal from '../../../components/StageModal';
+import { useNotification } from '../../../context/NotificationContext';
 
 /* ═══════════════════════════════════════════════════════════
    CONSTANTS
@@ -146,6 +147,7 @@ const DEFAULT_SERVICES = [
    TAB: INFORMAÇÕES GERAIS
 ═══════════════════════════════════════════════════════════ */
 function TabInfo({ client, onSave }) {
+  const { notify } = useNotification();
   const [form, setForm] = useState({
     company_name:    client.company_name  || '',
     niche:           client.niche         || '',
@@ -174,6 +176,7 @@ function TabInfo({ client, onSave }) {
   /* ── Ticket médio derivado do contrato (soma de todos os contratos ativos) ── */
   const [contractMonthly, setContractMonthly] = useState(null);
   useEffect(() => {
+    console.log('[INFO][Frontend:ClientDetail] Buscando contratos para ticket médio', { clientId: client.id });
     fetch(`/api/clients/${client.id}/contracts`)
       .then(r => r.json())
       .then(j => {
@@ -183,9 +186,12 @@ function TabInfo({ client, onSave }) {
             return sum + mv;
           }, 0);
           if (total > 0) setContractMonthly(total);
+          console.log('[SUCESSO][Frontend:ClientDetail] Contratos carregados para ticket médio', { total, count: j.contracts.length });
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.error('[ERRO][Frontend:ClientDetail] Falha ao buscar contratos para ticket médio', { error: err.message });
+      });
   }, [client.id]);
 
   const [saving,   setSaving  ] = useState(false);
@@ -200,7 +206,7 @@ function TabInfo({ client, onSave }) {
   async function handleLogoFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 3 * 1024 * 1024) { alert('Imagem máxima: 3 MB'); return; }
+    if (file.size > 3 * 1024 * 1024) { notify('Imagem máxima: 3 MB', 'error'); return; }
     setUploading(true);
     try {
       const base64 = await new Promise((resolve, reject) => {
@@ -209,6 +215,7 @@ function TabInfo({ client, onSave }) {
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
+      console.log('[INFO][Frontend:ClientDetail] Enviando logo do cliente', { fileName: file.name });
       const res  = await fetch('/api/clients/upload-logo', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileName: file.name, base64, mimeType: file.type }),
@@ -217,7 +224,12 @@ function TabInfo({ client, onSave }) {
       if (!json.success) throw new Error(json.error);
       setForm(p => ({ ...p, logo_url: json.url }));
       setSaved(false);
-    } catch (e) { alert('Erro ao fazer upload: ' + e.message); }
+      console.log('[SUCESSO][Frontend:ClientDetail] Logo enviado com sucesso', { url: json.url });
+      notify('Logo atualizado com sucesso', 'success');
+    } catch (err) {
+      console.error('[ERRO][Frontend:ClientDetail] Falha ao enviar logo', { error: err.message });
+      notify('Erro ao fazer upload: ' + err.message, 'error');
+    }
     finally { setUploading(false); }
   }
 
@@ -246,6 +258,7 @@ function TabInfo({ client, onSave }) {
         ? { ...existingExtra, inactive_reason: form.inactive_reason }
         : { ...existingExtra, inactive_reason: existingExtra.inactive_reason || '' };
       const { inactive_reason, ...formWithoutReason } = form;
+      console.log('[INFO][Frontend:ClientDetail] Salvando informações do cliente', { clientId: client.id });
       const res  = await fetch(`/api/clients/${client.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -260,7 +273,13 @@ function TabInfo({ client, onSave }) {
       if (!json.success) throw new Error(json.error);
       onSave(json.client);
       setSaved(true);
-    } catch (e) { setErr(e.message); }
+      console.log('[SUCESSO][Frontend:ClientDetail] Informações do cliente salvas', { clientId: client.id });
+      notify('Informações salvas com sucesso', 'success');
+    } catch (err) {
+      console.error('[ERRO][Frontend:ClientDetail] Falha ao salvar informações do cliente', { error: err.message });
+      notify('Erro ao salvar: ' + err.message, 'error');
+      setErr(err.message);
+    }
     finally { setSaving(false); }
   }
 
@@ -593,6 +612,7 @@ function TabDatabase({ client, stages, onStageUpdated }) {
    TAB: ANEXOS
 ═══════════════════════════════════════════════════════════ */
 function TabAnexos({ clientId }) {
+  const { notify } = useNotification();
   const [attachments, setAttachments] = useState([]);
   const [loading,     setLoading    ] = useState(true);
   const [form,        setForm       ] = useState({ title: '', description: '' });
@@ -602,9 +622,17 @@ function TabAnexos({ clientId }) {
   const fileRef = useRef(null);
 
   useEffect(() => {
+    console.log('[INFO][Frontend:ClientDetail] Carregando anexos', { clientId });
     fetch(`/api/clients/${clientId}/attachments`)
       .then(r => r.json())
-      .then(j => { if (j.success) setAttachments(j.attachments); })
+      .then(j => {
+        if (j.success) setAttachments(j.attachments);
+        console.log('[SUCESSO][Frontend:ClientDetail] Anexos carregados', { count: j.attachments?.length || 0 });
+      })
+      .catch(err => {
+        console.error('[ERRO][Frontend:ClientDetail] Falha ao carregar anexos', { error: err.message });
+        notify('Erro ao carregar anexos', 'error');
+      })
       .finally(() => setLoading(false));
   }, [clientId]);
 
@@ -621,6 +649,7 @@ function TabAnexos({ clientId }) {
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
+      console.log('[INFO][Frontend:ClientDetail] Enviando anexo', { clientId, title: form.title, fileName: file.name });
       const res  = await fetch(`/api/clients/${clientId}/attachments`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: form.title, description: form.description, fileName: file.name, base64, mimeType: file.type }),
@@ -631,16 +660,30 @@ function TabAnexos({ clientId }) {
       setForm({ title: '', description: '' });
       setFile(null);
       if (fileRef.current) fileRef.current.value = '';
-    } catch (e) { setUploadErr(e.message); }
+      console.log('[SUCESSO][Frontend:ClientDetail] Anexo enviado com sucesso', { title: form.title });
+      notify('Anexo adicionado com sucesso', 'success');
+    } catch (err) {
+      console.error('[ERRO][Frontend:ClientDetail] Falha ao enviar anexo', { error: err.message });
+      notify('Erro ao enviar anexo: ' + err.message, 'error');
+      setUploadErr(err.message);
+    }
     finally { setUploading(false); }
   }
 
   async function handleDelete(id) {
     if (!confirm('Remover este anexo?')) return;
     try {
-      await fetch(`/api/clients/${clientId}/attachments?attachmentId=${id}`, { method: 'DELETE' });
+      console.log('[INFO][Frontend:ClientDetail] Excluindo anexo', { clientId, attachmentId: id });
+      const res = await fetch(`/api/clients/${clientId}/attachments?attachmentId=${id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success === false) throw new Error(json.error || 'Erro ao excluir');
       setAttachments(p => p.filter(a => a.id !== id));
-    } catch (e) { alert(e.message); }
+      console.log('[SUCESSO][Frontend:ClientDetail] Anexo excluído', { attachmentId: id });
+      notify('Anexo removido com sucesso', 'success');
+    } catch (err) {
+      console.error('[ERRO][Frontend:ClientDetail] Falha ao excluir anexo', { error: err.message });
+      notify('Erro ao excluir anexo: ' + err.message, 'error');
+    }
   }
 
   function fileIcon(mime = '') {
@@ -767,6 +810,7 @@ function TabAnexos({ clientId }) {
    TAB: OBSERVAÇÕES — múltiplas com editar/deletar
 ═══════════════════════════════════════════════════════════ */
 function TabObservacoes({ clientId }) {
+  const { notify } = useNotification();
   const [observations, setObservations] = useState([]);
   const [loading,      setLoading     ] = useState(true);
   const [newText,      setNewText     ] = useState('');
@@ -776,9 +820,17 @@ function TabObservacoes({ clientId }) {
   const [savingEdit,   setSavingEdit  ] = useState(false);
 
   useEffect(() => {
+    console.log('[INFO][Frontend:ClientDetail] Carregando observações', { clientId });
     fetch(`/api/clients/${clientId}/observations`)
       .then(r => r.json())
-      .then(j => { if (j.success) setObservations(j.observations); })
+      .then(j => {
+        if (j.success) setObservations(j.observations);
+        console.log('[SUCESSO][Frontend:ClientDetail] Observações carregadas', { count: j.observations?.length || 0 });
+      })
+      .catch(err => {
+        console.error('[ERRO][Frontend:ClientDetail] Falha ao carregar observações', { error: err.message });
+        notify('Erro ao carregar observações', 'error');
+      })
       .finally(() => setLoading(false));
   }, [clientId]);
 
@@ -786,6 +838,7 @@ function TabObservacoes({ clientId }) {
     if (!newText.trim()) return;
     setAdding(true);
     try {
+      console.log('[INFO][Frontend:ClientDetail] Adicionando observação', { clientId });
       const res  = await fetch(`/api/clients/${clientId}/observations`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: newText }),
@@ -794,7 +847,12 @@ function TabObservacoes({ clientId }) {
       if (!json.success) throw new Error(json.error);
       setObservations(p => [json.observation, ...p]);
       setNewText('');
-    } catch (e) { alert(e.message); }
+      console.log('[SUCESSO][Frontend:ClientDetail] Observação adicionada', { observationId: json.observation?.id });
+      notify('Observação adicionada com sucesso', 'success');
+    } catch (err) {
+      console.error('[ERRO][Frontend:ClientDetail] Falha ao adicionar observação', { error: err.message });
+      notify('Erro ao adicionar observação: ' + err.message, 'error');
+    }
     finally { setAdding(false); }
   }
 
@@ -802,6 +860,7 @@ function TabObservacoes({ clientId }) {
     if (!editText.trim()) return;
     setSavingEdit(true);
     try {
+      console.log('[INFO][Frontend:ClientDetail] Editando observação', { clientId, observationId: id });
       const res  = await fetch(`/api/clients/${clientId}/observations`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ observationId: id, text: editText }),
@@ -810,16 +869,29 @@ function TabObservacoes({ clientId }) {
       if (!json.success) throw new Error(json.error);
       setObservations(p => p.map(o => o.id === id ? json.observation : o));
       setEditingId(null);
-    } catch (e) { alert(e.message); }
+      console.log('[SUCESSO][Frontend:ClientDetail] Observação editada', { observationId: id });
+      notify('Observação atualizada com sucesso', 'success');
+    } catch (err) {
+      console.error('[ERRO][Frontend:ClientDetail] Falha ao editar observação', { error: err.message });
+      notify('Erro ao editar observação: ' + err.message, 'error');
+    }
     finally { setSavingEdit(false); }
   }
 
   async function handleDelete(id) {
     if (!confirm('Excluir esta observação?')) return;
     try {
-      await fetch(`/api/clients/${clientId}/observations?observationId=${id}`, { method: 'DELETE' });
+      console.log('[INFO][Frontend:ClientDetail] Excluindo observação', { clientId, observationId: id });
+      const res = await fetch(`/api/clients/${clientId}/observations?observationId=${id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success === false) throw new Error(json.error || 'Erro ao excluir');
       setObservations(p => p.filter(o => o.id !== id));
-    } catch (e) { alert(e.message); }
+      console.log('[SUCESSO][Frontend:ClientDetail] Observação excluída', { observationId: id });
+      notify('Observação excluída com sucesso', 'success');
+    } catch (err) {
+      console.error('[ERRO][Frontend:ClientDetail] Falha ao excluir observação', { error: err.message });
+      notify('Erro ao excluir observação: ' + err.message, 'error');
+    }
   }
 
   function startEdit(obs) {
@@ -939,6 +1011,7 @@ function fmtDate(d) {
 }
 
 function TabFinanceiro({ clientId, clientServices }) {
+  const { notify } = useNotification();
   const [contracts, setContracts] = useState([]);
   const [loading,   setLoading  ] = useState(true);
   const [showForm,  setShowForm ] = useState(false);
@@ -948,8 +1021,7 @@ function TabFinanceiro({ clientId, clientServices }) {
 
   const EMPTY_FORM = {
     monthly_value: '', num_installments: '12',
-    due_day: '10', start_date: new Date().toISOString().split('T')[0],
-    notes: '', services: [],
+    first_due_date: '', notes: '', services: [],
   };
   const [form, setForm] = useState(EMPTY_FORM);
 
@@ -970,8 +1042,13 @@ function TabFinanceiro({ clientId, clientServices }) {
   async function load() {
     setLoading(true);
     try {
+      console.log('[INFO][Frontend:ClientDetail] Carregando contratos', { clientId });
       const j = await fetch(`/api/clients/${clientId}/contracts`).then(r => r.json());
       if (j.success) setContracts(j.contracts || []);
+      console.log('[SUCESSO][Frontend:ClientDetail] Contratos carregados', { count: j.contracts?.length || 0 });
+    } catch (err) {
+      console.error('[ERRO][Frontend:ClientDetail] Falha ao carregar contratos', { error: err.message });
+      notify('Erro ao carregar contratos', 'error');
     } finally { setLoading(false); }
   }
 
@@ -993,7 +1070,9 @@ function TabFinanceiro({ clientId, clientServices }) {
   }
 
   function openNewForm() {
-    setForm({ ...EMPTY_FORM, services: (clientServices || []).map(s => s.name) });
+    const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(1);
+    const nextFirstDue = d.toISOString().split('T')[0];
+    setForm({ ...EMPTY_FORM, first_due_date: nextFirstDue, services: (clientServices || []).map(s => s.name) });
     setEditingId(null);
     setShowForm(true);
   }
@@ -1003,8 +1082,7 @@ function TabFinanceiro({ clientId, clientServices }) {
     setForm({
       monthly_value: mv.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       num_installments: String(c.num_installments || 12),
-      due_day: String(c.due_day),
-      start_date: c.start_date ? c.start_date.split('T')[0] : '',
+      first_due_date: c.start_date ? c.start_date.split('T')[0] : '',
       notes: c.notes || '',
       services: Array.isArray(c.services) ? c.services : (typeof c.services === 'string' ? JSON.parse(c.services || '[]') : []),
     });
@@ -1015,20 +1093,23 @@ function TabFinanceiro({ clientId, clientServices }) {
   async function handleSaveContract(e) {
     e.preventDefault();
     const rawVal = parseFloat((form.monthly_value || '0').replace(/\./g, '').replace(',', '.')) || 0;
-    if (!rawVal || !form.start_date) return alert('Valor mensal e data de início são obrigatórios.');
+    if (!rawVal || !form.first_due_date) { notify('Valor mensal e data da primeira parcela são obrigatórios.', 'error'); return; }
+    const firstDue = new Date(form.first_due_date + 'T12:00:00');
+    const dueDay   = firstDue.getDate();
     setSaving(true);
     try {
       const payload = {
         monthly_value: rawVal,
         num_installments: parseInt(form.num_installments) || 12,
-        due_day: parseInt(form.due_day) || 10,
-        start_date: form.start_date,
+        due_day: dueDay,
+        start_date: form.first_due_date,
         notes: form.notes || null,
         services: form.services,
       };
 
       if (editingId) {
         payload.contractId = editingId;
+        console.log('[INFO][Frontend:ClientDetail] Atualizando contrato', { clientId, contractId: editingId });
         const res = await fetch(`/api/clients/${clientId}/contracts`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -1036,7 +1117,10 @@ function TabFinanceiro({ clientId, clientServices }) {
         const j = await res.json();
         if (!j.success) throw new Error(j.error);
         setContracts(p => p.map(c => c.id === editingId ? j.contract : c));
+        console.log('[SUCESSO][Frontend:ClientDetail] Contrato atualizado', { contractId: editingId });
+        notify('Contrato atualizado com sucesso', 'success');
       } else {
+        console.log('[INFO][Frontend:ClientDetail] Criando novo contrato', { clientId, monthly_value: rawVal });
         const res = await fetch(`/api/clients/${clientId}/contracts`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -1044,16 +1128,22 @@ function TabFinanceiro({ clientId, clientServices }) {
         const j = await res.json();
         if (!j.success) throw new Error(j.error);
         setContracts(p => [j.contract, ...p]);
+        console.log('[SUCESSO][Frontend:ClientDetail] Contrato criado', { contractId: j.contract?.id });
+        notify('Contrato criado com sucesso', 'success');
       }
       setShowForm(false);
       setEditingId(null);
-    } catch (err) { alert(err.message); }
+    } catch (err) {
+      console.error('[ERRO][Frontend:ClientDetail] Falha ao salvar contrato', { error: err.message });
+      notify('Erro ao salvar contrato: ' + err.message, 'error');
+    }
     finally { setSaving(false); }
   }
 
   async function handleDeleteContract(contractId) {
     if (!confirm('Tem certeza que deseja excluir este contrato e todas as suas parcelas?')) return;
     try {
+      console.log('[INFO][Frontend:ClientDetail] Excluindo contrato', { clientId, contractId });
       const res = await fetch(`/api/clients/${clientId}/contracts`, {
         method: 'DELETE', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contractId }),
@@ -1061,12 +1151,18 @@ function TabFinanceiro({ clientId, clientServices }) {
       const j = await res.json();
       if (!j.success) throw new Error(j.error);
       setContracts(p => p.filter(c => c.id !== contractId));
-    } catch (err) { alert(err.message); }
+      console.log('[SUCESSO][Frontend:ClientDetail] Contrato excluído', { contractId });
+      notify('Contrato excluído com sucesso', 'success');
+    } catch (err) {
+      console.error('[ERRO][Frontend:ClientDetail] Falha ao excluir contrato', { error: err.message });
+      notify('Erro ao excluir contrato: ' + err.message, 'error');
+    }
   }
 
   async function toggleInstallment(contractId, inst) {
     const newStatus = inst.status === 'paid' ? 'pending' : 'paid';
     try {
+      console.log('[INFO][Frontend:ClientDetail] Atualizando status da parcela', { contractId, installmentId: inst.id, newStatus });
       const res = await fetch(`/api/clients/${clientId}/installments`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ installmentId: inst.id, status: newStatus }),
@@ -1077,7 +1173,12 @@ function TabFinanceiro({ clientId, clientServices }) {
         if (c.id !== contractId) return c;
         return { ...c, installments: c.installments.map(i => i.id === inst.id ? j.installment : i) };
       }));
-    } catch (err) { alert(err.message); }
+      console.log('[SUCESSO][Frontend:ClientDetail] Parcela atualizada', { installmentId: inst.id, status: newStatus });
+      notify(newStatus === 'paid' ? 'Parcela marcada como paga' : 'Pagamento da parcela desfeito', 'success');
+    } catch (err) {
+      console.error('[ERRO][Frontend:ClientDetail] Falha ao atualizar parcela', { error: err.message });
+      notify('Erro ao atualizar parcela: ' + err.message, 'error');
+    }
   }
 
   if (loading) return (
@@ -1176,15 +1277,13 @@ function TabFinanceiro({ clientId, clientServices }) {
                 <input type="number" min="1" max="120" value={form.num_installments}
                   onChange={e => setForm(f => ({ ...f, num_installments: e.target.value }))} style={INP} />
               </div>
-              <div>
-                <Label>Dia de Vencimento</Label>
-                <input type="number" min="1" max="31" value={form.due_day}
-                  onChange={e => setForm(f => ({ ...f, due_day: e.target.value }))} style={INP} />
-              </div>
-              <div>
-                <Label>Data de Início</Label>
-                <input type="date" value={form.start_date}
-                  onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} style={INP} />
+              <div style={{ gridColumn: '1/-1' }}>
+                <Label>Data da Primeira Parcela</Label>
+                <input type="date" value={form.first_due_date}
+                  onChange={e => setForm(f => ({ ...f, first_due_date: e.target.value }))} style={INP} />
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginTop: 3 }}>
+                  As demais parcelas seguem o mesmo dia do mês
+                </div>
               </div>
             </div>
 
@@ -1226,7 +1325,7 @@ function TabFinanceiro({ clientId, clientServices }) {
                 background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)',
               }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: '#22c55e' }}>
-                  {numP}x de {fmtBRL(rawMonthly)} = {fmtBRL(totalPreview)} · vence dia {form.due_day}
+                  {numP}x de {fmtBRL(rawMonthly)} = {fmtBRL(totalPreview)}{form.first_due_date ? ` · 1ª parcela: ${form.first_due_date.split('-').reverse().join('/')}` : ''}
                 </span>
               </div>
             )}
@@ -1441,6 +1540,7 @@ function TabFinanceiro({ clientId, clientServices }) {
    PÁGINA PRINCIPAL
 ═══════════════════════════════════════════════════════════ */
 export default function ClientInfoPage() {
+  const { notify } = useNotification();
   const router       = useRouter();
   const { id }       = router.query;
   const [activeTab,  setActiveTab ] = useState('info');
@@ -1453,6 +1553,7 @@ export default function ClientInfoPage() {
     if (!id) return;
     setLoading(true); setError(null);
     try {
+      console.log('[INFO][Frontend:ClientDetail] Carregando dados do cliente e estágios', { clientId: id });
       const [cRes, sRes] = await Promise.all([
         fetch(`/api/clients/${id}`),
         fetch(`/api/clients/${id}/stages`),
@@ -1462,7 +1563,12 @@ export default function ClientInfoPage() {
       if (!cJson.success) throw new Error(cJson.error || 'Cliente não encontrado');
       setClient(cJson.client);
       setStages(sJson.success ? sJson.stages : []);
-    } catch (e) { setError(e.message); }
+      console.log('[SUCESSO][Frontend:ClientDetail] Dados do cliente carregados', { clientId: id, stagesCount: sJson.stages?.length || 0 });
+    } catch (err) {
+      console.error('[ERRO][Frontend:ClientDetail] Falha ao carregar dados do cliente', { error: err.message });
+      notify('Erro ao carregar cliente: ' + err.message, 'error');
+      setError(err.message);
+    }
     finally { setLoading(false); }
   }, [id]);
 

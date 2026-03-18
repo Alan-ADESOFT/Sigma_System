@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import DashboardLayout from '../../components/DashboardLayout';
+import { useNotification } from '../../context/NotificationContext';
 
 /* ─────────────────────────────────────────────────────────────────────────────
    CONSTANTES
@@ -257,6 +258,8 @@ function SkeletonLine({ width = '100%', height = 14 }) {
    COMPONENTE PRINCIPAL
 ───────────────────────────────────────────────────────────────────────────── */
 export default function AgentesPage() {
+  const { notify } = useNotification();
+
   /* ── State: agentes ── */
   const [agents, setAgents]         = useState([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
@@ -289,7 +292,6 @@ export default function AgentesPage() {
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   /* ── State: UI ── */
-  const [toasts, setToasts]         = useState([]);
   const [showPromptArea, setShowPromptArea] = useState(false);
   const loadingMsgRef               = useRef(null);
   const resultRef                   = useRef(null);
@@ -298,15 +300,20 @@ export default function AgentesPage() {
 
   // Carrega lista de agentes ao montar
   useEffect(() => {
+    console.log('[INFO][Frontend:Agentes] Carregando lista de agentes');
     fetch('/api/agentes/agents')
       .then(r => r.json())
       .then(d => {
         if (d.success) {
+          console.log('[SUCESSO][Frontend:Agentes] Agentes carregados', { count: d.data.length });
           setAgents(d.data);
           if (d.data.length) selectAgent(d.data[0]);
         }
       })
-      .catch(() => addToast('Erro ao carregar agentes', 'error'))
+      .catch((err) => {
+        console.error('[ERRO][Frontend:Agentes] Falha ao carregar agentes', { error: err.message });
+        addToast('Erro ao carregar agentes', 'error');
+      })
       .finally(() => setLoadingAgents(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -332,10 +339,8 @@ export default function AgentesPage() {
   /* ── Helpers ── */
 
   const addToast = useCallback((message, type = 'info') => {
-    const id = Date.now();
-    setToasts(t => [...t, { id, message, type }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3500);
-  }, []);
+    notify(message, type);
+  }, [notify]);
 
   function selectAgent(agent) {
     setSelectedAgent(agent);
@@ -355,14 +360,18 @@ export default function AgentesPage() {
   async function loadHistory() {
     if (!selectedAgent) return;
     setLoadingHistory(true);
+    console.log('[INFO][Frontend:History] Carregando histórico', { type: historyType, agentName: selectedAgent.name, page: historyPage });
     try {
       const r = await fetch(`/api/agentes/history?type=${historyType}&agentName=${selectedAgent.name}&page=${historyPage}&limit=10`);
       const d = await r.json();
       if (d.success) {
+        console.log('[SUCESSO][Frontend:History] Histórico carregado', { count: d.data.length, total: d.pagination.total });
         setHistoryData(d.data);
         setHistoryTotal(d.pagination.total);
       }
-    } catch { /* ignora */ }
+    } catch (err) {
+      console.error('[ERRO][Frontend:History] Falha ao carregar histórico', { error: err.message });
+    }
     finally { setLoadingHistory(false); }
   }
 
@@ -392,6 +401,9 @@ export default function AgentesPage() {
         complements: { links, images },
       };
 
+      console.log('[INFO][Frontend:Generate] Enviando requisição', { agentName: body.agentName, modelLevel });
+      addToast(`Gerando conteúdo com ${selectedAgent.displayName}...`, 'info');
+
       const r = await fetch('/api/agentes/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -401,10 +413,12 @@ export default function AgentesPage() {
 
       if (!d.success) throw new Error(d.error || 'Erro desconhecido');
 
+      console.log('[SUCESSO][Frontend:Generate] Resposta recebida', { dataLength: d.data.text.length, citationsCount: (d.data.citations || []).length });
       setResult(d.data.text);
       setCitations(d.data.citations || []);
       addToast('Conteúdo gerado com sucesso!', 'success');
     } catch (err) {
+      console.error('[ERRO][Frontend:Generate] Falha na requisição', { error: err.message });
       addToast(err.message || 'Erro ao gerar conteúdo', 'error');
     } finally {
       setLoading(false);
@@ -414,6 +428,7 @@ export default function AgentesPage() {
   async function handleSaveDraft(status) {
     if (!result) return;
     try {
+      console.log('[INFO][Frontend:Draft] Salvando rascunho', { status, savedDraftId, agentName: selectedAgent?.name });
       const body = {
         agentName: selectedAgent?.name,
         title: `${selectedAgent?.displayName} — ${new Date().toLocaleDateString('pt-BR')}`,
@@ -447,11 +462,13 @@ export default function AgentesPage() {
       }
 
       setDraftStatus(status);
+      console.log('[SUCESSO][Frontend:Draft] Rascunho salvo', { status, savedDraftId });
       addToast(
         status === 'concluido' ? 'Marcado como concluído!' : 'Rascunho salvo!',
         'success'
       );
-    } catch {
+    } catch (err) {
+      console.error('[ERRO][Frontend:Draft] Falha ao salvar rascunho', { error: err.message });
       addToast('Erro ao salvar rascunho', 'error');
     }
   }
@@ -505,7 +522,6 @@ export default function AgentesPage() {
 
   return (
     <DashboardLayout activeTab="agentes">
-      <Toast toasts={toasts} />
 
       {/* ── Cabeçalho da página ── */}
       <div className="page-header animate-fade-in-up" style={{ marginBottom: 20 }}>

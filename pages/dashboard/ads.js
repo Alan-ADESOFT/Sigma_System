@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '../../components/DashboardLayout';
+import { useNotification } from '../../context/NotificationContext';
 
 const DATE_PRESETS = [
   { value: 'today', label: 'Hoje' },
@@ -13,6 +14,7 @@ const DATE_PRESETS = [
 ];
 
 export default function AdsPage() {
+  const { notify } = useNotification();
   const [accounts, setAccounts] = useState([]);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [datePreset, setDatePreset] = useState('last_30d');
@@ -27,15 +29,18 @@ export default function AdsPage() {
 
   async function loadAccounts() {
     try {
+      console.log('[INFO][Frontend:Ads] Carregando contas de Ads...');
       const res = await fetch('/api/accounts');
       const data = await res.json();
       if (data.success) {
         const adsAccounts = (data.accounts || []).filter((a) => a.adsToken && a.adsAccountId);
         setAccounts(adsAccounts);
         if (adsAccounts.length > 0) setSelectedAccount(adsAccounts[0]);
+        console.log('[SUCESSO][Frontend:Ads] Contas de Ads carregadas', { total: adsAccounts.length });
       }
     } catch (err) {
-      console.error('Erro ao carregar contas:', err);
+      console.error('[ERRO][Frontend:Ads] Erro ao carregar contas', { error: err.message });
+      notify('Erro ao carregar contas de Ads', 'error');
     }
   }
 
@@ -45,6 +50,7 @@ export default function AdsPage() {
     setError(null);
 
     try {
+      console.log('[INFO][Frontend:Ads] Carregando campanhas', { accountId: selectedAccount.adsAccountId, datePreset });
       const res = await fetch('/api/ads-campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -57,11 +63,15 @@ export default function AdsPage() {
       const data = await res.json();
       if (data.success) {
         setCampaigns(data.campaigns || []);
+        console.log('[SUCESSO][Frontend:Ads] Campanhas carregadas', { total: (data.campaigns || []).length });
       } else {
         setError(data.error);
+        console.error('[ERRO][Frontend:Ads] Erro ao carregar campanhas', { error: data.error });
+        notify('Erro ao carregar campanhas', 'error');
       }
 
       // Carregar KPIs
+      console.log('[INFO][Frontend:Ads] Carregando insights/KPIs', { accountId: selectedAccount.adsAccountId, datePreset });
       const insightsRes = await fetch('/api/ads-insights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -74,9 +84,12 @@ export default function AdsPage() {
       const insightsData = await insightsRes.json();
       if (insightsData.success) {
         setKpi(insightsData.kpiSummary);
+        console.log('[SUCESSO][Frontend:Ads] Insights/KPIs carregados');
       }
     } catch (err) {
       setError(err.message);
+      console.error('[ERRO][Frontend:Ads] Erro ao carregar campanhas/insights', { error: err.message });
+      notify('Erro ao carregar campanhas', 'error');
     } finally {
       setLoading(false);
     }
@@ -89,6 +102,7 @@ export default function AdsPage() {
   async function handleCampaignAction(campaignId, action, status) {
     if (!selectedAccount) return;
     try {
+      console.log('[INFO][Frontend:Ads] Executando acao na campanha', { campaignId, action, status });
       const res = await fetch('/api/ads-actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -102,9 +116,12 @@ export default function AdsPage() {
       const data = await res.json();
       if (data.success) {
         loadCampaigns();
+        console.log('[SUCESSO][Frontend:Ads] Acao executada na campanha', { campaignId, action, status });
+        notify(`Campanha ${status === 'ACTIVE' ? 'ativada' : 'pausada'} com sucesso`, 'success');
       }
     } catch (err) {
-      console.error('Erro na acao:', err);
+      console.error('[ERRO][Frontend:Ads] Erro na acao da campanha', { error: err.message });
+      notify('Erro ao executar acao na campanha', 'error');
     }
   }
 

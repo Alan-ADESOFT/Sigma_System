@@ -11,6 +11,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import DashboardLayout from '../../../components/DashboardLayout';
+import { useNotification } from '../../../context/NotificationContext';
 
 /* ─────────────────────────────────────────────────────────
    Constantes
@@ -167,7 +168,7 @@ const DEFAULT_SERVICES = [
   'Arte digital',
 ];
 
-function AddClientModal({ onClose }) {
+function AddClientModal({ onClose, notify }) {
   const router  = useRouter();
   const [tab,   setTab  ] = useState(0);
   const [done,  setDone ] = useState([false, false]); // tabs 0,1 completed
@@ -239,6 +240,7 @@ function AddClientModal({ onClose }) {
     setSaving(true); setError(null);
     try {
       const selectedServices = services.filter(s => s.selected).map(s => ({ id: s.id, name: s.name }));
+      console.log('[INFO][Frontend:Clients] Criando novo cliente', { company_name: info.company_name, services: selectedServices.length });
       const cRes  = await fetch('/api/clients', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -250,10 +252,12 @@ function AddClientModal({ onClose }) {
       const cJson = await cRes.json();
       if (!cJson.success) throw new Error(cJson.error);
       const clientId = cJson.client.id;
+      console.log('[SUCESSO][Frontend:Clients] Cliente criado com sucesso', { clientId, company_name: info.company_name });
 
       const val = parseTicket(fin.contract_value);
       if (val > 0 && fin.start_date) {
-        await fetch(`/api/clients/${clientId}/contracts`, {
+        console.log('[INFO][Frontend:Clients] Criando contrato para cliente', { clientId, contract_value: val, frequency: fin.frequency });
+        const contractRes = await fetch(`/api/clients/${clientId}/contracts`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contract_value: val,
@@ -263,11 +267,21 @@ function AddClientModal({ onClose }) {
             start_date:     fin.start_date,
           }),
         });
+        const contractJson = await contractRes.json();
+        if (contractJson.success) {
+          console.log('[SUCESSO][Frontend:Clients] Contrato criado com sucesso', { clientId, contract_value: val });
+        }
       }
 
+      notify('Cliente cadastrado com sucesso!', 'success');
       onClose();
       router.push(`/dashboard/clients/${clientId}`);
-    } catch (err) { setError(err.message); setSaving(false); }
+    } catch (err) {
+      console.error('[ERRO][Frontend:Clients] Erro ao criar cliente', { error: err.message });
+      notify('Erro ao cadastrar cliente: ' + err.message, 'error');
+      setError(err.message);
+      setSaving(false);
+    }
   }
 
   const TABS_LBL = ['Informações', 'Serviços', 'Valores'];
@@ -586,7 +600,7 @@ function AddClientModal({ onClose }) {
 /* ─────────────────────────────────────────────────────────
    Modal de edição rápida
 ───────────────────────────────────────────────────────── */
-function EditModal({ client, onClose, onSave }) {
+function EditModal({ client, onClose, onSave, notify }) {
   const [form, setForm] = useState({
     company_name:    client.company_name    || '',
     niche:           client.niche           || '',
@@ -624,14 +638,22 @@ function EditModal({ client, onClose, onSave }) {
           ? { ...existingExtra } // keep old reason even when reactivated
           : existingExtra;
       const { inactive_reason, ...formWithoutReason } = form;
+      console.log('[INFO][Frontend:Clients] Atualizando cliente', { clientId: client.id, company_name: form.company_name });
       const res  = await fetch(`/api/clients/${client.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formWithoutReason, extra_data }),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
+      console.log('[SUCESSO][Frontend:Clients] Cliente atualizado com sucesso', { clientId: client.id, company_name: form.company_name });
+      notify('Cliente atualizado com sucesso!', 'success');
       onSave(json.client);
-    } catch (err) { setError(err.message); setSaving(false); }
+    } catch (err) {
+      console.error('[ERRO][Frontend:Clients] Erro ao atualizar cliente', { error: err.message });
+      notify('Erro ao atualizar cliente: ' + err.message, 'error');
+      setError(err.message);
+      setSaving(false);
+    }
   }
 
   return (
@@ -947,6 +969,7 @@ function Pagination({ current, total, onChange }) {
    Página
 ───────────────────────────────────────────────────────── */
 export default function ClientsPage() {
+  const { notify } = useNotification();
   const [clients,     setClients    ] = useState([]);
   const [loading,     setLoading    ] = useState(true);
   const [error,       setError      ] = useState(null);
@@ -961,11 +984,17 @@ export default function ClientsPage() {
   async function load() {
     setLoading(true); setError(null);
     try {
+      console.log('[INFO][Frontend:Clients] Carregando lista de clientes');
       const res  = await fetch('/api/clients');
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
+      console.log('[SUCESSO][Frontend:Clients] Lista de clientes carregada', { total: json.clients.length });
       setClients(json.clients);
-    } catch (err) { setError(err.message); }
+    } catch (err) {
+      console.error('[ERRO][Frontend:Clients] Erro ao carregar clientes', { error: err.message });
+      notify('Erro ao carregar clientes: ' + err.message, 'error');
+      setError(err.message);
+    }
     finally { setLoading(false); }
   }
 
@@ -1011,10 +1040,18 @@ export default function ClientsPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await fetch(`/api/clients/${deleteTarget.id}`, { method: 'DELETE' });
+      console.log('[INFO][Frontend:Clients] Excluindo cliente', { clientId: deleteTarget.id, company_name: deleteTarget.company_name });
+      const res = await fetch(`/api/clients/${deleteTarget.id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success === false) throw new Error(json.error || 'Erro ao excluir');
+      console.log('[SUCESSO][Frontend:Clients] Cliente excluído com sucesso', { clientId: deleteTarget.id, company_name: deleteTarget.company_name });
+      notify('Cliente excluído com sucesso!', 'success');
       setClients(prev => prev.filter(c => c.id !== deleteTarget.id));
       setDeleteTarget(null);
-    } catch (err) { alert('Erro ao excluir: ' + err.message); }
+    } catch (err) {
+      console.error('[ERRO][Frontend:Clients] Erro ao excluir cliente', { error: err.message });
+      notify('Erro ao excluir cliente: ' + err.message, 'error');
+    }
     finally { setDeleting(false); }
   }
 
@@ -1182,10 +1219,10 @@ export default function ClientsPage() {
       )}
 
       {/* Modal novo cliente */}
-      {showAdd && <AddClientModal onClose={() => setShowAdd(false)} onCreate={c => setClients(p => [c, ...p])} />}
+      {showAdd && <AddClientModal onClose={() => setShowAdd(false)} onCreate={c => setClients(p => [c, ...p])} notify={notify} />}
 
       {/* Modal edição */}
-      {editTarget && <EditModal client={editTarget} onClose={() => setEditTarget(null)} onSave={handleSaved} />}
+      {editTarget && <EditModal client={editTarget} onClose={() => setEditTarget(null)} onSave={handleSaved} notify={notify} />}
 
       {/* Modal exclusão */}
       {deleteTarget && <DeleteConfirm client={deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={confirmDelete} deleting={deleting} />}

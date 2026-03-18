@@ -2,6 +2,8 @@ const { fetchInstagramInsights, verifyMetaToken, refreshMetaToken } = require('.
 const { findAccountByToken, updateAccountToken } = require('../../models/account.model');
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/meta-insights] Requisição recebida', { method: req.method, query: req.query });
+
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Use POST.' });
   }
@@ -43,6 +45,7 @@ export default async function handler(req, res) {
 
     const posts = await fetchInstagramInsights(currentToken, limit);
 
+    console.log('[SUCESSO][API:/api/meta-insights] Resposta enviada', { postCount: posts.length, verifyOnly });
     return res.json({
       success: true,
       data: posts,
@@ -51,7 +54,7 @@ export default async function handler(req, res) {
       fetchedAt: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('[/api/meta-insights] Erro:', error);
+    console.error('[ERRO][API:/api/meta-insights] Erro no endpoint', { error: error.message, stack: error.stack });
     return res.status(500).json({ success: false, error: error.message });
   }
 }

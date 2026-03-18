@@ -29,6 +29,8 @@ export default async function handler(req, res) {
   const offset   = (pageNum - 1) * limitNum;
 
   try {
+    console.log('[INFO][API:/api/agentes/history] Requisição recebida', { type, agentName, page: pageNum, limit: limitNum });
+
     // ── Histórico de pesquisas web ──────────────────────────────────────────
     if (type === 'search') {
       const conditions = ['tenant_id = $1'];
@@ -103,7 +105,7 @@ export default async function handler(req, res) {
       },
     });
   } catch (err) {
-    console.error('[/api/agentes/history] Erro:', err);
+    console.error('[ERRO][API:/api/agentes/history] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

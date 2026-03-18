@@ -9,6 +9,7 @@ import { getClientById, updateClient, deleteClient } from '../../../../models/cl
 import { resolveTenantId } from '../../../../infra/get-tenant-id';
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/clients/:id] Requisição recebida', { method: req.method, query: req.query });
   const tenantId = await resolveTenantId(req);
   const { id }   = req.query;
 
@@ -18,24 +19,27 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const client = await getClientById(id, tenantId);
       if (!client) return res.status(404).json({ success: false, error: 'Cliente nao encontrado' });
+      console.log('[SUCESSO][API:/api/clients/:id] Resposta enviada', { clientId: id });
       return res.json({ success: true, client });
     }
 
     if (req.method === 'PUT') {
       const client = await updateClient(id, tenantId, req.body);
       if (!client) return res.status(404).json({ success: false, error: 'Cliente nao encontrado' });
+      console.log('[SUCESSO][API:/api/clients/:id] Cliente atualizado', { clientId: id });
       return res.json({ success: true, client });
     }
 
     if (req.method === 'DELETE') {
       const deleted = await deleteClient(id, tenantId);
       if (!deleted) return res.status(404).json({ success: false, error: 'Cliente nao encontrado' });
+      console.log('[SUCESSO][API:/api/clients/:id] Cliente removido', { clientId: id });
       return res.json({ success: true, id: deleted.id });
     }
 
     return res.status(405).json({ error: 'Metodo nao permitido' });
   } catch (err) {
-    console.error(`[/api/clients/${id}] Erro:`, err);
+    console.error('[ERRO][API:/api/clients/:id] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import DashboardLayout from '../../components/DashboardLayout';
+import { useNotification } from '../../context/NotificationContext';
 
 export default function DashboardHome() {
+  const { notify } = useNotification();
   const [accounts, setAccounts] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -12,13 +14,19 @@ export default function DashboardHome() {
 
   async function loadDashboard() {
     try {
+      console.log('[INFO][Frontend:Dashboard] Carregando contas do dashboard via /api/accounts');
       const res = await fetch('/api/accounts');
       const data = await res.json();
       if (data.success) {
+        console.log('[SUCESSO][Frontend:Dashboard] Contas carregadas com sucesso', { total: (data.accounts || []).length });
         setAccounts(data.accounts || []);
+      } else {
+        console.error('[ERRO][Frontend:Dashboard] Resposta sem sucesso ao carregar contas', { data });
+        notify('Erro ao carregar contas do dashboard.', 'error');
       }
     } catch (err) {
-      console.error('Erro ao carregar dashboard:', err);
+      console.error('[ERRO][Frontend:Dashboard] Erro ao carregar dashboard', { error: err.message });
+      notify('Erro ao carregar dados do dashboard.', 'error');
     } finally {
       setLoading(false);
     }

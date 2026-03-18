@@ -11,6 +11,7 @@ import { getClientById } from '../../../../models/client.model';
 import { resolveTenantId } from '../../../../infra/get-tenant-id';
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/clients/:id/observations] Requisição recebida', { method: req.method, query: req.query });
   const tenantId = await resolveTenantId(req);
   const { id: clientId, observationId } = req.query;
 
@@ -24,6 +25,7 @@ export default async function handler(req, res) {
         `SELECT * FROM client_observations WHERE client_id = $1 ORDER BY created_at DESC`,
         [clientId]
       );
+      console.log('[SUCESSO][API:/api/clients/:id/observations] Resposta enviada', { clientId, count: rows.length });
       return res.json({ success: true, observations: rows });
     }
 
@@ -36,6 +38,7 @@ export default async function handler(req, res) {
         `INSERT INTO client_observations (client_id, text) VALUES ($1, $2) RETURNING *`,
         [clientId, text.trim()]
       );
+      console.log('[SUCESSO][API:/api/clients/:id/observations] Observação criada', { clientId, observationId: row.id });
       return res.json({ success: true, observation: row });
     }
 
@@ -52,6 +55,7 @@ export default async function handler(req, res) {
         [text.trim(), obsId, clientId]
       );
       if (!row) return res.status(404).json({ success: false, error: 'Observação não encontrada' });
+      console.log('[SUCESSO][API:/api/clients/:id/observations] Observação atualizada', { clientId, observationId: obsId });
       return res.json({ success: true, observation: row });
     }
 
@@ -64,12 +68,13 @@ export default async function handler(req, res) {
         [observationId, clientId]
       );
       if (!row) return res.status(404).json({ success: false, error: 'Observação não encontrada' });
+      console.log('[SUCESSO][API:/api/clients/:id/observations] Observação removida', { clientId, observationId });
       return res.json({ success: true, id: observationId });
     }
 
     return res.status(405).end();
   } catch (err) {
-    console.error(`[/api/clients/${clientId}/observations]`, err);
+    console.error('[ERRO][API:/api/clients/:id/observations] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

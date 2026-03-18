@@ -1,6 +1,8 @@
 import { getDailyInsights, getInsights, computeKpiSummary, getCampaigns } from '../../models/facebook-ads.service';
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/ads-insights] Requisição recebida', { method: req.method, query: req.query });
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Use POST' });
   }
@@ -20,9 +22,10 @@ export default async function handler(req, res) {
     ]);
 
     const kpiSummary = computeKpiSummary(insights, campaigns);
+    console.log('[SUCESSO][API:/api/ads-insights] Resposta enviada', { dailyCount: dailyData.length, insightsCount: insights.length });
     return res.json({ success: true, daily: dailyData, insights, kpiSummary });
   } catch (e) {
-    console.error('[ads-insights] Erro:', e);
+    console.error('[ERRO][API:/api/ads-insights] Erro no endpoint', { error: e.message, stack: e.stack });
     return res.status(500).json({ success: false, error: e.message });
   }
 }

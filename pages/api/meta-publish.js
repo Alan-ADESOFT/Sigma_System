@@ -1,6 +1,8 @@
 import { getInstagramUserId, publishImage } from '../../models/instagram-graph.service';
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/meta-publish] Requisição recebida', { method: req.method, query: req.query });
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Use POST' });
   }
@@ -22,9 +24,10 @@ export default async function handler(req, res) {
       return res.status(500).json({ success: false, error: result.error });
     }
 
+    console.log('[SUCESSO][API:/api/meta-publish] Publicação realizada', { userId });
     return res.json(result);
   } catch (error) {
-    console.error('[/api/meta-publish] Erro:', error);
+    console.error('[ERRO][API:/api/meta-publish] Erro no endpoint', { error: error.message, stack: error.stack });
     return res.status(500).json({ success: false, error: error.message });
   }
 }

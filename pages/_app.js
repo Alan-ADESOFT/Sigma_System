@@ -1,4 +1,4 @@
-import '../style/globals.css';
+import '../assets/style/globals.css';
 import { NotificationProvider } from '../context/NotificationContext';
 
 /* Wrapper global da aplicação — envolve todas as páginas */

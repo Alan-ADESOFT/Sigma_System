@@ -20,7 +20,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState, useEffect, useRef } from 'react';
-import styles from '../style/dashboard.module.css';
+import styles from '../assets/style/dashboard.module.css';
 import { useAuth } from '../hooks/useAuth';
 
 /* ─────────────────────────────────────────────────────────────────────────────

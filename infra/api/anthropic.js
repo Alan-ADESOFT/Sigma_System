@@ -29,6 +29,8 @@ function getHeaders() {
  * @returns {Promise<string>} Texto gerado
  */
 async function generateCompletion(model, systemPrompt, userMessage, maxTokens = 2000) {
+  console.log('[INFO][Anthropic] Iniciando completion', { model, maxTokens, promptLength: systemPrompt.length });
+
   const response = await fetch(`${ANTHROPIC_BASE}/messages`, {
     method: 'POST',
     headers: getHeaders(),
@@ -44,11 +46,15 @@ async function generateCompletion(model, systemPrompt, userMessage, maxTokens = 
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
+    console.error('[ERRO][Anthropic] Falha na completion', { model, status: response.status, message: err?.error?.message });
     throw new Error(`Anthropic Error ${response.status}: ${err?.error?.message || response.statusText}`);
   }
 
   const data = await response.json();
-  return data.content?.[0]?.text || '';
+  const result = data.content?.[0]?.text || '';
+  console.log('[SUCESSO][Anthropic] Completion recebido', { model, responseLength: result.length, usage: data.usage });
+
+  return result;
 }
 
 module.exports = { generateCompletion };

@@ -8,6 +8,8 @@ export const config = {
 };
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/upload] Requisição recebida', { method: req.method, query: req.query });
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Metodo nao permitido' });
   }
@@ -66,9 +68,10 @@ export default async function handler(req, res) {
     // URL absoluta necessaria para a Meta API baixar a midia
     const baseUrl = (process.env.TUNNEL_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
     const publicUrl = `${baseUrl}/uploads/${newFilename}`;
+    console.log('[SUCESSO][API:/api/upload] Upload realizado', { filename: newFilename, publicUrl });
     return res.json({ url: publicUrl, localPath: `/uploads/${newFilename}`, success: true });
   } catch (error) {
-    console.error('Erro no upload:', error);
+    console.error('[ERRO][API:/api/upload] Erro no endpoint', { error: error.message, stack: error.stack });
     return res.status(500).json({ error: 'Erro interno ao salvar arquivo.' });
   }
 }

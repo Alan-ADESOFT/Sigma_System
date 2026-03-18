@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import DashboardLayout from '../../components/DashboardLayout';
+import { useNotification } from '../../context/NotificationContext';
 
 const CONTENT_TYPES = [
   { value: 'post', label: 'Post (Imagem)' },
@@ -18,6 +19,7 @@ const CONTENT_STATUSES = [
 ];
 
 export default function PublishPage() {
+  const { notify } = useNotification();
   const [contents, setContents] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +56,7 @@ export default function PublishPage() {
   }, []);
 
   async function loadData() {
+    console.log('[INFO][Frontend:Publish] Carregando dados (conteúdos + contas)');
     try {
       const [contentsRes, accountsRes] = await Promise.all([
         fetch('/api/contents'),
@@ -72,8 +75,10 @@ export default function PublishPage() {
           setQuickPublish((prev) => ({ ...prev, accountId: firstId }));
         }
       }
+      console.log('[SUCESSO][Frontend:Publish] Dados carregados', { contents: (contentsData.contents || []).length, accounts: (accountsData.accounts || []).length });
     } catch (err) {
-      console.error('Erro ao carregar dados:', err);
+      console.error('[ERRO][Frontend:Publish] Erro ao carregar dados', { error: err.message });
+      notify('Erro ao carregar dados', 'error');
     } finally {
       setLoading(false);
     }
@@ -85,12 +90,15 @@ export default function PublishPage() {
     if (!file) return;
 
     setQuickPublish((prev) => ({ ...prev, uploading: true, imageUrl: '', localPath: '' }));
+    console.log('[INFO][Frontend:Publish] Fazendo upload de imagem para publicação rápida', { fileName: file.name, fileSize: file.size });
     try {
       const fd = new FormData();
       fd.append('file', file);
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
       const data = await res.json();
       if (data.success) {
+        console.log('[SUCESSO][Frontend:Publish] Upload concluído', { url: data.url });
+        notify('Imagem enviada com sucesso!', 'success');
         setQuickPublish((prev) => ({
           ...prev,
           imageUrl: data.url,       // URL absoluta para a Meta
@@ -98,12 +106,14 @@ export default function PublishPage() {
           uploading: false,
         }));
       } else {
+        console.error('[ERRO][Frontend:Publish] Falha no upload', { error: data.error || 'erro desconhecido' });
+        notify('Falha no upload: ' + (data.error || 'erro desconhecido'), 'error');
         setQuickPublish((prev) => ({ ...prev, uploading: false }));
-        alert('Falha no upload: ' + (data.error || 'erro desconhecido'));
       }
     } catch (err) {
+      console.error('[ERRO][Frontend:Publish] Erro no upload', { error: err.message });
+      notify('Erro no upload: ' + err.message, 'error');
       setQuickPublish((prev) => ({ ...prev, uploading: false }));
-      alert('Erro no upload: ' + err.message);
     }
   }
 
@@ -120,6 +130,7 @@ export default function PublishPage() {
     }
 
     setQuickPublish((prev) => ({ ...prev, status: 'publishing', message: '' }));
+    console.log('[INFO][Frontend:Publish] Publicando diretamente no Instagram', { accountId, imageUrl });
 
     try {
       const res = await fetch('/api/meta-publish', {
@@ -134,12 +145,16 @@ export default function PublishPage() {
       const data = await res.json();
 
       if (data.success) {
+        console.log('[SUCESSO][Frontend:Publish] Publicado no Instagram', { postId: data.id || 'ok' });
+        notify('Publicado no Instagram com sucesso!', 'success');
         setQuickPublish((prev) => ({
           ...prev,
           status: 'success',
           message: `Publicado! ID: ${data.id || 'ok'}`,
         }));
       } else {
+        console.error('[ERRO][Frontend:Publish] Falha ao publicar no Instagram', { error: data.error || 'Erro desconhecido' });
+        notify('Erro ao publicar: ' + (data.error || 'Erro desconhecido'), 'error');
         setQuickPublish((prev) => ({
           ...prev,
           status: 'error',
@@ -147,6 +162,8 @@ export default function PublishPage() {
         }));
       }
     } catch (err) {
+      console.error('[ERRO][Frontend:Publish] Erro ao publicar no Instagram', { error: err.message });
+      notify('Erro ao publicar: ' + err.message, 'error');
       setQuickPublish((prev) => ({
         ...prev,
         status: 'error',
@@ -171,6 +188,7 @@ export default function PublishPage() {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
+    console.log('[INFO][Frontend:Publish] Fazendo upload de mídia para formulário', { fileCount: files.length });
     const uploadedUrls = [];
     for (const file of files) {
       const fd = new FormData();
@@ -178,10 +196,21 @@ export default function PublishPage() {
       try {
         const res = await fetch('/api/upload', { method: 'POST', body: fd });
         const data = await res.json();
-        if (data.success) uploadedUrls.push(data.url);
+        if (data.success) {
+          console.log('[SUCESSO][Frontend:Publish] Upload de mídia concluído', { fileName: file.name, url: data.url });
+          uploadedUrls.push(data.url);
+        } else {
+          console.error('[ERRO][Frontend:Publish] Falha no upload de mídia', { fileName: file.name, error: data.error || 'erro desconhecido' });
+          notify('Falha no upload: ' + file.name, 'error');
+        }
       } catch (err) {
-        console.error('Erro no upload:', err);
+        console.error('[ERRO][Frontend:Publish] Erro no upload de mídia', { fileName: file.name, error: err.message });
+        notify('Erro no upload: ' + err.message, 'error');
       }
+    }
+
+    if (uploadedUrls.length > 0) {
+      notify(`${uploadedUrls.length} mídia(s) enviada(s) com sucesso!`, 'success');
     }
 
     setFormData((prev) => ({
@@ -194,6 +223,7 @@ export default function PublishPage() {
     if (!formData.title.trim()) return alert('Titulo obrigatorio');
     if (formData.mediaUrls.length === 0) return alert('Adicione pelo menos uma midia');
 
+    console.log('[INFO][Frontend:Publish] Salvando conteúdo', { title: formData.title, type: formData.type, status: formData.status });
     try {
       const hashtags = formData.hashtags
         .split(/[,\s]+/)
@@ -220,14 +250,18 @@ export default function PublishPage() {
       const data = await res.json();
 
       if (data.success) {
+        console.log('[SUCESSO][Frontend:Publish] Conteúdo salvo com sucesso', { title: formData.title });
+        notify('Conteúdo salvo com sucesso!', 'success');
         setShowForm(false);
         resetForm();
         loadData();
       } else {
-        alert('Erro ao salvar: ' + (data.error || 'erro desconhecido'));
+        console.error('[ERRO][Frontend:Publish] Falha ao salvar conteúdo', { error: data.error || 'erro desconhecido' });
+        notify('Erro ao salvar: ' + (data.error || 'erro desconhecido'), 'error');
       }
     } catch (err) {
-      alert('Erro: ' + err.message);
+      console.error('[ERRO][Frontend:Publish] Erro ao salvar conteúdo', { error: err.message });
+      notify('Erro ao salvar: ' + err.message, 'error');
     }
   }
 
@@ -239,13 +273,13 @@ export default function PublishPage() {
 
       const account = accounts.find((a) => a.id === content.accountId);
       if (!account?.oauthToken) {
-        alert('Conta sem token Meta. Conecte o Instagram em Configuracoes.');
+        notify('Conta sem token Meta. Conecte o Instagram em Configurações.', 'error');
         return;
       }
 
       const imageUrl = content.mediaUrls?.[0];
       if (!imageUrl) {
-        alert('Conteudo sem midia');
+        notify('Conteúdo sem mídia', 'error');
         return;
       }
 
@@ -253,6 +287,7 @@ export default function PublishPage() {
         .filter(Boolean)
         .join('\n\n');
 
+      console.log('[INFO][Frontend:Publish] Publicando conteúdo salvo no Instagram', { contentId, imageUrl });
       const res = await fetch('/api/meta-publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -261,13 +296,16 @@ export default function PublishPage() {
       const data = await res.json();
 
       if (data.success) {
-        alert('Publicado com sucesso!');
+        console.log('[SUCESSO][Frontend:Publish] Conteúdo publicado no Instagram', { contentId, postId: data.id });
+        notify('Publicado com sucesso!', 'success');
         loadData();
       } else {
-        alert('Erro: ' + data.error);
+        console.error('[ERRO][Frontend:Publish] Falha ao publicar conteúdo', { contentId, error: data.error });
+        notify('Erro ao publicar: ' + data.error, 'error');
       }
     } catch (err) {
-      alert('Erro: ' + err.message);
+      console.error('[ERRO][Frontend:Publish] Erro ao publicar conteúdo', { contentId, error: err.message });
+      notify('Erro ao publicar: ' + err.message, 'error');
     } finally {
       setPublishing(false);
     }

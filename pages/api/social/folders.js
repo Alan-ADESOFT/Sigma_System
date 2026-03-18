@@ -8,6 +8,7 @@ const { query, queryOne } = require('../../../infra/db');
 const { resolveTenantId }  = require('../../../infra/get-tenant-id');
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/social/folders] Requisição recebida', { method: req.method, query: req.query });
   const tenantId = await resolveTenantId(req);
 
   try {
@@ -30,6 +31,7 @@ export default async function handler(req, res) {
         [tenantId, accountId]
       );
 
+      console.log('[SUCESSO][API:/api/social/folders] Resposta enviada', { count: rows.length, accountId });
       return res.json({ success: true, folders: rows });
     }
 
@@ -47,12 +49,13 @@ export default async function handler(req, res) {
         [tenantId, accountId, name.trim(), description || null, color || '#ff0033']
       );
 
+      console.log('[SUCESSO][API:/api/social/folders] Pasta criada', { folderId: folder.id, name: name.trim() });
       return res.status(201).json({ success: true, folder });
     }
 
     return res.status(405).json({ error: 'Metodo nao permitido' });
   } catch (err) {
-    console.error('[/api/social/folders]', err);
+    console.error('[ERRO][API:/api/social/folders] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

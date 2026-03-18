@@ -1,6 +1,8 @@
 import { verifyMetaToken, fetchAccountInsights, fetchAudienceDemographics } from '../../models/instagram-graph.service';
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/meta-account-insights] Requisição recebida', { method: req.method, query: req.query });
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Use POST' });
   }
@@ -26,9 +28,10 @@ export default async function handler(req, res) {
     const accountInsights = await fetchAccountInsights(token, userData.id, days);
     const demographics = await fetchAudienceDemographics(token, userData.id);
 
+    console.log('[SUCESSO][API:/api/meta-account-insights] Resposta enviada', { period: days });
     return res.json({ success: true, accountInsights, demographics, period: days });
   } catch (error) {
-    console.error('[/api/meta-account-insights] Erro:', error);
+    console.error('[ERRO][API:/api/meta-account-insights] Erro no endpoint', { error: error.message, stack: error.stack });
     return res.status(500).json({ success: false, error: error.message });
   }
 }

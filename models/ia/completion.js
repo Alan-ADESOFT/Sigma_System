@@ -44,14 +44,17 @@ function resolveModel(level) {
  */
 async function runCompletion(modelLevel, systemPrompt, userMessage, maxTokens = 2000) {
   const model = resolveModel(modelLevel);
+  const provider = model.toLowerCase().includes('claude') ? 'Anthropic' : 'OpenAI';
+  console.log('[INFO][Completion] Roteando para provider', { modelLevel, model, provider });
 
   let text;
-  if (model.toLowerCase().includes('claude')) {
+  if (provider === 'Anthropic') {
     text = await anthropic.generateCompletion(model, systemPrompt, userMessage, maxTokens);
   } else {
     text = await openai.generateCompletion(model, systemPrompt, userMessage, maxTokens);
   }
 
+  console.log('[SUCESSO][Completion] Texto gerado', { model, provider, responseLength: text.length });
   return { text, modelUsed: model };
 }
 

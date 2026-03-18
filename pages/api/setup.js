@@ -10,6 +10,8 @@ const fs = require('fs');
 const path = require('path');
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/setup] Requisição recebida', { method: req.method, query: req.query });
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Use POST' });
   }
@@ -114,6 +116,7 @@ export default async function handler(req, res) {
     const tenant = await sql`SELECT id, email, name FROM tenants WHERE email = ${adminEmail}`;
     const alan   = await sql`SELECT id, email, name, username FROM tenants WHERE email = 'alan.diasm.jr@gmail.com'`;
 
+    console.log('[SUCESSO][API:/api/setup] Banco configurado', { alanId: alan[0]?.id, adminId: tenant[0]?.id });
     return res.json({
       success: true,
       message: 'Banco configurado com sucesso!',
@@ -121,7 +124,7 @@ export default async function handler(req, res) {
       admin: { id: tenant[0]?.id, email: tenant[0]?.email, name: tenant[0]?.name },
     });
   } catch (error) {
-    console.error('[/api/setup] Erro:', error);
+    console.error('[ERRO][API:/api/setup] Erro no endpoint', { error: error.message, stack: error.stack });
     return res.status(500).json({ success: false, error: error.message });
   }
 }

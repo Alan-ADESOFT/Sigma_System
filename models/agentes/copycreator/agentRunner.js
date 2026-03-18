@@ -161,6 +161,7 @@ async function runAgent({
 
   const { agentConfig } = agentModule;
   const level = modelLevel || agentConfig.modelLevel;
+  console.log('[INFO][AgentRunner] Carregando prompt', { agentName, isCustom: !!customPrompt, type: agentConfig.type, level });
 
   // 2. Carrega knowledge base do tenant
   const kb = await loadKnowledgeBase(tenantId);
@@ -171,6 +172,7 @@ async function runAgent({
   // 4. Injeta dados dinâmicos (context + knowledge base)
   systemPrompt = injectContext(systemPrompt, context);
   systemPrompt = injectKnowledgeBase(systemPrompt, kb);
+  console.log('[DEBUG][AgentRunner] Placeholders substituídos', { placeholders: Object.keys({ ...context, ...KB_PLACEHOLDER_MAP }) });
 
   // 5. Injeta complementos (links/imagens) se agente tipo text
   if (agentConfig.type === 'text') {
@@ -187,15 +189,18 @@ async function runAgent({
 
   // ── Agente de PESQUISA ────────────────────────────────────────────────────
   if (agentConfig.type === 'search' && agentConfig.hasWebSearch) {
+    console.log('[INFO][AgentRunner] Executando pesquisa web', { agentName, queryLength: userInput.length });
     const result = await deepSearch(userInput, systemPrompt);
     text      = result.text;
     citations = result.citations;
     modelUsed = process.env.AI_MODEL_SEARCH || 'gpt-4o-mini';
 
     historyId = await saveSearchHistory(tenantId, agentName, userInput, text, citations);
+    console.log('[SUCESSO][AgentRunner] Pesquisa concluída', { agentName, resultLength: text.length, citationsCount: citations.length, historyId });
 
   // ── Agente de TEXTO ───────────────────────────────────────────────────────
   } else {
+    console.log('[INFO][AgentRunner] Executando completion', { agentName, level, promptLength: systemPrompt.length });
     const result = await runCompletion(level, systemPrompt, userInput, 4000);
     text      = result.text;
     modelUsed = result.modelUsed;
@@ -204,6 +209,7 @@ async function runAgent({
       userInput,
       level,
     });
+    console.log('[SUCESSO][AgentRunner] Agente executado', { agentName, modelUsed, responseLength: text.length, historyId });
   }
 
   return {

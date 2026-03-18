@@ -11,6 +11,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '../../components/DashboardLayout';
 import StageModal from '../../components/StageModal';
+import { useNotification } from '../../context/NotificationContext';
 
 const STAGES_META = [
   { key: 'diagnosis',   index: 1, label: 'Diagnóstico do Negócio',  desc: 'Base estratégica — dados do formulário + interpretação.' },
@@ -318,6 +319,7 @@ function ClientStagesPopup({ client, onClose, onStageUpdated }) {
 
 /* ── Página ── */
 export default function DatabasePage() {
+  const { notify } = useNotification();
   const [clients,        setClients       ] = useState([]);
   const [loading,        setLoading       ] = useState(true);
   const [error,          setError         ] = useState(null);
@@ -327,9 +329,11 @@ export default function DatabasePage() {
   async function load() {
     setLoading(true); setError(null);
     try {
+      console.log('[INFO][Frontend:Database] Carregando clientes...');
       const res  = await fetch('/api/clients');
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
+      console.log('[SUCESSO][Frontend:Database] Clientes carregados', { total: json.clients.length });
       const withStages = await Promise.all(
         json.clients.map(async c => {
           try {
@@ -339,8 +343,13 @@ export default function DatabasePage() {
           } catch { return { ...c, stages: [] }; }
         })
       );
+      console.log('[SUCESSO][Frontend:Database] Etapas carregadas para todos os clientes');
       setClients(withStages);
-    } catch (err) { setError(err.message); }
+    } catch (err) {
+      setError(err.message);
+      console.error('[ERRO][Frontend:Database] Erro ao carregar clientes', { error: err.message });
+      notify('Erro ao carregar clientes', 'error');
+    }
     finally { setLoading(false); }
   }
 
@@ -349,10 +358,16 @@ export default function DatabasePage() {
   async function handleDelete(id) {
     if (!confirm('Remover cliente e etapas?')) return;
     try {
+      console.log('[INFO][Frontend:Database] Removendo cliente', { id });
       await fetch(`/api/clients/${id}`, { method: 'DELETE' });
       setClients(p => p.filter(c => c.id !== id));
       if (selectedClient?.id === id) setSelectedClient(null);
-    } catch (err) { alert(err.message); }
+      console.log('[SUCESSO][Frontend:Database] Cliente removido', { id });
+      notify('Cliente removido com sucesso', 'success');
+    } catch (err) {
+      console.error('[ERRO][Frontend:Database] Erro ao remover cliente', { error: err.message });
+      notify('Erro ao remover cliente', 'error');
+    }
   }
 
   function handleStageUpdated(clientId, stageKey, updated) {

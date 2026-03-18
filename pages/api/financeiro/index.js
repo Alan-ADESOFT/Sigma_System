@@ -8,6 +8,7 @@ import { query, queryOne } from '../../../infra/db';
 import { resolveTenantId } from '../../../infra/get-tenant-id';
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/financeiro] Requisição recebida', { method: req.method, query: req.query });
   const tenantId = await resolveTenantId(req);
 
   try {
@@ -35,10 +36,11 @@ export default async function handler(req, res) {
          JOIN marketing_clients mc ON mc.id = i.client_id
          JOIN client_contracts  cc ON cc.id = i.contract_id
          WHERE mc.tenant_id = $1
-         ORDER BY i.due_date DESC`,
+         ORDER BY i.due_date ASC`,
         [tenantId]
       );
 
+      console.log('[SUCESSO][API:/api/financeiro] Resposta enviada', { installmentCount: installments.length });
       return res.json({ success: true, installments });
     }
 
@@ -58,12 +60,13 @@ export default async function handler(req, res) {
         [status, installmentId, clientId]
       );
       if (!row) return res.status(404).json({ success: false, error: 'Parcela não encontrada' });
+      console.log('[SUCESSO][API:/api/financeiro] Parcela atualizada', { installmentId, clientId, status });
       return res.json({ success: true, installment: row });
     }
 
     return res.status(405).end();
   } catch (err) {
-    console.error('[/api/financeiro]', err);
+    console.error('[ERRO][API:/api/financeiro] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }

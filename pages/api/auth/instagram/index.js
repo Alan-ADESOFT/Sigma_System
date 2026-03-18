@@ -1,4 +1,5 @@
 export default function handler(req, res) {
+  console.log('[INFO][API:/api/auth/instagram] Requisição recebida', { method: req.method, query: req.query });
   const clientId = process.env.INSTAGRAM_APP_ID;
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/instagram/callback`;
 
@@ -17,5 +18,6 @@ export default function handler(req, res) {
     `&response_type=code` +
     `&scope=${scope}`;
 
+  console.log('[SUCESSO][API:/api/auth/instagram] Redirecionando para OAuth', { authUrl });
   res.redirect(authUrl);
 }

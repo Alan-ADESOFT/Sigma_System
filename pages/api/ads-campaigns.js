@@ -1,6 +1,8 @@
 import { getCampaigns, getAdSets, getAds, getAdAccount, getInsights } from '../../models/facebook-ads.service';
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/ads-campaigns] Requisição recebida', { method: req.method, query: req.query });
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Use POST' });
   }
@@ -34,9 +36,10 @@ export default async function handler(req, res) {
 
     if (includeAds) ads = await getAds(token, accountId);
 
+    console.log('[SUCESSO][API:/api/ads-campaigns] Resposta enviada', { campaignCount: enrichedCampaigns.length, hasAdSets: !!adSets, hasAds: !!ads });
     return res.json({ success: true, account, campaigns: enrichedCampaigns, adSets, ads });
   } catch (e) {
-    console.error('[ads-campaigns] Erro:', e);
+    console.error('[ERRO][API:/api/ads-campaigns] Erro no endpoint', { error: e.message, stack: e.stack });
     return res.status(500).json({ success: false, error: e.message });
   }
 }

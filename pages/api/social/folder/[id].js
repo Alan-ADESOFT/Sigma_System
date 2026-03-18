@@ -8,6 +8,7 @@ const { query, queryOne } = require('../../../../infra/db');
 const { resolveTenantId }  = require('../../../../infra/get-tenant-id');
 
 export default async function handler(req, res) {
+  console.log('[INFO][API:/api/social/folder/:id] Requisição recebida', { method: req.method, query: req.query });
   const tenantId = await resolveTenantId(req);
   const { id }   = req.query;
 
@@ -24,6 +25,7 @@ export default async function handler(req, res) {
         [id, tenantId]
       );
       if (!folder) return res.status(404).json({ success: false, error: 'Pasta nao encontrada' });
+      console.log('[SUCESSO][API:/api/social/folder/:id] Resposta enviada', { folderId: id });
       return res.json({ success: true, folder });
     }
 
@@ -39,6 +41,7 @@ export default async function handler(req, res) {
         [name?.trim() || null, description || null, color || null, id, tenantId]
       );
       if (!folder) return res.status(404).json({ success: false, error: 'Pasta nao encontrada' });
+      console.log('[SUCESSO][API:/api/social/folder/:id] Pasta atualizada', { folderId: id });
       return res.json({ success: true, folder });
     }
 
@@ -47,12 +50,13 @@ export default async function handler(req, res) {
         `DELETE FROM content_folders WHERE id = $1 AND tenant_id = $2`,
         [id, tenantId]
       );
+      console.log('[SUCESSO][API:/api/social/folder/:id] Pasta removida', { folderId: id });
       return res.json({ success: true });
     }
 
     return res.status(405).json({ error: 'Metodo nao permitido' });
   } catch (err) {
-    console.error('[/api/social/folder/:id]', err);
+    console.error('[ERRO][API:/api/social/folder/:id] Erro no endpoint', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }
 }
