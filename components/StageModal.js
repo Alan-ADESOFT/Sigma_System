@@ -121,6 +121,10 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
   const [historyData, setHistoryData]   = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [modelLevel, setModelLevel]     = useState('medium');
+  const [showPrompt, setShowPrompt]     = useState(false);
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [isPromptEdited, setIsPromptEdited] = useState(false);
+  const [loadingPrompt, setLoadingPrompt] = useState(false);
 
   const agents = AGENTS[meta.key] || [];
 
@@ -288,6 +292,39 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
     }
   }
 
+  /* ── Carregar prompt base do agente ── */
+  async function loadPrompt() {
+    const currentAgent = agents[agentTab];
+    if (!currentAgent) return;
+    const agentName = AGENT_NAME_MAP[currentAgent.id];
+    if (!agentName) return;
+
+    setLoadingPrompt(true);
+    try {
+      console.log('[INFO][Frontend:StageModal] Carregando prompt base', { agentName });
+      const r = await fetch(`/api/agentes/agents?name=${agentName}&prompt=true`);
+      const d = await r.json();
+      if (d.success) {
+        setCustomPrompt(d.data.prompt);
+        setIsPromptEdited(false);
+        setShowPrompt(true);
+        console.log('[SUCESSO][Frontend:StageModal] Prompt carregado', { agentName, length: d.data.prompt.length });
+      }
+    } catch (err) {
+      console.error('[ERRO][Frontend:StageModal] Falha ao carregar prompt', { error: err.message });
+      notify('Erro ao carregar prompt', 'error');
+    } finally {
+      setLoadingPrompt(false);
+    }
+  }
+
+  function handleResetPrompt() {
+    setCustomPrompt('');
+    setIsPromptEdited(false);
+    setShowPrompt(false);
+    notify('Prompt restaurado ao padrão', 'info');
+  }
+
   /* ── Executar Agente ── */
   async function handleRunAgent() {
     const currentAgent = agents[agentTab];
@@ -324,6 +361,7 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
         agentName,
         clientId,
         modelLevel,
+        customPrompt: isPromptEdited ? customPrompt : undefined,
         userInput: clientJson,
         context: { '{DADOS_CLIENTE}': clientJson },
         complements: refLink ? { links: [refLink] } : {},
@@ -752,6 +790,77 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
                         PNG · JPG · PDF · DOCX
                       </div>
                     </div>
+                  </div>
+
+                  {/* Prompt base editável */}
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <SectionLabel>Prompt Base</SectionLabel>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {showPrompt && isPromptEdited && (
+                          <button
+                            onClick={handleResetPrompt}
+                            style={{
+                              padding: '2px 8px', borderRadius: 4,
+                              background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.2)',
+                              color: '#f97316', cursor: 'pointer',
+                              fontFamily: 'var(--font-mono)', fontSize: '0.52rem', fontWeight: 600,
+                            }}
+                          >
+                            Restaurar Padrão
+                          </button>
+                        )}
+                        <button
+                          onClick={() => showPrompt ? setShowPrompt(false) : loadPrompt()}
+                          disabled={loadingPrompt}
+                          style={{
+                            padding: '2px 8px', borderRadius: 4,
+                            background: showPrompt ? 'rgba(255,0,51,0.06)' : 'rgba(255,255,255,0.02)',
+                            border: `1px solid ${showPrompt ? 'rgba(255,0,51,0.2)' : 'rgba(255,255,255,0.08)'}`,
+                            color: showPrompt ? '#ff6680' : 'var(--text-muted)',
+                            cursor: 'pointer',
+                            fontFamily: 'var(--font-mono)', fontSize: '0.52rem', fontWeight: 600,
+                          }}
+                        >
+                          {loadingPrompt ? '...' : showPrompt ? 'Fechar' : 'Editar Prompt'}
+                        </button>
+                      </div>
+                    </div>
+                    {showPrompt && (
+                      <div style={{ position: 'relative' }}>
+                        <textarea
+                          value={customPrompt}
+                          onChange={e => { setCustomPrompt(e.target.value); setIsPromptEdited(true); }}
+                          rows={10}
+                          style={{
+                            width: '100%', boxSizing: 'border-box', padding: '10px 12px',
+                            background: 'rgba(10,10,10,0.8)',
+                            border: `1px solid ${isPromptEdited ? 'rgba(249,115,22,0.25)' : 'rgba(255,255,255,0.06)'}`,
+                            borderRadius: 8, color: 'var(--text-secondary)', fontSize: '0.68rem',
+                            fontFamily: 'var(--font-mono)', lineHeight: 1.6, outline: 'none', resize: 'vertical',
+                          }}
+                        />
+                        {isPromptEdited && (
+                          <div style={{
+                            position: 'absolute', top: 6, right: 8,
+                            padding: '1px 6px', borderRadius: 3,
+                            background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.2)',
+                            fontFamily: 'var(--font-mono)', fontSize: '0.48rem', color: '#f97316',
+                          }}>
+                            EDITADO
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {!showPrompt && (
+                      <div style={{
+                        padding: '8px 12px', borderRadius: 8,
+                        background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)',
+                        fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: '#2a2a2a',
+                      }}>
+                        Clique em "Editar Prompt" para visualizar e customizar
+                      </div>
+                    )}
                   </div>
 
                   {/* Seletor de Modelo */}
