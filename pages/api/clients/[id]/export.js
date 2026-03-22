@@ -8,6 +8,7 @@
 
 import { resolveTenantId } from '../../../../infra/get-tenant-id';
 import { query, queryOne } from '../../../../infra/db';
+import { createNotification } from '../../../../models/clientForm';
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel,
   AlignmentType, BorderStyle, ShadingType, PageBreak, Footer,
@@ -312,6 +313,15 @@ export default async function handler(req, res) {
       const buffer = await Packer.toBuffer(doc);
       console.log('[SUCESSO][API:export] DOCX gerado', { clientId, size: buffer.length });
 
+      // Notificacao interna: export gerado
+      try {
+        await createNotification(
+          tenantId, 'export_generated', 'Export gerado',
+          `Documento DOCX de ${client.company_name} exportado com ${sections.length} etapa(s).`,
+          clientId, { format: 'docx', stageCount: sections.length }
+        );
+      } catch {}
+
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       res.setHeader('Content-Disposition', `attachment; filename="SIGMA-Base-Estrategica-${safeName}.docx"`);
       return res.send(buffer);
@@ -410,6 +420,15 @@ ${htmlSections}
 </body></html>`;
 
       console.log('[SUCESSO][API:export] HTML/PDF gerado', { clientId });
+
+      // Notificacao interna: export gerado
+      try {
+        await createNotification(
+          tenantId, 'export_generated', 'Export gerado',
+          `Documento PDF de ${client.company_name} exportado com ${sections.length} etapa(s).`,
+          clientId, { format: 'pdf', stageCount: sections.length }
+        );
+      } catch {}
 
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="SIGMA-Base-Estrategica-${safeName}.html"`);

@@ -15,6 +15,7 @@ import { getExecutionOrder } from '../../../../models/agentes/copycreator/pipeli
 import { resolveModel }     from '../../../../models/ia/completion';
 import { createJobEmitter } from '../../../../infra/pipelineEmitter';
 import { checkRateLimit, logRateLimitEvent } from '../../../../infra/rateLimit';
+import { createNotification } from '../../../../models/clientForm';
 
 /**
  * Converte markdown básico para HTML (mesmo padrão do StageModal frontend)
@@ -265,6 +266,16 @@ async function runPipeline(tenantId, clientId, client, jobId) {
         ]
       );
       emitter.emit('event', { type: 'pipeline_error', message: err.message, agentName, timestamp: Date.now() });
+
+      // Notificacao interna: pipeline falhou
+      try {
+        await createNotification(
+          tenantId, 'pipeline_failed', 'Pipeline falhou',
+          `O pipeline de ${client.company_name} falhou no agente ${agentName}. Verifique o log e tente novamente.`,
+          clientId, { jobId, agentName, error: err.message }
+        );
+      } catch {}
+
       return; // Para o pipeline no primeiro erro
     }
   }
@@ -275,5 +286,15 @@ async function runPipeline(tenantId, clientId, client, jobId) {
     [jobId]
   );
   emitter.emit('event', { type: 'pipeline_done', timestamp: Date.now() });
+
+  // Notificacao interna: pipeline concluido
+  try {
+    await createNotification(
+      tenantId, 'pipeline_done', 'Pipeline concluido',
+      `Todos os rascunhos de ${client.company_name} foram gerados com sucesso.`,
+      clientId, { jobId, agentCount: executionOrder.length }
+    );
+  } catch {}
+
   console.log('[SUCESSO][Pipeline] Pipeline completo', { jobId, clientId });
 }

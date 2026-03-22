@@ -6,7 +6,8 @@
  */
 
 import { resolveTenantId } from '../../../../infra/get-tenant-id';
-import { query }           from '../../../../infra/db';
+import { query, queryOne } from '../../../../infra/db';
+import { createNotification } from '../../../../models/clientForm';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -43,6 +44,18 @@ export default async function handler(req, res) {
       `UPDATE marketing_stages SET status = 'pending', data = NULL, notes = NULL, updated_at = now() WHERE client_id = $1`,
       [clientId]
     );
+
+    // Busca nome do cliente para a notificacao
+    const client = await queryOne('SELECT company_name FROM marketing_clients WHERE id = $1', [clientId]);
+
+    // Notificacao interna: base de dados apagada
+    try {
+      await createNotification(
+        tenantId, 'database_reset', 'Base de dados apagada',
+        `Todos os dados de ${client?.company_name || 'cliente'} foram apagados. As etapas foram resetadas para pendente.`,
+        clientId, { resetAt: new Date().toISOString() }
+      );
+    } catch {}
 
     console.log('[SUCESSO][ResetDatabase] Base resetada', { clientId });
     return res.json({ success: true });

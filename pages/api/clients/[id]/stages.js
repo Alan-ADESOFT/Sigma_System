@@ -1,9 +1,15 @@
 import { getStagesByClient, upsertStage, updateStageNotes } from '../../../../models/marketing.model';
 import { getClientById } from '../../../../models/client.model';
 import { resolveTenantId } from '../../../../infra/get-tenant-id';
+import { createNotification } from '../../../../models/clientForm';
 
 const VALID_STAGES = ['diagnosis', 'competitors', 'audience', 'avatar', 'positioning', 'offer'];
 const VALID_STATUS = ['pending', 'in_progress', 'done'];
+
+const STAGE_LABELS = {
+  diagnosis: 'Diagnostico', competitors: 'Concorrentes', audience: 'Publico-Alvo',
+  avatar: 'Avatar', positioning: 'Posicionamento', offer: 'Oferta',
+};
 
 export default async function handler(req, res) {
   console.log('[INFO][API:/api/clients/:id/stages] Requisição recebida', { method: req.method, query: req.query });
@@ -57,6 +63,18 @@ export default async function handler(req, res) {
         notes ?? null
       );
       console.log('[SUCESSO][API:/api/clients/:id/stages] Etapa salva', { clientId, stage_key, status: status ?? 'in_progress' });
+
+      // Notificacao quando etapa e marcada como concluida
+      if (status === 'done') {
+        try {
+          await createNotification(
+            tenantId, 'stage_done', 'Etapa concluida',
+            `A etapa "${STAGE_LABELS[stage_key] || stage_key}" de ${client.company_name} foi marcada como concluida.`,
+            clientId, { stageKey: stage_key }
+          );
+        } catch {}
+      }
+
       return res.json({ success: true, stage });
     }
 

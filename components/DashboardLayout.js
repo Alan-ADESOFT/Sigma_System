@@ -488,20 +488,30 @@ function NotificationBell() {
 
   // Ícone de tipo da notificação
   function typeIcon(type) {
-    if (type === 'form_submitted') return '✓';
-    if (type === 'form_started')   return '✏';
-    if (type === 'form_sent')      return '📋';
-    if (type === 'token_expired')  return '⏱';
-    if (type === 'pipeline_done')  return '✓';
+    if (type === 'form_submitted')  return '✓';
+    if (type === 'form_started')    return '✏';
+    if (type === 'form_sent')       return '📋';
+    if (type === 'token_expired')   return '⏱';
+    if (type === 'pipeline_done')   return '✓';
+    if (type === 'pipeline_failed') return '✕';
+    if (type === 'client_created')  return '+';
+    if (type === 'stage_done')      return '✓';
+    if (type === 'database_reset')  return '⟳';
+    if (type === 'export_generated')return '↓';
     return '●';
   }
 
   // Cor do tipo
   function typeColor(type) {
-    if (type === 'form_submitted') return 'var(--success)';
-    if (type === 'form_started')   return 'var(--warning)';
-    if (type === 'token_expired')  return 'var(--error)';
-    if (type === 'pipeline_done')  return 'var(--success)';
+    if (type === 'form_submitted')  return 'var(--success)';
+    if (type === 'form_started')    return 'var(--warning)';
+    if (type === 'token_expired')   return 'var(--error)';
+    if (type === 'pipeline_done')   return 'var(--success)';
+    if (type === 'pipeline_failed') return 'var(--error)';
+    if (type === 'client_created')  return 'var(--info)';
+    if (type === 'stage_done')      return 'var(--success)';
+    if (type === 'database_reset')  return 'var(--warning)';
+    if (type === 'export_generated')return 'var(--info)';
     return 'var(--info)';
   }
 

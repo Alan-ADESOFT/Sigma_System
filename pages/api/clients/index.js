@@ -1,6 +1,7 @@
 import { getClientsByTenant, createClient, seedStages } from '../../../models/client.model';
 import { query, queryOne } from '../../../infra/db';
 import { resolveTenantId } from '../../../infra/get-tenant-id';
+import { createNotification } from '../../../models/clientForm';
 
 function buildInstallments(contractId, clientId, monthlyValue, numInstallments, dueDay, startDate) {
   const installments = [];
@@ -66,6 +67,16 @@ export default async function handler(req, res) {
       }
 
       console.log('[SUCESSO][API:/api/clients] Cliente criado', { clientId: client.id, company_name });
+
+      // Notificacao interna: cliente criado
+      try {
+        await createNotification(
+          tenantId, 'client_created', 'Novo cliente cadastrado',
+          `${company_name} foi adicionado ao sistema. Envie o formulario de briefing para iniciar.`,
+          client.id, { createdAt: new Date().toISOString() }
+        );
+      } catch {}
+
       return res.status(201).json({ success: true, client });
     }
 
