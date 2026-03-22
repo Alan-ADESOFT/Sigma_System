@@ -26,7 +26,7 @@ function getHeaders() {
  * @param {string} systemPrompt - Prompt do sistema
  * @param {string} userMessage - Mensagem do usuário
  * @param {number} [maxTokens=2000] - Limite de tokens
- * @returns {Promise<string>} Texto gerado
+ * @returns {Promise<{text: string, usage: {input: number, output: number, total: number}}>}
  */
 async function generateCompletion(model, systemPrompt, userMessage, maxTokens = 2000) {
   console.log('[INFO][Anthropic] Iniciando completion', { model, maxTokens, promptLength: systemPrompt.length });
@@ -52,9 +52,15 @@ async function generateCompletion(model, systemPrompt, userMessage, maxTokens = 
 
   const data = await response.json();
   const result = data.content?.[0]?.text || '';
-  console.log('[SUCESSO][Anthropic] Completion recebido', { model, responseLength: result.length, usage: data.usage });
+  const rawUsage = data.usage || {};
+  const usage = {
+    input:  rawUsage.input_tokens  || 0,
+    output: rawUsage.output_tokens || 0,
+    total:  (rawUsage.input_tokens || 0) + (rawUsage.output_tokens || 0),
+  };
+  console.log('[SUCESSO][Anthropic] Completion recebido', { model, responseLength: result.length, usage });
 
-  return result;
+  return { text: result, usage };
 }
 
 module.exports = { generateCompletion };

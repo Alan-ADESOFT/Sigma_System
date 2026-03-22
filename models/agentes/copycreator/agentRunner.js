@@ -382,7 +382,11 @@ async function runAgent({
   // ── Agente de TEXTO ───────────────────────────────────────────────────────
   } else {
     console.log('[INFO][AgentRunner] Executando completion', { agentName, level, promptLength: systemPrompt.length });
-    const result = await runCompletion(level, systemPrompt, userInput, 4000);
+    const result = await runCompletion(level, systemPrompt, userInput, 4000, {
+      tenantId,
+      clientId,
+      operationType: 'pipeline',
+    });
     text      = result.text;
     modelUsed = result.modelUsed;
 

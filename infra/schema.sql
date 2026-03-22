@@ -185,7 +185,7 @@ DO $$
 DECLARE
     t TEXT;
 BEGIN
-    FOR t IN SELECT unnest(ARRAY['tenants','accounts','contents','collections','settings','analytics','content_folders','marketing_clients','marketing_stages','client_form_tokens','client_form_responses'])
+    FOR t IN SELECT unnest(ARRAY['tenants','accounts','contents','collections','settings','analytics','content_folders','marketing_clients','marketing_stages','client_form_tokens','client_form_responses','copy_structures','copy_sessions'])
     LOOP
         EXECUTE format('
             DROP TRIGGER IF EXISTS trg_%s_updated_at ON %s;
@@ -570,3 +570,120 @@ CREATE TABLE IF NOT EXISTS rate_limit_log (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_rate_limit_tenant_action ON rate_limit_log(tenant_id, action, created_at);
+
+-- ============================================================
+-- COPY_STRUCTURES (estruturas de copy configuraveis)
+-- Cada estrutura tem um prompt base proprio e pode ser
+-- adicionada/editada nas configuracoes do sistema.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS copy_structures (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name        VARCHAR(255) NOT NULL,
+    description TEXT,
+    prompt_base TEXT NOT NULL,
+    -- Prompt injetado antes do prompt raiz do operador
+    icon        VARCHAR(50) DEFAULT 'file',
+    -- Nome do icone para a UI
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    is_default  BOOLEAN NOT NULL DEFAULT false,
+    -- true = veio do sistema, nao pode ser deletado (so editado)
+    active      BOOLEAN NOT NULL DEFAULT true,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_copy_structures_tenant
+  ON copy_structures(tenant_id, active, sort_order);
+
+-- ============================================================
+-- COPY_SESSIONS (cada copy gerada em uma pasta/conteudo)
+-- Vincula uma copy ao conteudo da pasta social existente.
+-- Armazena o estado completo do workspace.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS copy_sessions (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    content_id      TEXT REFERENCES contents(id) ON DELETE CASCADE,
+    -- Vinculado ao conteudo da pasta social existente
+    client_id       TEXT REFERENCES marketing_clients(id) ON DELETE SET NULL,
+    -- Cliente cujas bases de dados sao usadas como contexto
+    structure_id    TEXT REFERENCES copy_structures(id) ON DELETE SET NULL,
+    -- Estrutura de copy selecionada
+    model_used      VARCHAR(100),
+    -- Modelo de IA usado (gpt-4o, claude-opus-4, etc.)
+    prompt_raiz     TEXT,
+    -- O prompt raiz atual (editado pelo operador)
+    output_text     TEXT,
+    -- A copy gerada (rascunho atual)
+    tone            VARCHAR(100),
+    -- Tom selecionado (direto, formal, descontraido, etc.)
+    status          VARCHAR(50) NOT NULL DEFAULT 'draft',
+    -- 'draft' | 'saved' | 'published'
+    metadata        JSONB NOT NULL DEFAULT '{}',
+    -- { images: [], files: [], additionalPrompt: '' }
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(content_id)
+    -- Um conteudo tem exatamente uma sessao de copy ativa
+);
+CREATE INDEX IF NOT EXISTS idx_copy_sessions_tenant
+  ON copy_sessions(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_copy_sessions_client
+  ON copy_sessions(client_id);
+
+-- ============================================================
+-- COPY_HISTORY (historico de cada geracao/modificacao)
+-- Sem sistema de versoes — apenas log de execucoes.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS copy_history (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    session_id      TEXT NOT NULL REFERENCES copy_sessions(id) ON DELETE CASCADE,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    model_used      VARCHAR(100),
+    prompt_sent     TEXT,
+    -- Prompt completo enviado (system + raiz + complementos)
+    output_text     TEXT NOT NULL,
+    -- Output gerado nesta execucao
+    action          VARCHAR(50) NOT NULL DEFAULT 'generate',
+    -- 'generate' | 'improve' | 'modify'
+    tokens_input    INTEGER,
+    tokens_output   INTEGER,
+    tokens_total    INTEGER,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_copy_history_session
+  ON copy_history(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_copy_history_tenant
+  ON copy_history(tenant_id, created_at DESC);
+
+-- ============================================================
+-- AI_TOKEN_USAGE (log centralizado de uso de tokens)
+-- Alimentado por TODA chamada de IA do sistema.
+-- Fonte de dados para o dashboard de tokens.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS ai_token_usage (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    model_used      VARCHAR(100) NOT NULL,
+    provider        VARCHAR(50) NOT NULL DEFAULT 'openai',
+    -- 'openai' | 'anthropic' | 'perplexity'
+    operation_type  VARCHAR(100) NOT NULL,
+    -- 'pipeline' | 'stage_modify' | 'copy_generate' | 'copy_modify'
+    -- 'web_search' | 'apply_modification' | 'export'
+    client_id       TEXT REFERENCES marketing_clients(id) ON DELETE SET NULL,
+    session_id      TEXT,
+    -- ID da sessao (pipeline_job_id, copy_session_id, etc.)
+    tokens_input    INTEGER NOT NULL DEFAULT 0,
+    tokens_output   INTEGER NOT NULL DEFAULT 0,
+    tokens_total    INTEGER NOT NULL DEFAULT 0,
+    estimated_cost_usd NUMERIC(10, 6),
+    -- Calculado no momento do registro
+    metadata        JSONB DEFAULT '{}',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_token_usage_tenant
+  ON ai_token_usage(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_token_usage_month
+  ON ai_token_usage(tenant_id, date_trunc('month', created_at));
+CREATE INDEX IF NOT EXISTS idx_token_usage_type
+  ON ai_token_usage(tenant_id, operation_type);

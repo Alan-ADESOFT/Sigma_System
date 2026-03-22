@@ -2,10 +2,12 @@
  * @fileoverview Roteador unificado de completion de texto
  * @description Decide automaticamente qual API usar (OpenAI ou Anthropic)
  * com base no model ID resolvido via variáveis de ambiente.
+ * Registra uso de tokens automaticamente via logUsage (silencioso).
  */
 
 const openai = require('../../infra/api/openai');
 const anthropic = require('../../infra/api/anthropic');
+const { logUsage } = require('../copy/tokenUsage');
 
 /**
  * Mapa de níveis para variáveis de ambiente dos modelos
@@ -40,22 +42,46 @@ function resolveModel(level) {
  * @param {string} systemPrompt - Prompt do sistema
  * @param {string} userMessage - Mensagem do usuário
  * @param {number} [maxTokens=2000] - Limite de tokens
- * @returns {Promise<{text: string, modelUsed: string}>}
+ * @param {object} [opts] - Opcoes para tracking de tokens (nao quebra chamadas existentes)
+ * @param {string} [opts.tenantId] - ID do tenant
+ * @param {string} [opts.operationType] - Tipo de operacao ('pipeline', 'copy_generate', etc.)
+ * @param {string} [opts.clientId] - ID do cliente
+ * @param {string} [opts.sessionId] - ID da sessao
+ * @returns {Promise<{text: string, modelUsed: string, usage: {input: number, output: number, total: number}}>}
  */
-async function runCompletion(modelLevel, systemPrompt, userMessage, maxTokens = 2000) {
+async function runCompletion(modelLevel, systemPrompt, userMessage, maxTokens = 2000, opts = {}) {
   const model = resolveModel(modelLevel);
   const provider = model.toLowerCase().includes('claude') ? 'Anthropic' : 'OpenAI';
   console.log('[INFO][Completion] Roteando para provider', { modelLevel, model, provider });
 
-  let text;
+  let text, usage;
   if (provider === 'Anthropic') {
-    text = await anthropic.generateCompletion(model, systemPrompt, userMessage, maxTokens);
+    const result = await anthropic.generateCompletion(model, systemPrompt, userMessage, maxTokens);
+    text = result.text;
+    usage = result.usage;
   } else {
-    text = await openai.generateCompletion(model, systemPrompt, userMessage, maxTokens);
+    const result = await openai.generateCompletion(model, systemPrompt, userMessage, maxTokens);
+    text = result.text;
+    usage = result.usage;
   }
 
-  console.log('[SUCESSO][Completion] Texto gerado', { model, provider, responseLength: text.length });
-  return { text, modelUsed: model };
+  console.log('[SUCESSO][Completion] Texto gerado', { model, provider, responseLength: text.length, usage });
+
+  // Registra uso de tokens (silencioso — nunca bloqueia)
+  if (opts.tenantId) {
+    logUsage({
+      tenantId: opts.tenantId,
+      modelUsed: model,
+      provider: provider.toLowerCase(),
+      operationType: opts.operationType || 'general',
+      clientId: opts.clientId || null,
+      sessionId: opts.sessionId || null,
+      tokensInput: usage.input,
+      tokensOutput: usage.output,
+    });
+  }
+
+  return { text, modelUsed: model, usage };
 }
 
 /**

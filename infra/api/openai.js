@@ -25,7 +25,7 @@ function getHeaders() {
  * @param {string} systemPrompt - Prompt do sistema
  * @param {string} userMessage - Mensagem do usuário
  * @param {number} [maxTokens=2000] - Limite de tokens
- * @returns {Promise<string>} Texto gerado
+ * @returns {Promise<{text: string, usage: {input: number, output: number, total: number}}>}
  */
 async function generateCompletion(model, systemPrompt, userMessage, maxTokens = 2000) {
   console.log('[INFO][OpenAI] Iniciando completion', { model, maxTokens, promptLength: systemPrompt.length });
@@ -51,10 +51,15 @@ async function generateCompletion(model, systemPrompt, userMessage, maxTokens = 
 
   const data = await response.json();
   const result = data.choices?.[0]?.message?.content || '';
-  const usage = data.usage || {};
+  const rawUsage = data.usage || {};
+  const usage = {
+    input:  rawUsage.prompt_tokens     || 0,
+    output: rawUsage.completion_tokens || 0,
+    total:  rawUsage.total_tokens      || 0,
+  };
   console.log('[SUCESSO][OpenAI] Completion recebido', { model, responseLength: result.length, tokensUsed: usage });
 
-  return result;
+  return { text: result, usage };
 }
 
 /**
