@@ -36,7 +36,8 @@ export default async function handler(req, res) {
     }
 
     const tokenRow = await generateFormToken(tenantId, clientId);
-    const link = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/form/${tokenRow.token}`;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001';
+    const link = `${baseUrl}/form/${tokenRow.token}`;
 
     console.log('[SUCESSO][API:/api/form/generate-token] Token gerado', { clientId, tokenId: tokenRow.id });
     return res.status(201).json({

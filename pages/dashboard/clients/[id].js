@@ -12,6 +12,7 @@ import Link from 'next/link';
 import DashboardLayout from '../../../components/DashboardLayout';
 import StageModal from '../../../components/StageModal';
 import { useNotification } from '../../../context/NotificationContext';
+import { FORM_STEPS } from '../../../assets/data/formQuestions';
 
 /* ═══════════════════════════════════════════════════════════
    CONSTANTS
@@ -593,35 +594,254 @@ function TabRespostas({ clientId, client }) {
 
   // ── Estado: submetido ──
   if (status.formStatus === 'submitted') {
-    const data = status.draft?.data || {};
-    const steps = [
-      { num: 1,  title: 'Informações do Negócio' },
-      { num: 2,  title: 'Produto / Serviço Principal' },
-      { num: 3,  title: 'Público-Alvo' },
-      { num: 4,  title: 'Concorrência' },
-      { num: 5,  title: 'Marca e Identidade' },
-      { num: 6,  title: 'Comunicação e Tom de Voz' },
-      { num: 7,  title: 'Canais e Presença Digital' },
-      { num: 8,  title: 'Histórico de Marketing' },
-      { num: 9,  title: 'Objetivos e Metas' },
-      { num: 10, title: 'Orçamento e Recursos' },
-      { num: 11, title: 'Informações Adicionais' },
-    ];
-
     return (
-      <div style={{ maxWidth: 700 }}>
-        {/* Badge verde */}
-        <div style={{ marginBottom: 20 }}>
+      <SubmittedResponses
+        clientId={clientId}
+        status={status}
+        onDeleted={() => loadStatus()}
+        notify={notify}
+      />
+    );
+  }
+
+  return null;
+}
+
+/* Respostas submetidas — com resumo IA + botão de apagar + modal de confirmação */
+function SubmittedResponses({ clientId, status, onDeleted, notify }) {
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteMode, setDeleteMode] = useState('all'); // 'all' | 'sections'
+  const [selectedSections, setSelectedSections] = useState([]);
+  const [confirmText, setConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  // Resumo IA
+  const [summary, setSummary] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [summaryChecked, setSummaryChecked] = useState(false);
+
+  // Verifica se já existe resumo ao montar
+  useEffect(() => {
+    fetch(`/api/form/generate-summary?clientId=${clientId}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.success && d.summary) setSummary(d.summary);
+        setSummaryChecked(true);
+      })
+      .catch(() => setSummaryChecked(true));
+  }, [clientId]);
+
+  async function handleGenerateSummary() {
+    setSummaryLoading(true);
+    setShowSummaryModal(true);
+    try {
+      const res = await fetch('/api/form/generate-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        setSummary(result.summary);
+        notify('Resumo gerado com sucesso!', 'success');
+      } else {
+        notify(result.error || 'Erro ao gerar resumo.', 'error');
+        setShowSummaryModal(false);
+      }
+    } catch (err) {
+      notify('Erro de conexão ao gerar resumo.', 'error');
+      setShowSummaryModal(false);
+    } finally {
+      setSummaryLoading(false);
+    }
+  }
+
+  const data = status.draft?.data || {};
+  const steps = [
+    { num: 1,  title: 'Sua Empresa' },
+    { num: 2,  title: 'Produtos e Serviços' },
+    { num: 3,  title: 'Seu Cliente' },
+    { num: 4,  title: 'Mercado e Concorrência' },
+    { num: 5,  title: 'Contexto Externo' },
+    { num: 6,  title: 'Forças e Diferenciais' },
+    { num: 7,  title: 'Provas e Autoridade' },
+    { num: 8,  title: 'Marketing Atual' },
+    { num: 9,  title: 'Jornada do Cliente' },
+    { num: 10, title: 'Objetivos e Metas' },
+    { num: 11, title: 'Alinhamento' },
+  ];
+
+  const CONFIRM_PHRASE = 'APAGAR RESPOSTAS';
+  const canConfirm = confirmText.trim().toUpperCase() === CONFIRM_PHRASE;
+
+  async function handleDelete() {
+    if (!canConfirm) return;
+    setDeleting(true);
+    try {
+      const body = { clientId };
+      if (deleteMode === 'sections' && selectedSections.length > 0) {
+        body.sections = selectedSections;
+      }
+      const res = await fetch('/api/form/delete-responses', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const result = await res.json();
+      if (result.success) {
+        notify(result.message, 'success');
+        setShowDeleteModal(false);
+        setConfirmText('');
+        setSelectedSections([]);
+        onDeleted();
+      } else {
+        notify(result.error || 'Erro ao apagar respostas.', 'error');
+      }
+    } catch (err) {
+      notify('Erro de conexão ao apagar respostas.', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  function toggleSection(num) {
+    setSelectedSections(prev =>
+      prev.includes(num) ? prev.filter(n => n !== num) : [...prev, num]
+    );
+  }
+
+  /* Renderiza markdown de forma segura como React elements */
+  function renderSummaryText(text) {
+    if (!text) return null;
+    return text.split('\n').map((line, i) => {
+      const t = line.trim();
+      if (!t) return <div key={i} style={{ height: 8 }} />;
+      if (t.startsWith('## ')) return <h3 key={i} style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', margin: '20px 0 8px', borderBottom: '1px solid rgba(255,0,51,0.15)', paddingBottom: 6 }}>{t.slice(3)}</h3>;
+      if (t.startsWith('- ') || t.startsWith('* ')) return <div key={i} style={{ paddingLeft: 14, position: 'relative', marginBottom: 4 }}><span style={{ position: 'absolute', left: 0, color: 'var(--brand-500)' }}>·</span>{t.slice(2)}</div>;
+      const parts = t.split(/\*\*(.*?)\*\*/g);
+      if (parts.length > 1) return <p key={i} style={{ marginBottom: 6 }}>{parts.map((p, j) => j % 2 === 1 ? <strong key={j} style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{p}</strong> : p)}</p>;
+      return <p key={i} style={{ marginBottom: 6 }}>{t}</p>;
+    });
+  }
+
+  return (
+    <div style={{ maxWidth: 700 }}>
+      {/* ── Card Resumo IA ── */}
+      <div className="glass-card" style={{ padding: '20px', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+            background: 'linear-gradient(135deg, rgba(255,0,51,0.1), rgba(255,0,51,0.1))',
+            border: '1px solid rgba(255,0,51,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2a4 4 0 0 0-4 4v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4z" />
+              <circle cx="9" cy="15" r="1" /><circle cx="15" cy="15" r="1" />
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <h3 style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' }}>
+              Resumo Estratégico IA
+            </h3>
+            <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.72rem', color: 'var(--text-secondary)', margin: '0 0 14px', lineHeight: 1.5 }}>
+              Análise completa das respostas: dores, desejos, diferenciais, oportunidades e recomendações estratégicas.
+            </p>
+            {summaryChecked && (
+              summary ? (
+                <button
+                  onClick={() => setShowSummaryModal(true)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 16px',
+                    borderRadius: 6, cursor: 'pointer',
+                    fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600,
+                    letterSpacing: '0.04em', textTransform: 'uppercase',
+                    background: 'rgba(255,0,51,0.1)', border: '1px solid rgba(255,0,51,0.3)',
+                    color: 'var(--brand-500)', transition: 'all 0.2s',
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+                  </svg>
+                  Visualizar resumo
+                </button>
+              ) : (
+                <button onClick={handleGenerateSummary} disabled={summaryLoading} className="sigma-btn-primary" style={{ fontSize: '0.65rem', padding: '7px 16px', gap: 6 }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                  Gerar agora
+                </button>
+              )
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Modal do resumo IA ── */}
+      {showSummaryModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div className="glass-card animate-scale-in" style={{ maxWidth: 680, width: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2a4 4 0 0 0-4 4v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4z" />
+                  <circle cx="9" cy="15" r="1" /><circle cx="15" cy="15" r="1" />
+                </svg>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>Resumo Estratégico</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {summary && !summaryLoading && (
+                  <button onClick={handleGenerateSummary} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 4, cursor: 'pointer', background: 'rgba(17,17,17,0.8)', border: '1px solid rgba(255,255,255,0.06)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                    </svg>
+                    Regenerar
+                  </button>
+                )}
+                <button onClick={() => setShowSummaryModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 4 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                </button>
+              </div>
+            </div>
+            {/* Conteúdo */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+              {summaryLoading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', gap: 16 }}>
+                  <div className="spinner" style={{ width: 28, height: 28 }} />
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)' }}>Analisando respostas e gerando resumo estratégico...</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>Isso pode levar até 30 segundos</span>
+                </div>
+              ) : summary ? (
+                <div style={{ fontFamily: 'var(--font-sans)', fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                  {renderSummaryText(summary.summary)}
+                </div>
+              ) : null}
+            </div>
+            {/* Footer */}
+            {summary && !summaryLoading && (
+              <div style={{ padding: '12px 24px', borderTop: '1px solid rgba(255,255,255,0.04)', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                <span>Modelo: {summary.model_used || '—'}</span>
+                <span>Gerado em {new Date(summary.updated_at || summary.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Badge verde + botão apagar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
+        <div>
           <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px',
             borderRadius: 20, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)',
             fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
             letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--success)',
           }}>
-            <span style={{
-              width: 6, height: 6, borderRadius: '50%', background: 'var(--success)',
-              animation: 'syncPulse 2s infinite',
-            }} />
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', animation: 'syncPulse 2s infinite' }} />
             Formulário recebido
           </span>
           {status.draft?.submittedAt && (
@@ -631,30 +851,181 @@ function TabRespostas({ clientId, client }) {
           )}
         </div>
 
-        {/* Progress bar 100% */}
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Progresso
-            </span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--success)' }}>100%</span>
-          </div>
-          <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,0,51,0.1)' }}>
-            <div style={{ width: '100%', height: '100%', borderRadius: 2, background: 'var(--success)', transition: 'width 0.5s' }} />
-          </div>
-        </div>
+        <button
+          onClick={() => { setShowDeleteModal(true); setDeleteMode('all'); setConfirmText(''); setSelectedSections([]); }}
+          className="btn-danger btn"
+          style={{ fontSize: '0.6rem', padding: '5px 12px', gap: 5 }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          </svg>
+          Apagar respostas
+        </button>
+      </div>
 
-        {/* Respostas por etapa — cards colapsáveis */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {steps.map(step => (
-            <StepCard key={step.num} step={step} data={data} />
-          ))}
+      {/* Progress bar 100% */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Progresso
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--success)' }}>100%</span>
+        </div>
+        <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,0,51,0.1)' }}>
+          <div style={{ width: '100%', height: '100%', borderRadius: 2, background: 'var(--success)', transition: 'width 0.5s' }} />
         </div>
       </div>
-    );
-  }
 
-  return null;
+      {/* Respostas por etapa */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {steps.map(step => (
+          <StepCard key={step.num} step={step} data={data} />
+        ))}
+      </div>
+
+      {/* ── Modal de confirmação de exclusão ── */}
+      {showDeleteModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 20,
+        }}>
+          <div className="glass-card animate-scale-in" style={{ maxWidth: 460, width: '100%', padding: '28px 24px' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.2)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff1a4d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+              </div>
+              <div>
+                <h3 style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                  Apagar respostas
+                </h3>
+                <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.72rem', color: 'var(--text-secondary)', margin: 0 }}>
+                  Esta ação não pode ser desfeita.
+                </p>
+              </div>
+            </div>
+
+            {/* Modo: tudo ou seções */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              <button
+                onClick={() => { setDeleteMode('all'); setSelectedSections([]); }}
+                style={{
+                  flex: 1, padding: '8px 12px', borderRadius: 6, cursor: 'pointer',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: '0.06em',
+                  background: deleteMode === 'all' ? 'rgba(255,0,51,0.12)' : 'rgba(17,17,17,0.8)',
+                  border: `1px solid ${deleteMode === 'all' ? 'rgba(255,0,51,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                  color: deleteMode === 'all' ? 'var(--brand-500)' : 'var(--text-secondary)',
+                }}
+              >
+                Apagar tudo
+              </button>
+              <button
+                onClick={() => setDeleteMode('sections')}
+                style={{
+                  flex: 1, padding: '8px 12px', borderRadius: 6, cursor: 'pointer',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: '0.06em',
+                  background: deleteMode === 'sections' ? 'rgba(255,0,51,0.12)' : 'rgba(17,17,17,0.8)',
+                  border: `1px solid ${deleteMode === 'sections' ? 'rgba(255,0,51,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                  color: deleteMode === 'sections' ? 'var(--brand-500)' : 'var(--text-secondary)',
+                }}
+              >
+                Por etapa
+              </button>
+            </div>
+
+            {/* Seletor de etapas (se modo sections) */}
+            {deleteMode === 'sections' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 16, maxHeight: 200, overflowY: 'auto' }}>
+                {steps.map(s => (
+                  <label key={s.num} style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+                    borderRadius: 6, cursor: 'pointer',
+                    background: selectedSections.includes(s.num) ? 'rgba(255,0,51,0.08)' : 'rgba(17,17,17,0.6)',
+                    border: `1px solid ${selectedSections.includes(s.num) ? 'rgba(255,0,51,0.2)' : 'rgba(255,255,255,0.04)'}`,
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedSections.includes(s.num)}
+                      onChange={() => toggleSection(s.num)}
+                      style={{ accentColor: '#ff0033' }}
+                    />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-primary)' }}>
+                      {s.num}. {s.title}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {/* Campo de confirmação por texto */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{
+                display: 'block', fontFamily: 'var(--font-mono)', fontSize: '0.6rem',
+                color: 'var(--text-muted)', marginBottom: 6, letterSpacing: '0.06em', textTransform: 'uppercase',
+              }}>
+                Digite <span style={{ color: 'var(--brand-500)', fontWeight: 700 }}>APAGAR RESPOSTAS</span> para confirmar
+              </label>
+              <input
+                type="text"
+                value={confirmText}
+                onChange={e => setConfirmText(e.target.value)}
+                placeholder="APAGAR RESPOSTAS"
+                className="sigma-input"
+                style={{ fontSize: '0.78rem' }}
+                autoComplete="off"
+              />
+            </div>
+
+            {/* Botões */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="btn btn-secondary"
+                style={{ flex: 1 }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={!canConfirm || deleting || (deleteMode === 'sections' && selectedSections.length === 0)}
+                className="btn btn-danger"
+                style={{
+                  flex: 1,
+                  opacity: (canConfirm && (deleteMode === 'all' || selectedSections.length > 0)) ? 1 : 0.4,
+                  cursor: (canConfirm && (deleteMode === 'all' || selectedSections.length > 0)) ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {deleting ? (
+                  <><span className="spinner" style={{ width: 12, height: 12 }} /> Apagando...</>
+                ) : (
+                  deleteMode === 'all' ? 'Apagar tudo' : `Apagar ${selectedSections.length} etapa(s)`
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* Busca o label real da pergunta no FORM_STEPS pelo ID (ex: "1.1" → "Qual o nome da sua empresa?") */
+function getQuestionLabel(questionId) {
+  const stepNum = parseInt(questionId.split('.')[0], 10);
+  const stepData = FORM_STEPS.find(s => s.step === stepNum);
+  if (!stepData) return questionId;
+  const question = stepData.questions.find(q => q.id === questionId);
+  return question ? question.label : questionId;
 }
 
 /* Card colapsável para cada etapa do formulário — usado dentro de TabRespostas */
@@ -664,7 +1035,7 @@ function StepCard({ step, data }) {
   // Filtra respostas desta etapa: chaves que começam com "X." onde X é o número
   const prefix = `${step.num}.`;
   const entries = Object.entries(data)
-    .filter(([key]) => key.startsWith(prefix))
+    .filter(([key]) => key.startsWith(prefix) && !key.includes('_'))
     .sort(([a], [b]) => {
       const na = parseFloat(a);
       const nb = parseFloat(b);
@@ -718,16 +1089,19 @@ function StepCard({ step, data }) {
             entries.map(([key, val]) => (
               <div key={key} style={{ padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
                 <div style={{
-                  fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
-                  color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4,
+                  fontFamily: 'var(--font-sans)', fontSize: '0.72rem', fontWeight: 500,
+                  color: 'var(--text-secondary)', marginBottom: 4, lineHeight: 1.4,
                 }}>
-                  Pergunta {key}
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 700, color: 'var(--brand-500)', marginRight: 6 }}>
+                    {key}
+                  </span>
+                  {getQuestionLabel(key)}
                 </div>
                 <div style={{
                   fontFamily: 'var(--font-sans)', fontSize: '0.8rem', color: val ? 'var(--text-primary)' : 'var(--text-muted)',
-                  lineHeight: 1.5, whiteSpace: 'pre-wrap',
+                  lineHeight: 1.5, whiteSpace: 'pre-wrap', paddingLeft: 2,
                 }}>
-                  {Array.isArray(val) ? val.join(', ') : (val || '—')}
+                  {Array.isArray(val) ? val.filter(v => v !== '__other__').join(', ') : (val === '__other__' ? '(outro)' : (val || '—'))}
                 </div>
               </div>
             ))

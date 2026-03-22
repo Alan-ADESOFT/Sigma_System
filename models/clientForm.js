@@ -85,6 +85,12 @@ async function validateToken(tokenValue) {
     return { valid: false, reason: 'expired', tokenData };
   }
 
+  // in_progress = alguém já começou a preencher
+  if (tokenData.status === 'in_progress') {
+    console.log('[INFO][ClientForm:validateToken] Token em andamento', { tokenId: tokenData.id });
+    return { valid: false, reason: 'in_progress', tokenData };
+  }
+
   console.log('[SUCESSO][ClientForm:validateToken] Token válido', { tokenId: tokenData.id });
   return { valid: true, reason: 'valid', tokenData };
 }

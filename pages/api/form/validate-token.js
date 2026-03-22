@@ -27,6 +27,25 @@ export default async function handler(req, res) {
 
     const result = await validateToken(token);
 
+    // in_progress — retorna draft para permitir continuação no mesmo dispositivo
+    if (result.reason === 'in_progress') {
+      console.log('[INFO][API:/api/form/validate-token] Token em andamento', { reason: result.reason });
+      const draft = await getDraft(result.tokenData.id);
+      return res.json({
+        success: false,
+        reason: 'in_progress',
+        client: {
+          id: result.tokenData.client_id,
+          company_name: result.tokenData.company_name,
+        },
+        draft: draft ? {
+          data: draft.data,
+          currentStep: draft.current_step,
+          status: draft.status,
+        } : null,
+      });
+    }
+
     if (!result.valid) {
       console.log('[INFO][API:/api/form/validate-token] Token inválido', { reason: result.reason });
       return res.json({ success: false, reason: result.reason });
