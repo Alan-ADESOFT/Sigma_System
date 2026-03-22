@@ -121,7 +121,14 @@ export default async function handler(req, res) {
 }
 
 /**
- * Executa o pipeline completo em sequência
+ * Executa o pipeline em sequencia, retomando de onde parou se houver
+ * outputs anteriores salvos na KB.
+ *
+ * Logica de retomada:
+ * - Verifica na ai_knowledge_base quais agentes ja tem output para este cliente
+ * - Pula agentes que ja completaram (output existe e tem conteudo)
+ * - Comeca a executar a partir do primeiro agente sem output
+ * - Emite SSE events para os agentes pulados (frontend mostra como "done")
  */
 async function runPipeline(tenantId, clientId, client, jobId) {
   const emitter = createJobEmitter(jobId);
@@ -159,7 +166,48 @@ async function runPipeline(tenantId, clientId, client, jobId) {
 
   const userInput = clientJson + formData;
 
+  // ── Detecta agentes ja concluidos na KB (para retomada) ──
+  const completedAgentNames = new Set();
   for (const { agentName, config } of executionOrder) {
+    const kbEntry = await queryOne(
+      `SELECT id FROM ai_knowledge_base
+       WHERE client_id = $1 AND tenant_id = $2 AND category = $3 AND key = $4
+       AND value IS NOT NULL AND LENGTH(value) > 50`,
+      [clientId, tenantId, config.savesToKB.category, config.savesToKB.key]
+    );
+    if (kbEntry) {
+      completedAgentNames.add(agentName);
+    } else {
+      break; // Para no primeiro sem output — nao pular agentes intermediarios
+    }
+  }
+
+  const skippedCount = completedAgentNames.size;
+  if (skippedCount > 0) {
+    console.log('[INFO][Pipeline] Retomando pipeline — ' + skippedCount + ' agente(s) ja concluido(s)', {
+      jobId, clientId, skipped: [...completedAgentNames],
+    });
+
+    // Atualiza job com os agentes ja concluidos
+    await queryOne(
+      `UPDATE pipeline_jobs SET completed_agents = $1 WHERE id = $2`,
+      [skippedCount, jobId]
+    );
+
+    // Emite SSE events para os agentes pulados (frontend mostra como "done")
+    for (const { agentName, config } of executionOrder) {
+      if (!completedAgentNames.has(agentName)) break;
+      emitter.emit('event', { type: 'agent_start', agentName, agentIndex: config.order, timestamp: Date.now(), skipped: true });
+      emitter.emit('event', { type: 'agent_done', agentName, agentIndex: config.order, textLength: 0, timestamp: Date.now(), skipped: true });
+    }
+  }
+
+  for (const { agentName, config } of executionOrder) {
+    // Pula agentes ja concluidos
+    if (completedAgentNames.has(agentName)) {
+      console.log('[INFO][Pipeline] Agente ja concluido, pulando', { jobId, agentName });
+      continue;
+    }
     const startedAt = new Date().toISOString();
 
     try {
@@ -288,13 +336,16 @@ async function runPipeline(tenantId, clientId, client, jobId) {
   emitter.emit('event', { type: 'pipeline_done', timestamp: Date.now() });
 
   // Notificacao interna: pipeline concluido
+  const resumeMsg = skippedCount > 0
+    ? `Pipeline de ${client.company_name} retomado e concluido. ${skippedCount} etapa(s) reutilizada(s), ${executionOrder.length - skippedCount} gerada(s).`
+    : `Todos os rascunhos de ${client.company_name} foram gerados com sucesso.`;
   try {
     await createNotification(
       tenantId, 'pipeline_done', 'Pipeline concluido',
-      `Todos os rascunhos de ${client.company_name} foram gerados com sucesso.`,
-      clientId, { jobId, agentCount: executionOrder.length }
+      resumeMsg,
+      clientId, { jobId, agentCount: executionOrder.length, skippedAgents: skippedCount }
     );
   } catch {}
 
-  console.log('[SUCESSO][Pipeline] Pipeline completo', { jobId, clientId });
+  console.log('[SUCESSO][Pipeline] Pipeline completo', { jobId, clientId, skippedAgents: skippedCount });
 }

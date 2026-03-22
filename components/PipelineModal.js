@@ -258,13 +258,23 @@ export default function PipelineModal({ client, onClose, onComplete, onBackgroun
             const data = JSON.parse(e.data);
             if (data.type === 'agent_start') {
               const idx = AGENTS.findIndex(a => a.name === data.agentName);
-              addLog('> Executando ' + AGENTS[idx]?.label + ' [' + data.agentName + ']', 'system');
-              if (idx >= 0) {
-                setSelectedAgent(idx);
-                setBlurPhases(prev => ({ ...prev, [data.agentName]: 'generating' }));
-                startFakeTyping(data.agentName);
+              if (data.skipped) {
+                // Agente ja concluido anteriormente — pular sem fake typing
+                addLog('> ' + AGENTS[idx]?.label + ' — ja concluido (retomada)', 'success');
+                if (idx >= 0) {
+                  setAgentStatuses(prev => { const next = [...prev]; next[idx] = 'done'; return next; });
+                  setBlurPhases(prev => ({ ...prev, [data.agentName]: 'completed' }));
+                }
+              } else {
+                addLog('> Executando ' + AGENTS[idx]?.label + ' [' + data.agentName + ']', 'system');
+                if (idx >= 0) {
+                  setSelectedAgent(idx);
+                  setBlurPhases(prev => ({ ...prev, [data.agentName]: 'generating' }));
+                  startFakeTyping(data.agentName);
+                }
               }
             } else if (data.type === 'agent_done') {
+              if (data.skipped) return; // Ja tratado no agent_start
               const doneIdx = AGENTS.findIndex(a => a.name === data.agentName);
               const doneLabel = AGENTS[doneIdx]?.label || data.agentName;
               addLog('> ' + doneLabel + ' concluido [' + data.textLength + ' chars]', 'success');
