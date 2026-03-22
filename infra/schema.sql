@@ -594,9 +594,14 @@ CREATE TABLE IF NOT EXISTS copy_structures (
     is_default  BOOLEAN NOT NULL DEFAULT false,
     -- true = veio do sistema, nao pode ser deletado (so editado)
     active      BOOLEAN NOT NULL DEFAULT true,
+    questions   JSONB NOT NULL DEFAULT '[]',
+    -- Array de perguntas-chave: [{ id, label, placeholder, required }]
+    -- Preenchidas pelo operador ao selecionar a estrutura no popup
+    -- Respostas sao injetadas no prompt final como contexto adicional
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE copy_structures ADD COLUMN IF NOT EXISTS questions JSONB NOT NULL DEFAULT '[]';
 CREATE INDEX IF NOT EXISTS idx_copy_structures_tenant
   ON copy_structures(tenant_id, active, sort_order);
 

@@ -196,6 +196,177 @@ function PromptsSection() {
   );
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   CopyStructuresSection — gestao de estruturas de copy com perguntas-chave
+═══════════════════════════════════════════════════════════════════════════ */
+function CopyStructuresSection() {
+  const { notify } = useNotification();
+  const [structures, setStructures] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null); // structure.id or 'new'
+  const [form, setForm] = useState({ name: '', description: '', prompt_base: '', icon: 'file', questions: [] });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { loadStructures(); }, []);
+
+  async function loadStructures() {
+    setLoading(true);
+    try {
+      const r = await fetch('/api/copy/structures');
+      const d = await r.json();
+      if (d.success) setStructures(d.data || []);
+    } catch {}
+    setLoading(false);
+  }
+
+  function startEdit(s) {
+    setEditing(s.id);
+    setForm({
+      name: s.name, description: s.description || '', prompt_base: s.prompt_base,
+      icon: s.icon || 'file', questions: s.questions || [],
+    });
+  }
+
+  function startNew() {
+    setEditing('new');
+    setForm({ name: '', description: '', prompt_base: '', icon: 'file', questions: [] });
+  }
+
+  function addQuestion() {
+    setForm(f => ({ ...f, questions: [...f.questions, { id: 'q' + Date.now(), label: '', placeholder: '', required: false }] }));
+  }
+
+  function updateQuestion(idx, field, value) {
+    setForm(f => {
+      const qs = [...f.questions];
+      qs[idx] = { ...qs[idx], [field]: value };
+      return { ...f, questions: qs };
+    });
+  }
+
+  function removeQuestion(idx) {
+    setForm(f => ({ ...f, questions: f.questions.filter((_, i) => i !== idx) }));
+  }
+
+  async function handleSave() {
+    if (!form.name.trim() || !form.prompt_base.trim()) { notify('Nome e prompt base sao obrigatorios', 'warning'); return; }
+    setSaving(true);
+    try {
+      if (editing === 'new') {
+        await fetch('/api/copy/structures', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+        notify('Estrutura criada', 'success');
+      } else {
+        await fetch('/api/copy/structures?id=' + editing, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+        notify('Estrutura atualizada', 'success');
+      }
+      setEditing(null);
+      loadStructures();
+    } catch { notify('Erro ao salvar', 'error'); }
+    finally { setSaving(false); }
+  }
+
+  async function handleDeactivate(id) {
+    try {
+      const r = await fetch('/api/copy/structures?id=' + id, { method: 'DELETE' });
+      const d = await r.json();
+      if (!d.success) { notify(d.error, 'error'); return; }
+      notify('Estrutura desativada', 'success');
+      loadStructures();
+    } catch { notify('Erro ao desativar', 'error'); }
+  }
+
+  const sectionStyle = { marginTop: 32 };
+  const titleStyle = { fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 16 };
+  const cardStyle = { padding: '16px 20px', marginBottom: 10, borderRadius: 10, background: 'linear-gradient(145deg, rgba(17,17,17,0.95), rgba(10,10,10,0.98))', border: '1px solid rgba(255,255,255,0.04)' };
+  const inputStyle = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'rgba(10,10,10,0.6)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, color: 'var(--text-primary)', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', outline: 'none' };
+  const textareaStyle = { ...inputStyle, resize: 'vertical', minHeight: 120, fontSize: '0.65rem', lineHeight: 1.6 };
+  const labelStyle = { fontFamily: 'var(--font-mono)', fontSize: '0.52rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, display: 'block' };
+  const btnPrimary = { padding: '6px 16px', borderRadius: 6, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg, var(--action-primary), var(--brand-600))', color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 700 };
+  const btnSecondary = { padding: '6px 14px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', cursor: 'pointer' };
+  const badgeStyle = (bg, color) => ({ fontFamily: 'var(--font-mono)', fontSize: '0.42rem', fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: bg, color });
+
+  return (
+    <div style={sectionStyle}>
+      <div style={titleStyle}>Estruturas de Copy</div>
+
+      {loading && <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)' }}>Carregando...</div>}
+
+      {structures.map(s => (
+        <div key={s.id} style={cardStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: editing === s.id ? 14 : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-primary)' }}>{s.name}</span>
+              <span style={badgeStyle(s.is_default ? 'rgba(59,130,246,0.08)' : 'rgba(34,197,94,0.08)', s.is_default ? '#3b82f6' : '#22c55e')}>{s.is_default ? 'PADRAO' : 'CUSTOM'}</span>
+              {(s.questions || []).length > 0 && <span style={badgeStyle('rgba(249,115,22,0.08)', '#f97316')}>{s.questions.length} pergunta(s)</span>}
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => editing === s.id ? setEditing(null) : startEdit(s)} style={{ ...btnSecondary, fontSize: '0.5rem', padding: '3px 10px' }}>{editing === s.id ? 'Cancelar' : 'Editar'}</button>
+              {!s.is_default && <button onClick={() => handleDeactivate(s.id)} style={{ ...btnSecondary, fontSize: '0.5rem', padding: '3px 10px', borderColor: 'rgba(255,51,51,0.2)', color: 'var(--error)' }}>Desativar</button>}
+            </div>
+          </div>
+
+          {editing === s.id && <StructureForm form={form} setForm={setForm} saving={saving} onSave={handleSave} onAddQuestion={addQuestion} onUpdateQuestion={updateQuestion} onRemoveQuestion={removeQuestion} inputStyle={inputStyle} textareaStyle={textareaStyle} labelStyle={labelStyle} btnPrimary={btnPrimary} btnSecondary={btnSecondary} />}
+        </div>
+      ))}
+
+      {editing === 'new' ? (
+        <div style={{ ...cardStyle, borderColor: 'rgba(255,0,51,0.12)', background: 'rgba(255,0,51,0.02)' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 14 }}>Nova Estrutura</div>
+          <StructureForm form={form} setForm={setForm} saving={saving} onSave={handleSave} onCancel={() => setEditing(null)} onAddQuestion={addQuestion} onUpdateQuestion={updateQuestion} onRemoveQuestion={removeQuestion} inputStyle={inputStyle} textareaStyle={textareaStyle} labelStyle={labelStyle} btnPrimary={btnPrimary} btnSecondary={btnSecondary} />
+        </div>
+      ) : (
+        <button onClick={startNew} style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: '1px dashed rgba(255,0,51,0.2)', background: 'rgba(255,0,51,0.03)', color: 'var(--brand-300)', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', marginTop: 6 }}>+ Nova Estrutura</button>
+      )}
+    </div>
+  );
+}
+
+/* Formulario de estrutura (usado em editar e criar) */
+function StructureForm({ form, setForm, saving, onSave, onCancel, onAddQuestion, onUpdateQuestion, onRemoveQuestion, inputStyle, textareaStyle, labelStyle, btnPrimary, btnSecondary }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div>
+        <label style={labelStyle}>Nome</label>
+        <input style={inputStyle} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ex: Landing Page, Roteiro de Reels..." />
+      </div>
+      <div>
+        <label style={labelStyle}>Descricao</label>
+        <input style={inputStyle} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Descricao curta do que a estrutura gera" />
+      </div>
+      <div>
+        <label style={labelStyle}>Prompt Base</label>
+        <textarea style={textareaStyle} value={form.prompt_base} onChange={e => setForm(f => ({ ...f, prompt_base: e.target.value }))} placeholder="Instrucoes de como a IA deve gerar a copy nesta estrutura..." />
+      </div>
+
+      {/* Perguntas-chave */}
+      <div>
+        <label style={labelStyle}>Perguntas-Chave (preenchidas pelo operador ao gerar)</label>
+        {(form.questions || []).map((q, i) => (
+          <div key={q.id || i} style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
+              <input style={{ ...inputStyle, marginBottom: 4, fontSize: '0.62rem' }} value={q.label} onChange={e => onUpdateQuestion(i, 'label', e.target.value)} placeholder="Pergunta (ex: Qual o objetivo?)" />
+              <input style={{ ...inputStyle, fontSize: '0.58rem' }} value={q.placeholder} onChange={e => onUpdateQuestion(i, 'placeholder', e.target.value)} placeholder="Placeholder de ajuda" />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 4 }}>
+              <label style={{ fontFamily: 'var(--font-mono)', fontSize: '0.42rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+                <input type="checkbox" checked={q.required} onChange={e => onUpdateQuestion(i, 'required', e.target.checked)} style={{ width: 12, height: 12 }} />
+                Obrig.
+              </label>
+              <button onClick={() => onRemoveQuestion(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)', fontSize: '0.52rem', fontFamily: 'var(--font-mono)', padding: 0 }}>Remover</button>
+            </div>
+          </div>
+        ))}
+        <button onClick={onAddQuestion} style={{ padding: '4px 10px', borderRadius: 4, border: '1px dashed rgba(255,255,255,0.1)', background: 'transparent', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.52rem', cursor: 'pointer', marginTop: 2 }}>+ Adicionar pergunta</button>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6 }}>
+        {onCancel && <button onClick={onCancel} style={btnSecondary}>Cancelar</button>}
+        <button onClick={onSave} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.5 : 1 }}>{saving ? 'Salvando...' : 'Salvar'}</button>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { notify } = useNotification();
   const [accounts, setAccounts] = useState([]);
@@ -467,6 +638,8 @@ export default function SettingsPage() {
       {/* ── Prompts dos Agentes ── */}
       <PromptsSection />
 
+      {/* ── Estruturas de Copy ── */}
+      <CopyStructuresSection />
 
     </DashboardLayout>
   );

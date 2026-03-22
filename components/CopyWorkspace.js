@@ -66,6 +66,7 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
 
   // ── Configuracao ──
   const [selectedStructureId, setSelectedStructureId] = useState('');
+  const [questionAnswers, setQuestionAnswers] = useState({}); // { questionId: answer }
   const [toneInput, setToneInput] = useState('');
   const [selectedModel, setSelectedModel] = useState('gpt-4o');
   const [kbCategories, setKbCategories] = useState([]);
@@ -155,6 +156,18 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
     setSaved(s.status === 'saved');
     setHistoryDraftLabel(null);
     setPromptInput('');
+    // Restaura respostas de perguntas se existirem na metadata
+    setQuestionAnswers(s.metadata?.questionAnswers || {});
+  }
+
+  function handleSelectStructure(structId) {
+    if (selectedStructureId === structId) {
+      setSelectedStructureId('');
+      setQuestionAnswers({});
+    } else {
+      setSelectedStructureId(structId);
+      setQuestionAnswers({}); // Limpa respostas ao trocar de estrutura
+    }
   }
 
   async function switchChat(sessionId) {
@@ -259,10 +272,23 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
         filesB64.push({ base64: b64, mimeType: doc.file.type, fileName: doc.name });
       }
 
+      // Monta prompt final com respostas das perguntas-chave
+      let finalPrompt = promptInput.trim();
+      const selectedStruct = structures.find(s => s.id === selectedStructureId);
+      if (selectedStruct?.questions?.length && Object.keys(questionAnswers).length > 0) {
+        const answersBlock = selectedStruct.questions
+          .filter(q => questionAnswers[q.id]?.trim())
+          .map(q => `${q.label}: ${questionAnswers[q.id].trim()}`)
+          .join('\n');
+        if (answersBlock) {
+          finalPrompt = `${finalPrompt}\n\nINFORMACOES ADICIONAIS (perguntas-chave):\n${answersBlock}`;
+        }
+      }
+
       const endpoint = hasOutput ? '/api/copy/improve' : '/api/copy/generate';
       const body = hasOutput
-        ? { sessionId: activeSessionId, currentOutput: editorRef.current.innerText, instruction: promptInput.trim(), clientId, modelOverride: selectedModel, ...(imagesB64.length ? { images: imagesB64 } : {}), ...(filesB64.length ? { files: filesB64 } : {}) }
-        : { sessionId: activeSessionId, contentId: folder.id, clientId, structureId: selectedStructureId || undefined, modelOverride: selectedModel, promptRaiz: promptInput.trim(), tone: toneInput || undefined, ...(imagesB64.length ? { images: imagesB64 } : {}), ...(filesB64.length ? { files: filesB64 } : {}) };
+        ? { sessionId: activeSessionId, currentOutput: editorRef.current.innerText, instruction: finalPrompt, clientId, modelOverride: selectedModel, ...(imagesB64.length ? { images: imagesB64 } : {}), ...(filesB64.length ? { files: filesB64 } : {}) }
+        : { sessionId: activeSessionId, contentId: folder.id, clientId, structureId: selectedStructureId || undefined, modelOverride: selectedModel, promptRaiz: finalPrompt, tone: toneInput || undefined, ...(imagesB64.length ? { images: imagesB64 } : {}), ...(filesB64.length ? { files: filesB64 } : {}) };
 
       const r = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json();
@@ -351,7 +377,7 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
               <div className={styles.sectionHint}>Define o formato e as secoes da copy</div>
               <div className={styles.structGrid}>
                 {structures.map(s => (
-                  <div key={s.id} className={selectedStructureId === s.id ? styles.structCardActive : styles.structCard} onClick={() => setSelectedStructureId(selectedStructureId === s.id ? '' : s.id)}>
+                  <div key={s.id} className={selectedStructureId === s.id ? styles.structCardActive : styles.structCard} onClick={() => handleSelectStructure(s.id)}>
                     <div className={styles.structName}>{s.name}</div>
                     <div className={styles.structDesc}>{s.description}</div>
                   </div>
@@ -362,6 +388,32 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
                   Ativa: {structures.find(s => s.id === selectedStructureId)?.name}
                 </div>
               )}
+              {/* Perguntas-chave da estrutura selecionada */}
+              {selectedStructureId && (() => {
+                const struct = structures.find(s => s.id === selectedStructureId);
+                const qs = struct?.questions || [];
+                if (qs.length === 0) return null;
+                return (
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.48rem', fontWeight: 600, color: 'var(--warning)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Perguntas-chave</div>
+                    {qs.map(q => (
+                      <div key={q.id}>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', color: 'var(--text-secondary)', marginBottom: 2 }}>
+                          {q.label}{q.required && <span style={{ color: 'var(--error)', marginLeft: 2 }}>*</span>}
+                        </div>
+                        <input
+                          className={styles.selectWrap}
+                          type="text"
+                          value={questionAnswers[q.id] || ''}
+                          onChange={e => setQuestionAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                          placeholder={q.placeholder || ''}
+                          style={{ fontSize: '0.58rem' }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Bloco 3: Configuracoes */}

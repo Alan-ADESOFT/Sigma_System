@@ -22,15 +22,15 @@ export default async function handler(req, res) {
 
     // ── POST: cria nova estrutura ──
     if (req.method === 'POST') {
-      const { name, description, prompt_base, icon, sort_order } = req.body;
+      const { name, description, prompt_base, icon, sort_order, questions } = req.body;
       if (!name || !prompt_base) {
         return res.status(400).json({ success: false, error: 'name e prompt_base sao obrigatorios' });
       }
 
       const row = await queryOne(
-        `INSERT INTO copy_structures (tenant_id, name, description, prompt_base, icon, sort_order, is_default)
-         VALUES ($1, $2, $3, $4, $5, $6, false) RETURNING *`,
-        [tenantId, name, description || null, prompt_base, icon || 'file', sort_order || 0]
+        `INSERT INTO copy_structures (tenant_id, name, description, prompt_base, icon, sort_order, is_default, questions)
+         VALUES ($1, $2, $3, $4, $5, $6, false, $7) RETURNING *`,
+        [tenantId, name, description || null, prompt_base, icon || 'file', sort_order || 0, JSON.stringify(questions || [])]
       );
 
       console.log('[SUCESSO][API:structures] Estrutura criada', { id: row.id, name });
@@ -42,7 +42,7 @@ export default async function handler(req, res) {
       const { id } = req.query;
       if (!id) return res.status(400).json({ success: false, error: 'id e obrigatorio' });
 
-      const { name, description, prompt_base, icon, active } = req.body;
+      const { name, description, prompt_base, icon, active, questions } = req.body;
       const sets = [];
       const vals = [];
       let idx = 1;
@@ -52,6 +52,7 @@ export default async function handler(req, res) {
       if (prompt_base !== undefined)  { sets.push(`prompt_base = $${idx++}`); vals.push(prompt_base); }
       if (icon !== undefined)        { sets.push(`icon = $${idx++}`);        vals.push(icon); }
       if (active !== undefined)      { sets.push(`active = $${idx++}`);      vals.push(active); }
+      if (questions !== undefined)   { sets.push(`questions = $${idx++}::jsonb`); vals.push(JSON.stringify(questions)); }
 
       if (sets.length === 0) {
         return res.status(400).json({ success: false, error: 'Nenhum campo para atualizar' });
