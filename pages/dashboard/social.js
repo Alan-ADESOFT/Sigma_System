@@ -53,20 +53,24 @@ function formatDate(dateStr) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   SearchableSelect — select de conta Instagram com barra de pesquisa
+   ClientSelect — select de cliente marketing com barra de pesquisa
 ═══════════════════════════════════════════════════════════════════════════ */
-function SearchableSelect({ accounts, value, onChange, loading }) {
+function clientInitials(name) {
+  return (name || '').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+}
+
+function ClientSelect({ clients, value, onChange, loading }) {
   const [open,   setOpen]   = useState(false);
   const [query,  setQuery]  = useState('');
   const ref                 = useRef(null);
   const inputRef            = useRef(null);
 
-  const selected = accounts.find(a => a.id === value);
+  const selected = clients.find(c => c.id === value);
 
-  const filtered = accounts.filter(a =>
+  const filtered = clients.filter(c =>
     !query ||
-    a.name.toLowerCase().includes(query.toLowerCase()) ||
-    a.handle.toLowerCase().includes(query.toLowerCase())
+    (c.company_name || '').toLowerCase().includes(query.toLowerCase()) ||
+    (c.niche || '').toLowerCase().includes(query.toLowerCase())
   );
 
   /* Fecha ao clicar fora */
@@ -96,25 +100,25 @@ function SearchableSelect({ accounts, value, onChange, loading }) {
       >
         {selected ? (
           <>
-            {selected.avatarUrl ? (
-              <img src={selected.avatarUrl} alt="" className={styles.selectAvatar} />
+            {selected.logo_url ? (
+              <img src={selected.logo_url} alt="" className={styles.selectAvatar} />
             ) : (
-              <div className={styles.selectAvatarPlaceholder}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff0033" strokeWidth="2">
-                  <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-8 8-8s8 4 8 8"/>
-                </svg>
+              <div className={styles.selectAvatarPlaceholder} style={{ background: 'rgba(255,0,51,0.1)', color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700 }}>
+                {clientInitials(selected.company_name)}
               </div>
             )}
             <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {selected.name}
-              <span style={{ color: 'var(--text-muted)', fontSize: 12, marginLeft: 6, fontFamily: 'var(--font-mono)' }}>
-                {selected.handle}
-              </span>
+              {selected.company_name}
+              {selected.niche && (
+                <span style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 6, fontFamily: 'var(--font-mono)' }}>
+                  {selected.niche}
+                </span>
+              )}
             </span>
           </>
         ) : (
           <span style={{ color: 'var(--text-muted)', flex: 1, textAlign: 'left' }}>
-            {loading ? 'Carregando contas...' : accounts.length === 0 ? 'Nenhuma conta conectada' : 'Selecione um Instagram...'}
+            {loading ? 'Carregando clientes...' : clients.length === 0 ? 'Nenhum cliente cadastrado' : 'Selecione uma empresa...'}
           </span>
         )}
 
@@ -130,56 +134,32 @@ function SearchableSelect({ accounts, value, onChange, loading }) {
       {/* Dropdown */}
       {open && (
         <div className={styles.searchSelectDropdown}>
-          {/* Barra de pesquisa */}
           <div className={styles.searchInputWrapper}>
-            <svg
-              className={styles.searchIcon}
-              style={{ top: 14 }}
-              width="13" height="13" viewBox="0 0 24 24"
-              fill="none" stroke="currentColor" strokeWidth="2"
-            >
+            <svg className={styles.searchIcon} style={{ top: 14 }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
-            <input
-              ref={inputRef}
-              className={styles.searchInput}
-              placeholder="Pesquisar empresa ou Instagram..."
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-            />
+            <input ref={inputRef} className={styles.searchInput} placeholder="Pesquisar empresa ou segmento..." value={query} onChange={e => setQuery(e.target.value)} />
           </div>
-
-          {/* Lista */}
           <div className={styles.selectOptionList}>
             {filtered.length === 0 ? (
               <div className={styles.selectEmpty}>
-                {accounts.length === 0
-                  ? '// nenhuma conta conectada'
-                  : '// nenhum resultado encontrado'}
+                {clients.length === 0 ? '// nenhum cliente cadastrado' : '// nenhum resultado encontrado'}
               </div>
             ) : (
-              filtered.map(acc => (
-                <div
-                  key={acc.id}
-                  className={`${styles.selectOption} ${acc.id === value ? styles.selected : ''}`}
-                  onClick={() => { onChange(acc.id); setOpen(false); }}
-                >
-                  {acc.avatarUrl ? (
-                    <img src={acc.avatarUrl} alt="" className={styles.selectAvatar} />
+              filtered.map(c => (
+                <div key={c.id} className={`${styles.selectOption} ${c.id === value ? styles.selected : ''}`} onClick={() => { onChange(c.id); setOpen(false); }}>
+                  {c.logo_url ? (
+                    <img src={c.logo_url} alt="" className={styles.selectAvatar} />
                   ) : (
-                    <div className={styles.selectAvatarPlaceholder}>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ff0033" strokeWidth="2">
-                        <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-8 8-8s8 4 8 8"/>
-                      </svg>
+                    <div className={styles.selectAvatarPlaceholder} style={{ background: 'rgba(255,0,51,0.1)', color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700 }}>
+                      {clientInitials(c.company_name)}
                     </div>
                   )}
                   <div style={{ flex: 1, overflow: 'hidden' }}>
-                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {acc.name}
-                    </div>
-                    <div className={styles.selectOptionHandle}>{acc.handle}</div>
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.company_name}</div>
+                    {c.niche && <div className={styles.selectOptionHandle}>{c.niche}</div>}
                   </div>
-                  {acc.id === value && (
+                  {c.id === value && (
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff0033" strokeWidth="2.5">
                       <polyline points="20 6 9 17 4 12"/>
                     </svg>
@@ -757,45 +737,45 @@ function ContentEditorModal({ folder, account, onClose }) {
 ═══════════════════════════════════════════════════════════════════════════ */
 export default function SocialPage() {
   const { notify } = useNotification();
-  const [accounts,       setAccounts]       = useState([]);
-  const [selectedAccId,  setSelectedAccId]  = useState('');
-  const [folders,        setFolders]        = useState([]);
-  const [loadingAcc,     setLoadingAcc]     = useState(true);
-  const [loadingFolders, setLoadingFolders] = useState(false);
-  const [showNewFolder,  setShowNewFolder]  = useState(false);
-  const [openFolder,     setOpenFolder]     = useState(null);
+  const [clients,          setClients]         = useState([]);
+  const [selectedClientId, setSelectedClientId] = useState('');
+  const [folders,          setFolders]          = useState([]);
+  const [loadingClients,   setLoadingClients]   = useState(true);
+  const [loadingFolders,   setLoadingFolders]   = useState(false);
+  const [showNewFolder,    setShowNewFolder]    = useState(false);
+  const [openFolder,       setOpenFolder]       = useState(null);
 
-  const selectedAccount = accounts.find(a => a.id === selectedAccId);
+  const selectedClient = clients.find(c => c.id === selectedClientId);
 
-  /* Carrega contas */
+  /* Carrega clientes de marketing */
   useEffect(() => {
-    console.log('[INFO][Frontend:Social] Carregando contas Instagram');
-    fetch('/api/accounts')
+    console.log('[INFO][Frontend:Social] Carregando clientes');
+    fetch('/api/clients')
       .then(r => r.json())
       .then(data => {
         if (data.success) {
-          const accs = data.accounts || [];
-          console.log('[SUCESSO][Frontend:Social] Contas carregadas', { count: accs.length });
-          setAccounts(accs);
-          if (accs.length > 0) setSelectedAccId(accs[0].id);
+          const list = data.clients || [];
+          console.log('[SUCESSO][Frontend:Social] Clientes carregados', { count: list.length });
+          setClients(list);
+          if (list.length > 0) setSelectedClientId(list[0].id);
         } else {
-          console.error('[ERRO][Frontend:Social] Falha ao carregar contas', { error: data.error || 'Resposta sem sucesso' });
-          notify('Erro ao carregar contas', 'error');
+          console.error('[ERRO][Frontend:Social] Falha ao carregar clientes', { error: data.error || 'Resposta sem sucesso' });
+          notify('Erro ao carregar clientes', 'error');
         }
       })
       .catch(err => {
-        console.error('[ERRO][Frontend:Social] Erro ao carregar contas', { error: err.message });
-        notify('Erro ao carregar contas', 'error');
+        console.error('[ERRO][Frontend:Social] Erro ao carregar clientes', { error: err.message });
+        notify('Erro ao carregar clientes', 'error');
       })
-      .finally(() => setLoadingAcc(false));
+      .finally(() => setLoadingClients(false));
   }, []);
 
-  /* Carrega pastas ao trocar de conta */
+  /* Carrega pastas ao trocar de cliente */
   useEffect(() => {
-    if (!selectedAccId) { setFolders([]); return; }
+    if (!selectedClientId) { setFolders([]); return; }
     setLoadingFolders(true);
-    console.log('[INFO][Frontend:Social] Carregando pastas da conta', { accountId: selectedAccId });
-    fetch(`/api/social/folders?accountId=${selectedAccId}`)
+    console.log('[INFO][Frontend:Social] Carregando pastas do cliente', { clientId: selectedClientId });
+    fetch(`/api/social/folders?accountId=${selectedClientId}`)
       .then(r => r.json())
       .then(data => {
         if (data.success) {
@@ -833,19 +813,19 @@ export default function SocialPage() {
         <div className={styles.topPanel}>
           <div className={styles.topPanelInner}>
             <div className={styles.topPanelLeft}>
-              <div className={styles.topPanelLabel}>Instagram / Empresa</div>
-              <SearchableSelect
-                accounts={accounts}
-                value={selectedAccId}
-                onChange={setSelectedAccId}
-                loading={loadingAcc}
+              <div className={styles.topPanelLabel}>Empresa</div>
+              <ClientSelect
+                clients={clients}
+                value={selectedClientId}
+                onChange={setSelectedClientId}
+                loading={loadingClients}
               />
             </div>
 
             <button
               className={styles.btnNewFolder}
               onClick={() => setShowNewFolder(true)}
-              disabled={!selectedAccId}
+              disabled={!selectedClientId}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -856,18 +836,18 @@ export default function SocialPage() {
         </div>
 
         {/* ── Grid de pastas / estados ── */}
-        {!selectedAccId ? (
+        {!selectedClientId ? (
           <div className={styles.noAccountState}>
             <div className={styles.emptyIcon}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#525252" strokeWidth="1.5">
                 <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-8 8-8s8 4 8 8"/>
               </svg>
             </div>
-            <div className={styles.emptyTitle}>Selecione um Instagram</div>
-            <div className={styles.emptyDesc}>Escolha uma conta Instagram acima para ver e gerenciar o planejamento de conteúdo.</div>
-            {accounts.length === 0 && (
-              <a href="/dashboard/settings" className={styles.emptyAction}>
-                Conectar conta
+            <div className={styles.emptyTitle}>Selecione uma empresa</div>
+            <div className={styles.emptyDesc}>Escolha um cliente acima para ver e gerenciar as pastas de copy.</div>
+            {clients.length === 0 && (
+              <a href="/dashboard/clients" className={styles.emptyAction}>
+                Cadastrar cliente
               </a>
             )}
           </div>
@@ -918,7 +898,7 @@ export default function SocialPage() {
       {/* ── Modal: nova pasta ── */}
       {showNewFolder && (
         <NewFolderModal
-          accountId={selectedAccId}
+          accountId={selectedClientId}
           onClose={() => setShowNewFolder(false)}
           onCreated={handleFolderCreated}
         />
@@ -928,7 +908,7 @@ export default function SocialPage() {
       {openFolder && (
         <CopyWorkspace
           folder={openFolder}
-          account={selectedAccount}
+          client={selectedClient}
           onClose={() => setOpenFolder(null)}
         />
       )}

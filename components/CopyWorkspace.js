@@ -51,7 +51,7 @@ function mdToHtml(text) {
     .replace(/\n/g, '<br>');
 }
 
-export default function CopyWorkspace({ folder, account, onClose }) {
+export default function CopyWorkspace({ folder, client: clientProp, account, onClose }) {
   const { notify } = useNotification();
   const editorRef = useRef(null);
   const imageInputRef = useRef(null);
@@ -119,7 +119,12 @@ export default function CopyWorkspace({ folder, account, onClose }) {
         setHistory(d.data.history);
         setClients(d.data.clients);
         const s = d.data.session;
-        if (s.client_id) { setSelectedClientId(s.client_id); setKbMode('existing'); }
+        // Pre-seleciona cliente: da sessao salva OU da prop passada pelo social.js
+        if (s.client_id) {
+          setSelectedClientId(s.client_id); setKbMode('existing');
+        } else if (clientProp?.id) {
+          setSelectedClientId(clientProp.id); setKbMode('existing');
+        }
         if (s.structure_id) setSelectedStructureId(s.structure_id);
         if (s.tone) setSelectedTone(s.tone);
         if (s.model_used) setSelectedModel(s.model_used);
@@ -128,7 +133,9 @@ export default function CopyWorkspace({ folder, account, onClose }) {
           setTimeout(() => { if (editorRef.current) editorRef.current.innerHTML = mdToHtml(s.output_text); }, 0);
         }
         setSaved(s.status === 'saved');
-        if (s.client_id) loadKbPreview(s.client_id);
+        // Carrega preview da KB do cliente selecionado
+        const activeClientId = s.client_id || clientProp?.id;
+        if (activeClientId) loadKbPreview(activeClientId);
       }
     } catch (err) {
       console.error('[ERRO][CopyWorkspace] Falha ao carregar sessao', err);
@@ -254,7 +261,7 @@ export default function CopyWorkspace({ folder, account, onClose }) {
           <div className={styles.headerLeft}>
             <span className={styles.badge}>COPY CREATOR</span>
             <span className={styles.folderName}>{folder.name}</span>
-            {account && <span className={styles.accountBadge}>@{account.username}</span>}
+            {clientProp && <span className={styles.accountBadge}>{clientProp.company_name}</span>}
           </div>
           <button className={styles.btnClose} onClick={onClose}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>

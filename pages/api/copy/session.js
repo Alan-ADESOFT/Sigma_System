@@ -28,11 +28,11 @@ export default async function handler(req, res) {
       // Historico da sessao (ultimos 10)
       const history = await getHistory(session.id, 10);
 
-      // Clientes com base de dados completa (form_done=true)
+      // Todos os clientes (para select de base de dados)
       const clients = await query(
-        `SELECT id, company_name, niche, main_product, avg_ticket, form_done
+        `SELECT id, company_name, niche, main_product, avg_ticket, form_done, logo_url
          FROM marketing_clients
-         WHERE tenant_id = $1 AND form_done = true
+         WHERE tenant_id = $1
          ORDER BY company_name ASC`,
         [tenantId]
       );
