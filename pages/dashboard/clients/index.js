@@ -965,7 +965,9 @@ function DeleteConfirm({ client, onClose, onConfirm, deleting }) {
 function ClientRow({ client, onEdit, onDelete, isOdd, notify }) {
   const router   = useRouter();
   const services = Array.isArray(client.services) ? client.services : [];
-  const ticket   = parseTicket(client.avg_ticket);
+  // Prioriza valor mensal do contrato ativo, fallback para avg_ticket manual
+  const contractMonthly = parseFloat(client.contract_monthly_total) || 0;
+  const ticket = contractMonthly > 0 ? contractMonthly : parseTicket(client.avg_ticket);
   const [showWaModal, setShowWaModal] = useState(false);
 
   return (
@@ -1195,7 +1197,10 @@ export default function ClientsPage() {
   const stats = useMemo(() => {
     const active   = clients.filter(c => c.status !== 'inactive');
     const inactive = clients.filter(c => c.status === 'inactive');
-    const valorTotal = active.reduce((acc, c) => acc + parseTicket(c.avg_ticket), 0);
+    const valorTotal = active.reduce((acc, c) => {
+      const cm = parseFloat(c.contract_monthly_total) || 0;
+      return acc + (cm > 0 ? cm : parseTicket(c.avg_ticket));
+    }, 0);
     return { total: clients.length, active: active.length, inactive: inactive.length, valorTotal };
   }, [clients]);
 

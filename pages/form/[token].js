@@ -135,7 +135,6 @@ export default function FormPage() {
       <header className={styles.topBar}>
         <div className={styles.topBarBrand}>
           <img src="/logo.ranca.png" alt="SIGMA" className={styles.topBarLogoImg} />
-          <span className={styles.topBarLogo}>SIGMA</span>
         </div>
         <span className={styles.topBarLabel}>Formulário de Briefing</span>
       </header>

@@ -6,9 +6,15 @@ const STAGE_KEYS = ['diagnosis', 'competitors', 'audience', 'avatar', 'positioni
 
 async function getClientsByTenant(tenantId) {
   return query(
-    `SELECT * FROM marketing_clients
-     WHERE tenant_id = $1
-     ORDER BY created_at DESC`,
+    `SELECT mc.*,
+       COALESCE((
+         SELECT SUM(cc.monthly_value)
+         FROM client_contracts cc
+         WHERE cc.client_id = mc.id AND cc.status = 'active'
+       ), 0) AS contract_monthly_total
+     FROM marketing_clients mc
+     WHERE mc.tenant_id = $1
+     ORDER BY mc.created_at DESC`,
     [tenantId]
   );
 }

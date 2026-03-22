@@ -45,8 +45,7 @@
 }
 
 .topBarLogoImg {
-  width: 28px;
-  height: 28px;
+  height: 36px;
   object-fit: contain;
 }
 
@@ -255,7 +254,7 @@
   background: linear-gradient(145deg, rgba(17, 17, 17, 0.95), rgba(10, 10, 10, 0.98));
   border: 1px solid var(--border-default);
   border-radius: 12px;
-  padding: 20px;
+  padding: 16px;
   position: relative;
   overflow: hidden;
   animation: formFadeInUp 0.4s ease-out both;
@@ -441,6 +440,8 @@
 
 .inputSelect {
   cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23525252' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -450,6 +451,7 @@
 
 .inputNumber {
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .inputNumber::-webkit-inner-spin-button,
@@ -470,14 +472,14 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   background: rgba(17, 17, 17, 0.6);
   border: 1px solid var(--border-default);
   border-radius: 8px;
   cursor: pointer;
   transition: border-color 0.2s ease, background 0.2s ease;
-  /* Touch target mínimo 44px */
-  min-height: 44px;
+  /* Touch target mínimo 48px */
+  min-height: 48px;
 }
 
 .radioOption:hover {
@@ -540,13 +542,13 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   background: rgba(17, 17, 17, 0.6);
   border: 1px solid var(--border-default);
   border-radius: 8px;
   cursor: pointer;
   transition: border-color 0.2s ease, background 0.2s ease;
-  min-height: 44px;
+  min-height: 48px;
 }
 
 .checkboxOption:hover {
@@ -734,34 +736,41 @@
 }
 
 .welcomeLogoContainer {
-  width: 72px;
-  height: 72px;
-  border-radius: 14px;
-  background: rgba(255, 0, 51, 0.06);
-  border: 1px solid rgba(255, 0, 51, 0.25);
+  width: 96px;
+  height: 96px;
+  border-radius: 16px;
+  background: rgba(255, 0, 51, 0.05);
+  border: 1px solid rgba(255, 0, 51, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 24px;
-  box-shadow: 0 0 24px rgba(255, 0, 51, 0.12);
+  margin-bottom: 32px;
+  box-shadow: 0 0 32px rgba(255, 0, 51, 0.15), 0 0 64px rgba(255, 0, 51, 0.05);
 }
 
 .welcomeLogoImg {
-  width: 52px;
-  height: 52px;
+  width: 72px;
+  height: 72px;
   object-fit: contain;
+  filter: drop-shadow(0 0 12px rgba(255,0,51,0.4));
 }
 
 .welcomeTitle {
   font-family: var(--font-mono);
-  font-size: 1.3rem;
-  font-weight: 700;
-  line-height: 1.5;
+  font-size: 1.4rem;
+  font-weight: 800;
+  line-height: 1.4;
   margin-bottom: 20px;
+  color: var(--text-primary);
+  text-shadow: 0 0 8px rgba(255,0,51,0.2);
+}
+
+.welcomeTitle span {
   background: linear-gradient(135deg, #ff0033, #ff6680);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  text-shadow: none;
 }
 
 @media (min-width: 640px) {
@@ -780,10 +789,13 @@
 }
 
 .welcomeDivider {
-  width: 60px;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(255, 0, 51, 0.4), transparent);
-  margin: 20px auto;
+  width: 100%;
+  max-width: 120px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,0,51,0.4) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: dividerSweep 4s linear infinite;
+  margin: 28px auto;
 }
 
 .welcomeList {
@@ -938,21 +950,23 @@
 }
 
 .thankYouLogoContainer {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
-  background: rgba(255, 0, 51, 0.06);
-  border: 1px solid rgba(255, 0, 51, 0.2);
+  width: 80px;
+  height: 80px;
+  border-radius: 16px;
+  background: rgba(255, 0, 51, 0.05);
+  border: 1px solid rgba(255, 0, 51, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 8px;
+  margin-bottom: 24px;
+  box-shadow: 0 0 32px rgba(255, 0, 51, 0.15);
 }
 
 .thankYouLogoImg {
-  width: 40px;
-  height: 40px;
+  width: 56px;
+  height: 56px;
   object-fit: contain;
+  filter: drop-shadow(0 0 12px rgba(255,0,51,0.4));
 }
 
 .thankYouBody {

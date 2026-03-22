@@ -89,6 +89,21 @@ function TabIcon({ d }) {
   );
 }
 
+/* Box "Como funciona" — reutilizado em todas as abas (exceto Info) */
+function HowItWorks({ children }) {
+  return (
+    <div style={{
+      padding: '12px 16px', borderRadius: 8, marginBottom: 22,
+      background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.15)',
+    }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.63rem', color: 'rgba(165,180,252,0.75)', lineHeight: 1.75 }}>
+        <strong style={{ color: 'rgba(165,180,252,0.95)', display: 'block', marginBottom: 4 }}>Como funciona</strong>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function Label({ children }) {
   return (
     <div style={{
@@ -466,6 +481,11 @@ function TabRespostas({ clientId, client }) {
   // ── Estado: nunca enviou ──
   if (!status || status.formStatus === 'not_sent') {
     return (
+      <div>
+      <HowItWorks>
+        Envie o formulário de briefing para o cliente responder. As respostas serão usadas para construir a estratégia de marketing.
+        O link é válido por 7 dias e pode ser enviado via WhatsApp diretamente pelo sistema.
+      </HowItWorks>
       <div style={{ padding: '40px 0', textAlign: 'center' }}>
         <div className="glass-card" style={{ maxWidth: 480, margin: '0 auto', padding: '40px 32px' }}>
           <div style={{
@@ -485,6 +505,7 @@ function TabRespostas({ clientId, client }) {
           </p>
           <SendFormButton client={client} onSent={() => loadStatus()} />
         </div>
+      </div>
       </div>
     );
   }
@@ -1515,6 +1536,12 @@ function TabDatabase({ client, stages, onStageUpdated }) {
 
   return (
     <div>
+      <HowItWorks>
+        Aqui você acompanha as 6 etapas de inteligência estratégica do seu negócio.
+        Cada etapa é processada pela nossa IA com base nas informações coletadas.
+        Clique em uma etapa para visualizar ou iniciar a análise.
+      </HowItWorks>
+
       {/* Barra de progresso */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 22 }}>
         <div style={{ flex: 1, height: 3, background: 'rgba(255,255,255,0.04)', borderRadius: 3, overflow: 'hidden' }}>
@@ -1688,6 +1715,11 @@ function TabAnexos({ clientId }) {
 
   return (
     <div style={{ maxWidth: 720 }}>
+      <HowItWorks>
+        Envie arquivos importantes do cliente: contratos, briefings, logos, materiais de referência.
+        Tamanho máximo de 10 MB por arquivo. Todos os anexos ficam organizados por data de envio.
+      </HowItWorks>
+
       {/* Formulário de upload */}
       <div className="glass-card" style={{ padding: '18px 20px', marginBottom: 20 }}>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 14 }}>
@@ -1887,6 +1919,11 @@ function TabObservacoes({ clientId }) {
 
   return (
     <div style={{ maxWidth: 680 }}>
+      <HowItWorks>
+        Registre anotações, insights e pontos importantes sobre o cliente.
+        Use para guardar informações de reuniões, decisões e lembretes. Pressione ⌘Enter para salvar rapidamente.
+      </HowItWorks>
+
       {/* Nova observação */}
       <div className="glass-card" style={{ padding: '16px 18px', marginBottom: 18 }}>
         <Label>Nova observação</Label>
@@ -2196,17 +2233,10 @@ function TabFinanceiro({ clientId, clientServices }) {
 
   return (
     <div style={{ maxWidth: 820 }}>
-      {/* Info box */}
-      <div style={{
-        padding: '12px 16px', borderRadius: 8, marginBottom: 22,
-        background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.15)',
-      }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.63rem', color: 'rgba(165,180,252,0.75)', lineHeight: 1.75 }}>
-          <strong style={{ color: 'rgba(165,180,252,0.95)', display: 'block', marginBottom: 4 }}>Como funciona</strong>
-          Cada contrato é vinculado a serviços específicos. As parcelas são geradas automaticamente (valor mensal x quantidade).
-          Você pode ter múltiplos contratos por cliente. Parcelas vencidas são marcadas como <strong style={{ color: '#f97316' }}>Atrasadas</strong> automaticamente.
-        </div>
-      </div>
+      <HowItWorks>
+        Cada contrato é vinculado a serviços específicos. As parcelas são geradas automaticamente (valor mensal x quantidade).
+        Você pode ter múltiplos contratos por cliente. Parcelas vencidas são marcadas como <strong style={{ color: '#f97316' }}>Atrasadas</strong> automaticamente.
+      </HowItWorks>
 
       {/* KPIs */}
       {contracts.length > 0 && (

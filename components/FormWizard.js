@@ -648,7 +648,7 @@ function WelcomeScreen({ onStart }) {
         <h1 className={styles.welcomeTitle}>
           Você não contratou uma agência.
           <br />
-          Contratou estratégia.
+          Contratou <span>estratégia.</span>
         </h1>
 
         <p className={styles.welcomeBody}>
@@ -680,7 +680,7 @@ function WelcomeScreen({ onStart }) {
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
             <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
-          <span>Resposta rasa = estratégia genérica.</span>
+          <span>AVISO: Resposta rasa = estratégia genérica.</span>
         </div>
 
         <button className={styles.welcomeBtn} onClick={onStart}>
@@ -711,7 +711,9 @@ function ThankYouScreen() {
         </svg>
       </div>
 
-      <h1 className={styles.thankYouTitle}>Recebemos tudo.</h1>
+      <div className={styles.welcomeDivider} />
+
+      <h1 className={styles.thankYouTitle}>&gt; Recebemos tudo.</h1>
 
       <p className={styles.thankYouSubtitle}>
         Isso não foi um questionário. Foi o primeiro movimento

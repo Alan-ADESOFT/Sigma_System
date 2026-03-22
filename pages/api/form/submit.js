@@ -38,26 +38,8 @@ export default async function handler(req, res) {
     // Submete o formulário (salva dados + marca token como usado)
     await submitForm(tokenId, clientId, tenantId, data);
 
-    // Atualiza campos básicos do cliente com dados vindos do formulário
-    // Os campos dependem das chaves usadas no wizard — adaptar conforme as perguntas
-    const updates = {};
-    if (data['1.1']) updates.company_name = data['1.1'];
-    if (data['1.2']) updates.niche = data['1.2'];
-    if (data['1.3']) updates.main_product = data['1.3'];
-    if (data['1.4']) updates.product_description = data['1.4'];
-    if (data['1.5']) updates.email = data['1.5'];
-    if (data['1.6']) updates.phone = data['1.6'];
-
-    const fields = Object.keys(updates);
-    if (fields.length > 0) {
-      const sets = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
-      const vals = fields.map(f => updates[f]);
-      await query(
-        `UPDATE marketing_clients SET ${sets}, updated_at = now() WHERE id = $1`,
-        [clientId, ...vals]
-      );
-      console.log('[INFO][API:/api/form/submit] Dados do cliente atualizados', { clientId, fields });
-    }
+    // As respostas ficam em client_form_responses — NÃO sobrescrevem
+    // os dados de marketing_clients (cadastro base do operador)
 
     // Notifica o operador
     await createNotification(
