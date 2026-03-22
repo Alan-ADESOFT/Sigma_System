@@ -12,6 +12,7 @@ import { resolveTenantId } from '../../../../infra/get-tenant-id';
 import { query, queryOne } from '../../../../infra/db';
 import { orchestrate }     from '../../../../models/agentes/copycreator/orchestrator';
 import { getExecutionOrder } from '../../../../models/agentes/copycreator/pipelineConfig';
+import { resolveModel }     from '../../../../models/ia/completion';
 import { createJobEmitter } from '../../../../infra/pipelineEmitter';
 
 /**
@@ -162,14 +163,43 @@ async function runPipeline(tenantId, clientId, client, jobId) {
         context: { '{DADOS_CLIENTE}': clientJson },
       });
 
+      // Formata o output via modelo de formatacao (agentes de pesquisa nao formatam)
+      let finalText = result.text;
+      if (result.type !== 'search') {
+        try {
+          const fmtModel = resolveModel('weak');
+          const fmtKey = process.env.OPENAI_API_KEY;
+          if (fmtKey) {
+            const fmtR = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: { 'Authorization': 'Bearer ' + fmtKey, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: fmtModel, max_tokens: 4000,
+                messages: [
+                  { role: 'system', content: 'Voce e um formatador de texto. Formate o texto recebido usando ## para titulos, ### para subtitulos, **negrito** para termos importantes, *italico* para enfase, - para listas. NAO altere o conteudo. Retorne apenas o texto formatado.' },
+                  { role: 'user', content: result.text },
+                ],
+              }),
+            });
+            if (fmtR.ok) {
+              const fmtD = await fmtR.json();
+              const formatted = fmtD.choices?.[0]?.message?.content;
+              if (formatted && formatted.length > 100) finalText = formatted;
+            }
+          }
+        } catch (fmtErr) {
+          console.warn('[WARNING][Pipeline] Formatacao falhou, usando texto bruto', { agentName, error: fmtErr.message });
+        }
+      }
+
       // Salva no marketing_stages como in_progress (rascunho para revisao)
-      const notesHtml = markdownToHtml(result.text);
+      const notesHtml = markdownToHtml(finalText);
       await queryOne(
         `INSERT INTO marketing_stages (client_id, stage_key, status, data, notes)
          VALUES ($1, $2, 'in_progress', $3, $4)
          ON CONFLICT (client_id, stage_key)
          DO UPDATE SET status = 'in_progress', data = EXCLUDED.data, notes = EXCLUDED.notes, updated_at = now()`,
-        [clientId, config.stageKey, JSON.stringify({ agentOutput: result.text, agentName, generatedAt: new Date().toISOString() }), notesHtml]
+        [clientId, config.stageKey, JSON.stringify({ agentOutput: finalText, agentName, generatedAt: new Date().toISOString() }), notesHtml]
       );
 
       // Salva versão snapshot (stage_versions)

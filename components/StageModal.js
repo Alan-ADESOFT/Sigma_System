@@ -214,15 +214,37 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
   }
 
   async function handleImproveText() {
+    const sel = window.getSelection();
+    const selectedText = sel?.toString()?.trim();
     const fullText = editorRef.current?.innerText?.trim();
-    if (!fullText) { notify('Nenhum texto para melhorar', 'warning'); return; }
+    if (!selectedText && !fullText) { notify('Nenhum texto para melhorar', 'warning'); return; }
+
     setImproving(true);
     try {
-      const r = await fetch('/api/agentes/apply-modification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, stageKey: meta.key, operatorPrompt: 'Melhore a escrita deste texto. Corrija gramatica, ortografia e melhore a clareza sem mudar o significado. Retorne APENAS o texto melhorado.', currentOutput: fullText }) });
-      const d = await r.json();
-      if (!d.success) throw new Error(d.error);
-      if (editorRef.current) { editorRef.current.innerHTML = mdToHtml(d.data.text); setSavedN(false); }
-      notify('Escrita melhorada!', 'success');
+      if (selectedText) {
+        // Modo selecao: melhora apenas o trecho selecionado
+        const r = await fetch('/api/agentes/improve-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: selectedText, mode: 'selection' }) });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error);
+        // Substitui apenas a selecao
+        if (sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0);
+          range.deleteContents();
+          const span = document.createElement('span');
+          span.innerHTML = mdToHtml(d.data.text);
+          range.insertNode(span);
+          sel.removeAllRanges();
+        }
+        setSavedN(false);
+        notify('Trecho melhorado!', 'success');
+      } else {
+        // Modo full: corrige apenas acentos, semantica e conjugacoes
+        const r = await fetch('/api/agentes/improve-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: fullText, mode: 'full' }) });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.error);
+        if (editorRef.current) { editorRef.current.innerHTML = mdToHtml(d.data.text); setSavedN(false); }
+        notify('Texto corrigido!', 'success');
+      }
     } catch (err) { notify('Erro: ' + err.message, 'error'); }
     finally { setImproving(false); }
   }
@@ -241,9 +263,15 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
       const r = await fetch('/api/agentes/apply-modification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, stageKey: meta.key, operatorPrompt: userPrompt, currentOutput, chatHistory, ...(imagesB64.length ? { images: imagesB64 } : {}), ...(filesB64.length ? { files: filesB64 } : {}) }) });
       const d = await r.json();
       if (!d.success) throw new Error(d.error);
-      if (editorRef.current) { editorRef.current.innerHTML = mdToHtml(d.data.text); editorRef.current.scrollTop = 0; setSavedN(false); }
-      // Acumula no histórico de conversa (últimas 6 trocas)
-      setChatHistory(prev => [...prev, { role: 'user', content: userPrompt }, { role: 'assistant', content: d.data.text }].slice(-12));
+      let outputText = d.data.text;
+      // Formata o output via modelo de formatacao
+      try {
+        const fmtR = await fetch('/api/agentes/format-output', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: outputText }) });
+        const fmtD = await fmtR.json();
+        if (fmtD.success && fmtD.data?.text) outputText = fmtD.data.text;
+      } catch {}
+      if (editorRef.current) { editorRef.current.innerHTML = mdToHtml(outputText); editorRef.current.scrollTop = 0; setSavedN(false); }
+      setChatHistory(prev => [...prev, { role: 'user', content: userPrompt }, { role: 'assistant', content: outputText }].slice(-12));
       setPromptInput('');
       notify('Modificacao aplicada!', 'success');
     } catch (err) { notify('Erro: ' + err.message, 'error'); }
@@ -453,9 +481,9 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: '#ff6680' }}>Modificar com IA</span>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.48rem', color: 'var(--text-muted)' }}>Peca modificacoes no output acima</span>
               </div>
-              <textarea value={promptInput} onChange={e => setPromptInput(e.target.value.slice(0, 500))} placeholder={phVisible ? PROMPT_PLACEHOLDERS[placeholderIdx] : ''} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleApplyModification(); } }} style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: 'rgba(10,10,10,0.6)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)', lineHeight: 1.5, outline: 'none', resize: 'none', height: 80, transition: 'border-color 0.2s' }} onFocus={e => { e.target.style.borderColor = 'rgba(255,0,51,0.25)'; }} onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.07)'; }} />
+              <textarea value={promptInput} onChange={e => setPromptInput(e.target.value.slice(0, 900000))} placeholder={phVisible ? PROMPT_PLACEHOLDERS[placeholderIdx] : ''} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleApplyModification(); } }} style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: 'rgba(10,10,10,0.6)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)', lineHeight: 1.5, outline: 'none', resize: 'none', height: 80, transition: 'border-color 0.2s' }} onFocus={e => { e.target.style.borderColor = 'rgba(255,0,51,0.25)'; }} onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.07)'; }} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.48rem', color: 'var(--text-muted)' }}>{promptInput.length} / 500</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.48rem', color: 'var(--text-muted)' }}>{promptInput.length > 0 ? promptInput.length.toLocaleString() + ' chars' : ''}</span>
                 <button onClick={handleApplyModification} disabled={!promptInput.trim() || applying} style={{ padding: '7px 16px', borderRadius: 6, border: 'none', cursor: !promptInput.trim() || applying ? 'not-allowed' : 'pointer', background: !promptInput.trim() || applying ? 'rgba(255,0,51,0.15)' : 'linear-gradient(135deg, #ff0033, #cc0029)', color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 700, opacity: !promptInput.trim() || applying ? 0.4 : 1, transition: 'all 0.2s', boxShadow: promptInput.trim() && !applying ? '0 0 12px rgba(255,0,51,0.2)' : 'none' }}>
                   {applying ? 'Aplicando...' : 'Aplicar >'}
                 </button>

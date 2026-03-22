@@ -611,7 +611,7 @@ export default function DatabasePage() {
             border: '1px solid rgba(255,255,255,0.06)',
           }}>
             {/* Header com icone */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
               <div style={{
                 width: 48, height: 48, borderRadius: 12, flexShrink: 0,
                 background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.2)',
@@ -635,7 +635,7 @@ export default function DatabasePage() {
             <div style={{
               fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600,
               letterSpacing: '0.06em', textTransform: 'uppercase',
-              color: 'var(--text-muted)', marginBottom: 10,
+              color: 'var(--text-muted)', marginBottom: 12,
             }}>
               DIGITE <span style={{ color: '#ff3333' }}>APAGAR BASE</span> PARA CONFIRMAR
             </div>
@@ -651,7 +651,7 @@ export default function DatabasePage() {
             />
 
             {/* Botoes */}
-            <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => setResetClient(null)} style={{
                 flex: 1, padding: '12px 0', borderRadius: 8, cursor: 'pointer',
                 background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)',
