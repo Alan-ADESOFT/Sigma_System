@@ -19,6 +19,7 @@ import { runCompletion, resolveModel } from '../../../models/ia/completion';
 import { withMarkdown } from '../../../models/ia/markdownHelper';
 import { updateSession, saveToHistory } from '../../../models/copy/copySession';
 import { extractFromFile } from '../../../infra/api/fileReader';
+import { buildModifySystem, formatCopyOutput } from '../../../models/copy/copyPrompt';
 
 export const config = {
   api: { bodyParser: { sizeLimit: '30mb' } },
@@ -47,26 +48,12 @@ export default async function handler(req, res) {
         [clientId, tenantId]
       );
       if (client) {
-        clientContext = `\nCliente: ${client.company_name} | Nicho: ${client.niche || 'N/A'} | Produto: ${client.main_product || 'N/A'}`;
+        clientContext = `Cliente: ${client.company_name} | Nicho: ${client.niche || 'N/A'} | Produto: ${client.main_product || 'N/A'}`;
       }
     }
 
-    // System prompt
-    let systemPrompt = `Voce e um copywriter estrategico da agencia Sigma.
-O operador vai pedir uma modificacao na copy atual.
-
-REGRAS:
-1. SEMPRE retorne o TEXTO COMPLETO da copy, nao apenas o trecho modificado.
-2. Se pedir para adicionar: retorne TODO o texto + trecho novo.
-3. Se pedir para trocar: retorne TODO o texto com a parte trocada.
-4. Se pedir para remover: retorne TODO o texto sem a parte removida.
-5. Mantenha a formatacao, estrutura e secoes do texto original.
-${clientContext}
-
-COPY ATUAL (aplique as modificacoes SOBRE este texto):
-${currentOutput || '(vazio)'}`;
-
-    // Arquivos
+    // Processa arquivos
+    let filesContent = '';
     if (files?.length) {
       const fileTexts = [];
       for (const file of files) {
@@ -77,12 +64,11 @@ ${currentOutput || '(vazio)'}`;
           fileTexts.push(`[${file.fileName}]\n${result.text.substring(0, 3000)}`);
         }
       }
-      if (fileTexts.length) {
-        systemPrompt += `\n\nDOCUMENTOS ANEXADOS:\n${fileTexts.join('\n---\n')}`;
-      }
+      if (fileTexts.length) filesContent = fileTexts.join('\n---\n');
     }
 
-    // Imagens
+    // Processa imagens
+    let imagesDescription = '';
     if (images?.length) {
       const { analyzeMultipleImages } = require('../../../infra/api/vision');
       const imageUrls = images.map(img => img.base64);
@@ -91,17 +77,22 @@ ${currentOutput || '(vazio)'}`;
         'Descreva as imagens para uso em copywriting.',
         { detail: 'high' }
       );
-      if (visionResult.analysis) {
-        systemPrompt += `\n\nIMAGENS ANEXADAS:\n${visionResult.analysis}`;
-      }
+      if (visionResult.analysis) imagesDescription = visionResult.analysis;
     }
 
+    // System prompt via copyPrompt model
+    let systemPrompt = buildModifySystem({
+      currentOutput, clientContext, imagesDescription, filesContent,
+    });
     systemPrompt = withMarkdown(systemPrompt);
 
     // Chama IA
     const result = await runCompletion('medium', systemPrompt, instruction, 4000, {
       tenantId, clientId, sessionId, operationType: 'copy_modify',
     });
+
+    // Formatacao via IA (pos-geracao)
+    result.text = await formatCopyOutput(result.text);
 
     // Salva na sessao
     await updateSession(sessionId, { output_text: result.text });

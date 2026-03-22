@@ -85,7 +85,7 @@ async function createChat(folderId, tenantId, clientId, title) {
 async function updateSession(sessionId, fields) {
   console.log('[INFO][CopySession] updateSession', { sessionId, fields: Object.keys(fields) });
 
-  const ALLOWED = ['client_id', 'structure_id', 'model_used', 'prompt_raiz', 'output_text', 'tone', 'status', 'metadata'];
+  const ALLOWED = ['client_id', 'structure_id', 'model_used', 'prompt_raiz', 'output_text', 'tone', 'status', 'metadata', 'title'];
   const sets = [];
   const vals = [];
   let idx = 1;
@@ -183,12 +183,26 @@ async function getStructures(tenantId) {
   return rows;
 }
 
+/**
+ * Apaga uma sessao e seu historico
+ * @param {string} sessionId - ID da sessao
+ * @returns {Promise<object|null>} Sessao apagada ou null
+ */
+async function deleteSession(sessionId) {
+  console.log('[INFO][CopySession] deleteSession', { sessionId });
+  await query('DELETE FROM copy_history WHERE session_id = $1', [sessionId]);
+  const deleted = await queryOne('DELETE FROM copy_sessions WHERE id = $1 RETURNING *', [sessionId]);
+  console.log('[SUCESSO][CopySession] Sessao apagada', { sessionId });
+  return deleted;
+}
+
 // ── Exports ──────────────────────────────────────────────────
 
 module.exports = {
   getOrCreateSession,
   createChat,
   updateSession,
+  deleteSession,
   saveToHistory,
   getHistory,
   getStructures,

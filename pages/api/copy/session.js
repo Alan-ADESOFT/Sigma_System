@@ -7,7 +7,7 @@
 
 import { resolveTenantId } from '../../../infra/get-tenant-id';
 import { query } from '../../../infra/db';
-import { getOrCreateSession, createChat, updateSession, getHistory, getStructures } from '../../../models/copy/copySession';
+import { getOrCreateSession, createChat, updateSession, deleteSession, getHistory, getStructures } from '../../../models/copy/copySession';
 
 export default async function handler(req, res) {
   const tenantId = await resolveTenantId(req);
@@ -57,6 +57,19 @@ export default async function handler(req, res) {
       if (!updated) return res.status(404).json({ success: false, error: 'Sessao nao encontrada' });
 
       return res.json({ success: true, data: updated });
+    }
+
+    // ── DELETE: apaga uma sessao ──
+    if (req.method === 'DELETE') {
+      const { sessionId } = req.query;
+      if (!sessionId) return res.status(400).json({ success: false, error: 'sessionId e obrigatorio' });
+
+      console.log('[INFO][API:copy/session] DELETE sessao', { sessionId });
+
+      const deleted = await deleteSession(sessionId);
+      if (!deleted) return res.status(404).json({ success: false, error: 'Sessao nao encontrada' });
+
+      return res.json({ success: true, data: deleted });
     }
 
     return res.status(405).json({ success: false, error: 'Metodo nao permitido' });

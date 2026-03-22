@@ -24,6 +24,7 @@ import { runCompletion, resolveModel } from '../../../models/ia/completion';
 import { withMarkdown } from '../../../models/ia/markdownHelper';
 import { updateSession, saveToHistory } from '../../../models/copy/copySession';
 import { extractFromFile } from '../../../infra/api/fileReader';
+import { buildGenerateSystem, buildGenerateUserMessage, formatCopyOutput } from '../../../models/copy/copyPrompt';
 
 export const config = {
   api: { bodyParser: { sizeLimit: '30mb' } },
@@ -51,14 +52,16 @@ export default async function handler(req, res) {
     console.log('[INFO][API:copy/generate] Gerando copy', { sessionId, clientId, structureId });
 
     // 1. Carrega estrutura (se selecionada)
-    let structurePrompt = '';
+    let structureName = '';
+    let structurePromptBase = '';
     if (structureId) {
       const structure = await queryOne(
         'SELECT name, prompt_base FROM copy_structures WHERE id = $1 AND tenant_id = $2',
         [structureId, tenantId]
       );
       if (structure) {
-        structurePrompt = `\nESTRUTURA SOLICITADA: ${structure.name}\n${structure.prompt_base}\n`;
+        structureName = structure.name;
+        structurePromptBase = structure.prompt_base;
       }
     }
 
@@ -97,26 +100,8 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3. Tom de voz
-    const toneInstruction = tone
-      ? `\nTOM DE VOZ: Escreva com tom ${tone}. Adapte a linguagem de acordo.`
-      : '';
-
-    // 4. Monta system prompt completo
-    let systemPrompt = `Voce e um copywriter estrategico da agencia Sigma.
-Sua missao e criar copies profissionais, persuasivas e personalizadas
-com base nos dados estrategicos do cliente.
-${structurePrompt}${toneInstruction}${clientSummary}${kbContext}
-
-FORMATACAO:
-- Use ## para titulos e ### para subtitulos
-- Use **negrito** para destaques e termos importantes
-- Use *italico* para enfase
-- Use - para listas
-- Paragrafos curtos com espaco entre eles
-- NAO use blocos de codigo, tabelas HTML ou > citacoes`;
-
-    // 5. Processa arquivos anexados
+    // 3. Processa arquivos anexados
+    let filesContent = '';
     if (files?.length) {
       console.log('[INFO][API:copy/generate] Processando arquivos', { count: files.length });
       const fileTexts = [];
@@ -128,12 +113,11 @@ FORMATACAO:
           fileTexts.push(`[${file.fileName}]\n${result.text.substring(0, 3000)}`);
         }
       }
-      if (fileTexts.length) {
-        systemPrompt += `\n\nDOCUMENTOS ANEXADOS:\n${fileTexts.join('\n---\n')}`;
-      }
+      if (fileTexts.length) filesContent = fileTexts.join('\n---\n');
     }
 
-    // 6. Processa imagens
+    // 4. Processa imagens
+    let imagesDescription = '';
     if (images?.length) {
       console.log('[INFO][API:copy/generate] Processando imagens', { count: images.length });
       const { analyzeMultipleImages } = require('../../../infra/api/vision');
@@ -143,15 +127,23 @@ FORMATACAO:
         'Descreva as imagens para uso em copywriting de marketing.',
         { detail: 'high' }
       );
-      if (visionResult.analysis) {
-        systemPrompt += `\n\nIMAGENS ANEXADAS:\n${visionResult.analysis}`;
-      }
+      if (visionResult.analysis) imagesDescription = visionResult.analysis;
     }
 
+    // 5. Monta system prompt via copyPrompt model
+    let systemPrompt = buildGenerateSystem({
+      clientSummary, kbContext,
+      structureName, structurePrompt: structurePromptBase,
+      tone, imagesDescription, filesContent,
+    });
     systemPrompt = withMarkdown(systemPrompt);
 
+    // 6. Monta user message
+    // Se tem estrutura → texto do usuario = pedidos extras do operador
+    // Se nao tem → texto do usuario = instrucao principal
+    const userMessage = buildGenerateUserMessage(promptRaiz, !!structurePromptBase);
+
     // 7. Chama IA
-    const modelLevel = modelOverride ? null : 'medium';
     const model = modelOverride || resolveModel('medium');
     const provider = model.toLowerCase().includes('claude') ? 'Anthropic' : 'OpenAI';
 
@@ -161,7 +153,7 @@ FORMATACAO:
       const apiModule = provider === 'Anthropic'
         ? require('../../../infra/api/anthropic')
         : require('../../../infra/api/openai');
-      const result = await apiModule.generateCompletion(model, systemPrompt, promptRaiz, 4000);
+      const result = await apiModule.generateCompletion(model, systemPrompt, userMessage, 4000);
       text = result.text;
       usage = result.usage;
 
@@ -173,14 +165,17 @@ FORMATACAO:
         tokensInput: usage.input, tokensOutput: usage.output,
       });
     } else {
-      const result = await runCompletion('medium', systemPrompt, promptRaiz, 4000, {
+      const result = await runCompletion('medium', systemPrompt, userMessage, 4000, {
         tenantId, clientId, sessionId, operationType: 'copy_generate',
       });
       text = result.text;
       usage = result.usage;
     }
 
-    // 8. Salva na sessao
+    // 8. Formatacao via IA (pos-geracao)
+    text = await formatCopyOutput(text);
+
+    // 9. Salva na sessao
     await updateSession(sessionId, {
       client_id: clientId || null,
       structure_id: structureId || null,

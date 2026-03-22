@@ -88,6 +88,9 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
   // ── Popups ──
   const [showHistory, setShowHistory] = useState(false);
   const [viewingHistoryItem, setViewingHistoryItem] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [renamingChatId, setRenamingChatId] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
 
   const activeSession = sessions.find(s => s.id === activeSessionId);
   const clientId = clientProp?.id || null;
@@ -97,10 +100,16 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
   useEffect(() => { loadSession(); }, [folder.id]);
 
   useEffect(() => {
-    const h = e => { if (e.key === 'Escape' && !showHistory) onClose(); };
+    const h = e => {
+      if (e.key === 'Escape') {
+        if (contextMenu) { setContextMenu(null); return; }
+        if (renamingChatId) { setRenamingChatId(null); return; }
+        if (!showHistory) onClose();
+      }
+    };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [onClose, showHistory]);
+  }, [onClose, showHistory, contextMenu, renamingChatId]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -200,6 +209,38 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
         notify('Novo chat criado', 'success');
       }
     } catch { notify('Erro ao criar chat', 'error'); }
+  }
+
+  async function renameChat(sessionId, newTitle) {
+    if (!newTitle?.trim()) { setRenamingChatId(null); return; }
+    try {
+      const r = await fetch('/api/copy/session?sessionId=' + sessionId, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle.trim() }),
+      });
+      const d = await r.json();
+      if (d.success) {
+        setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, title: newTitle.trim() } : s));
+        notify('Chat renomeado', 'success');
+      }
+    } catch { notify('Erro ao renomear', 'error'); }
+    finally { setRenamingChatId(null); setRenameValue(''); }
+  }
+
+  async function deleteChat(sessionId) {
+    if (sessions.length <= 1) { notify('Nao e possivel apagar o unico chat', 'warning'); return; }
+    try {
+      const r = await fetch('/api/copy/session?sessionId=' + sessionId, { method: 'DELETE' });
+      const d = await r.json();
+      if (d.success) {
+        const remaining = sessions.filter(s => s.id !== sessionId);
+        setSessions(remaining);
+        if (activeSessionId === sessionId && remaining.length > 0) {
+          switchChat(remaining[remaining.length - 1].id);
+        }
+        notify('Chat apagado', 'success');
+      }
+    } catch { notify('Erro ao apagar chat', 'error'); }
   }
 
   async function loadKbPreview(cId) {
@@ -471,6 +512,39 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
                 )}
               </div>
             </div>
+
+            {/* Bloco 5: Historico (colapsavel) */}
+            <div className={styles.sidebarBlock}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }} onClick={() => setShowHistory(v => !v)}>
+                <div className={styles.sectionLabel}>HISTORICO</div>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" style={{ transform: showHistory ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}><polyline points="6,9 12,15 18,9" /></svg>
+              </div>
+              {showHistory && (
+                <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {history.length === 0 && <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', padding: 8, textAlign: 'center' }}>Nenhuma geracao neste chat</div>}
+                  {history.map(item => (
+                    <div key={item.id}>
+                      <div onClick={() => setViewingHistoryItem(viewingHistoryItem?.id === item.id ? null : item)} style={{ padding: '6px 8px', borderRadius: 6, cursor: 'pointer', background: viewingHistoryItem?.id === item.id ? 'rgba(255,0,51,0.04)' : 'rgba(255,255,255,0.015)', border: '1px solid ' + (viewingHistoryItem?.id === item.id ? 'rgba(255,0,51,0.15)' : 'rgba(255,255,255,0.05)'), transition: 'all 0.15s' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.48rem', color: 'var(--text-muted)' }}>{new Date(item.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.42rem', fontWeight: 600, padding: '0 4px', borderRadius: 3, background: item.action === 'generate' ? 'rgba(34,197,94,0.08)' : 'rgba(59,130,246,0.08)', color: item.action === 'generate' ? 'var(--success)' : 'var(--info)' }}>{item.action}</span>
+                          {item.tokens_total && <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.42rem', color: 'var(--text-muted)' }}>~{item.tokens_total} tk</span>}
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: 'var(--text-secondary)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{(item.output_text || '').substring(0, 120)}</div>
+                      </div>
+                      {viewingHistoryItem?.id === item.id && (
+                        <div style={{ padding: '8px', marginTop: -1, borderRadius: '0 0 6px 6px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderTop: 'none' }}>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.54rem', lineHeight: 1.6, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', maxHeight: 200, overflowY: 'auto', marginBottom: 6 }}>{item.output_text}</div>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <button onClick={() => applyHistoryAsDraft(item)} className={styles.btnGenerate} style={{ fontSize: '0.52rem', padding: '4px 10px' }}>&larr; Aplicar</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* ══ COLUNA DIREITA ══ */}
@@ -479,12 +553,22 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
             {/* Chat tabs */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: '1px solid rgba(255,255,255,0.04)', flexShrink: 0, padding: '0 12px', overflowX: 'auto' }}>
               {sessions.map(s => (
-                <button key={s.id} onClick={() => switchChat(s.id)} style={{
-                  padding: '8px 14px', border: 'none', cursor: 'pointer', background: 'transparent',
-                  borderBottom: s.id === activeSessionId ? '2px solid var(--action-primary)' : '2px solid transparent',
-                  color: s.id === activeSessionId ? 'var(--brand-300)' : 'var(--text-muted)',
-                  fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600, whiteSpace: 'nowrap',
-                }}>{s.title}</button>
+                renamingChatId === s.id ? (
+                  <input key={s.id} autoFocus value={renameValue} onChange={e => setRenameValue(e.target.value)}
+                    onBlur={() => renameChat(s.id, renameValue)}
+                    onKeyDown={e => { if (e.key === 'Enter') renameChat(s.id, renameValue); if (e.key === 'Escape') { setRenamingChatId(null); setRenameValue(''); } }}
+                    style={{ padding: '6px 10px', border: 'none', borderBottom: '2px solid var(--action-primary)', background: 'rgba(255,0,51,0.04)', color: 'var(--brand-300)', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600, width: 90, outline: 'none' }}
+                  />
+                ) : (
+                  <button key={s.id} onClick={() => switchChat(s.id)}
+                    onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, sessionId: s.id }); }}
+                    style={{
+                      padding: '8px 14px', border: 'none', cursor: 'pointer', background: 'transparent',
+                      borderBottom: s.id === activeSessionId ? '2px solid var(--action-primary)' : '2px solid transparent',
+                      color: s.id === activeSessionId ? 'var(--brand-300)' : 'var(--text-muted)',
+                      fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600, whiteSpace: 'nowrap',
+                    }}>{s.title}</button>
+                )
               ))}
               <button onClick={createNewChat} style={{
                 padding: '8px 10px', border: 'none', cursor: 'pointer', background: 'transparent',
@@ -506,13 +590,15 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
                 <button className={styles.toolBtn} title="Italico" onClick={() => execCmd('italic')}><em style={{ fontSize: '0.75rem' }}>I</em></button>
                 <div className={styles.toolDivider} />
                 <button className={styles.toolBtnWide} onClick={handleImproveText} disabled={improving || generating} style={{ color: improving ? '#a855f7' : undefined, background: improving ? 'rgba(168,85,247,0.12)' : undefined }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
                   {improving ? 'Melhorando...' : 'Melhorar'}
                 </button>
                 <div className={styles.toolDivider} />
-                <button className={styles.toolBtnWide} onClick={handleCopy}>Copiar</button>
+                <button className={styles.toolBtnWide} onClick={handleCopy}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  Copiar
+                </button>
                 <button className={styles.toolBtnWide} onClick={handleSave}>Salvar</button>
-                <div className={styles.toolDivider} />
-                <button className={styles.toolBtnWide} onClick={() => setShowHistory(true)}>Historico</button>
               </div>
             </div>
 
@@ -558,39 +644,18 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
           </div>
         </div>
 
-        {/* ── POPUP HISTORICO ── */}
-        {showHistory && (
-          <div onClick={() => { setShowHistory(false); setViewingHistoryItem(null); }} style={{ position: 'absolute', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 30 }}>
-            <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 700, maxHeight: '80vh', background: 'linear-gradient(145deg, rgba(14,14,14,0.99), rgba(8,8,8,0.99))', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', borderBottom: '1px solid rgba(255,255,255,0.05)', flexShrink: 0 }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>Historico de Geracoes</div>
-                <button onClick={() => { setShowHistory(false); setViewingHistoryItem(null); }} className={styles.btnClose}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                </button>
-              </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '12px 18px' }}>
-                {history.length === 0 && <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)', padding: 20, textAlign: 'center' }}>Nenhuma geracao neste chat</div>}
-                {history.map(item => (
-                  <div key={item.id}>
-                    <div onClick={() => setViewingHistoryItem(viewingHistoryItem?.id === item.id ? null : item)} style={{ padding: '8px 10px', marginBottom: 6, borderRadius: 6, cursor: 'pointer', background: viewingHistoryItem?.id === item.id ? 'rgba(255,0,51,0.04)' : 'rgba(255,255,255,0.015)', border: '1px solid ' + (viewingHistoryItem?.id === item.id ? 'rgba(255,0,51,0.15)' : 'rgba(255,255,255,0.05)') }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.48rem', color: 'var(--text-muted)' }}>{new Date(item.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.46rem', fontWeight: 600, padding: '0 4px', borderRadius: 3, background: item.action === 'generate' ? 'rgba(34,197,94,0.08)' : 'rgba(59,130,246,0.08)', color: item.action === 'generate' ? 'var(--success)' : 'var(--info)' }}>{item.action}</span>
-                        {item.tokens_total && <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.42rem', color: 'var(--text-muted)' }}>~{item.tokens_total} tokens</span>}
-                      </div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.54rem', color: 'var(--text-secondary)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{(item.output_text || '').substring(0, 120)}</div>
-                    </div>
-                    {viewingHistoryItem?.id === item.id && (
-                      <div style={{ padding: '10px 10px 8px', marginBottom: 8, borderRadius: '0 0 6px 6px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderTop: 'none', marginTop: -6 }}>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', lineHeight: 1.7, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', maxHeight: 300, overflowY: 'auto', marginBottom: 8 }}>{item.output_text}</div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                          <button onClick={() => applyHistoryAsDraft(item)} className={styles.btnGenerate} style={{ fontSize: '0.58rem', padding: '5px 12px' }}>&larr; Aplicar como Rascunho</button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+        {/* ── MENU CONTEXTUAL DO CHAT ── */}
+        {contextMenu && (
+          <div className={styles.contextOverlay} onClick={() => setContextMenu(null)}>
+            <div className={styles.contextMenu} style={{ top: contextMenu.y, left: contextMenu.x }} onClick={e => e.stopPropagation()}>
+              <button className={styles.contextItem} onClick={() => { setRenamingChatId(contextMenu.sessionId); setRenameValue(sessions.find(s => s.id === contextMenu.sessionId)?.title || ''); setContextMenu(null); }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Renomear
+              </button>
+              <button className={styles.contextItem} onClick={() => { if (confirm('Apagar este chat?')) deleteChat(contextMenu.sessionId); setContextMenu(null); }} style={{ color: 'var(--error)' }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                Apagar
+              </button>
             </div>
           </div>
         )}
