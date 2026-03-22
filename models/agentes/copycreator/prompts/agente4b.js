@@ -247,7 +247,7 @@ module.exports = {
     type: 'text',
     hasWebSearch: false,
     hasLinks: false,
-    hasImages: false,
+    hasImages: true,
     order: 6,
     icon: 'UserCircle',
     placeholders: ['{DADOS_CLIENTE}', '{OUTPUT_ANALISE_CONCORRENTES}', '{OUTPUT_PUBLICO_ALVO}', '{OUTPUT_PESQUISA_AVATAR}'],

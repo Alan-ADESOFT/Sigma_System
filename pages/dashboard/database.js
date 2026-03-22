@@ -11,6 +11,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '../../components/DashboardLayout';
 import StageModal from '../../components/StageModal';
+import PipelineModal from '../../components/PipelineModal';
 import { useNotification } from '../../context/NotificationContext';
 
 const STAGES_META = [
@@ -161,8 +162,23 @@ function ClientCard({ client, onOpenStages, onDelete }) {
 }
 
 /* ── Popup de etapas do cliente ── */
-function ClientStagesPopup({ client, onClose, onStageUpdated }) {
+const AGENT_DISPLAY_NAME = {
+  agente1: 'Diagnóstico', agente2a: 'Pesquisa Concorrentes', agente2b: 'Análise Concorrentes',
+  agente3: 'Público-Alvo', agente4a: 'Pesquisa Avatar', agente4b: 'Construção Avatar',
+  agente5: 'Posicionamento', agente6: 'Oferta',
+};
+
+function ClientStagesPopup({ client, onClose, onStageUpdated, onReloadClient }) {
+  const { notify } = useNotification();
   const [openMeta, setOpenMeta] = useState(null);
+  const [pipelineStatus, setPipelineStatus] = useState(null);
+  const [pipelinePolling, setPipelinePolling] = useState(false);
+  const [timeline, setTimeline]     = useState([]);
+  const [showTimeline, setShowTimeline] = useState(false);
+  const [loadingTimeline, setLoadingTimeline] = useState(false);
+  const [showExport, setShowExport]   = useState(false);
+  const [exportOnlyDone, setExportOnlyDone] = useState(false);
+  const [showPipeline, setShowPipeline] = useState(false);
   const stages    = client.stages || [];
   const doneCount = stages.filter(s => s.status === 'done').length;
   const progress  = Math.round((doneCount / STAGES_META.length) * 100);
@@ -172,6 +188,66 @@ function ClientStagesPopup({ client, onClose, onStageUpdated }) {
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onClose, openMeta]);
+
+  // Verifica se já existe pipeline rodando ao abrir
+  useEffect(() => {
+    checkPipelineStatus();
+  }, []);
+
+  // Polling de status do pipeline
+  useEffect(() => {
+    if (!pipelinePolling) return;
+    const interval = setInterval(async () => {
+      const data = await checkPipelineStatus();
+      if (data && data.status !== 'running' && data.status !== 'awaiting_review') {
+        setPipelinePolling(false);
+        clearInterval(interval);
+        if (data.status === 'completed') {
+          notify('Pipeline concluído com sucesso!', 'success');
+        } else if (data.status === 'failed') {
+          notify('Pipeline falhou: ' + (data.error || 'erro desconhecido'), 'error');
+        }
+        onReloadClient?.(client.id);
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [pipelinePolling]);
+
+  async function checkPipelineStatus() {
+    try {
+      const r = await fetch(`/api/agentes/pipeline/status?clientId=${client.id}`);
+      const d = await r.json();
+      if (d.success && d.data) {
+        setPipelineStatus(d.data);
+        if (d.data.status === 'running') setPipelinePolling(true);
+        return d.data;
+      }
+    } catch {}
+    return null;
+  }
+
+  async function handleRunPipeline() {
+    if (!confirm(`Isso vai rodar todos os 8 agentes em sequência para "${client.company_name}".\nPode levar de 3 a 8 minutos. Continuar?`)) return;
+    try {
+      console.log('[INFO][Frontend:Database] Iniciando pipeline completo', { clientId: client.id });
+      const r = await fetch('/api/agentes/pipeline/run-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: client.id }),
+      });
+      const d = await r.json();
+      if (!d.success) {
+        notify(d.error || 'Erro ao iniciar pipeline', 'error');
+        return;
+      }
+      notify('Pipeline iniciado! Acompanhe o progresso nos cards abaixo.', 'info');
+      setPipelineStatus({ status: 'running', completedAgents: 0, totalAgents: 8, currentAgent: 'agente1' });
+      setPipelinePolling(true);
+    } catch (err) {
+      console.error('[ERRO][Frontend:Database] Falha ao iniciar pipeline', { error: err.message });
+      notify('Erro ao iniciar pipeline', 'error');
+    }
+  }
 
   function getStage(key) { return stages.find(s => s.stage_key === key) || null; }
 
@@ -218,6 +294,87 @@ function ClientStagesPopup({ client, onClose, onStageUpdated }) {
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                onClick={() => setShowPipeline(true)}
+                style={{
+                  padding: '5px 12px', borderRadius: 6, cursor: 'pointer',
+                  border: client.form_done
+                    ? '1px solid rgba(255,0,51,0.3)'
+                    : '1px solid rgba(82,82,82,0.3)',
+                  background: client.form_done
+                    ? 'rgba(255,0,51,0.08)'
+                    : 'rgba(82,82,82,0.08)',
+                  color: client.form_done ? '#ff6680' : '#525252',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600,
+                }}
+                title={!client.form_done ? 'Aguardando formulário do cliente' : ''}
+              >
+                {'\u25B6'} Pipeline
+              </button>
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowExport(v => !v)}
+                  style={{
+                    padding: '5px 12px', borderRadius: 6, cursor: 'pointer',
+                    border: `1px solid ${showExport ? 'rgba(168,85,247,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                    background: showExport ? 'rgba(168,85,247,0.08)' : 'rgba(255,255,255,0.02)',
+                    color: showExport ? '#a855f7' : 'var(--text-muted)',
+                    fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600,
+                  }}
+                >
+                  Exportar
+                </button>
+                {showExport && (
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 50,
+                    width: 220, padding: '12px 14px', borderRadius: 10,
+                    background: 'rgba(12,12,12,0.98)', border: '1px solid rgba(255,255,255,0.08)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                  }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                      Exportar Base
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox" checked={exportOnlyDone}
+                        onChange={e => setExportOnlyDone(e.target.checked)}
+                        style={{ accentColor: '#ff0033' }}
+                      />
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-secondary)' }}>
+                        Somente concluídas
+                      </span>
+                    </label>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        onClick={() => {
+                          window.open(`/api/clients/${client.id}/export?format=docx${exportOnlyDone ? '&onlyDone=true' : ''}`, '_blank');
+                          setShowExport(false);
+                        }}
+                        style={{
+                          flex: 1, padding: '6px 0', borderRadius: 6, cursor: 'pointer',
+                          background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)',
+                          color: '#3b82f6', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
+                        }}
+                      >
+                        DOCX
+                      </button>
+                      <button
+                        onClick={() => {
+                          window.open(`/api/clients/${client.id}/export?format=pdf${exportOnlyDone ? '&onlyDone=true' : ''}`, '_blank');
+                          setShowExport(false);
+                        }}
+                        style={{
+                          flex: 1, padding: '6px 0', borderRadius: 6, cursor: 'pointer',
+                          background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.25)',
+                          color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
+                        }}
+                      >
+                        PDF
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
               <Link href={`/dashboard/clients/${client.id}?tab=database`} style={{
                 padding: '5px 12px', borderRadius: 6, textDecoration: 'none',
                 border: '1px solid rgba(255,0,51,0.25)', background: 'rgba(255,0,51,0.06)',
@@ -232,6 +389,81 @@ function ClientStagesPopup({ client, onClose, onStageUpdated }) {
               </button>
             </div>
           </div>
+
+          {/* Status do pipeline (se ativo) */}
+          {pipelineStatus?.status === 'running' && (
+            <div style={{
+              margin: '0 22px', padding: '8px 14px', borderRadius: 8,
+              background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.2)',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <div style={{
+                width: 8, height: 8, borderRadius: '50%', background: '#f97316',
+                animation: 'pulse 1.5s ease-in-out infinite',
+              }} />
+              <div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.64rem', fontWeight: 600, color: '#f97316' }}>
+                  Pipeline em andamento — {pipelineStatus.completedAgents}/{pipelineStatus.totalAgents} agentes
+                </div>
+                {pipelineStatus.currentAgent && (
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.54rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                    Executando: {pipelineStatus.currentAgent}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Status: Aguardando revisão */}
+          {pipelineStatus?.status === 'awaiting_review' && (
+            <div style={{
+              margin: '0 22px', padding: '10px 14px', borderRadius: 8,
+              background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 8, height: 8, borderRadius: '50%', background: '#eab308',
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                }} />
+                <div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.64rem', fontWeight: 600, color: '#eab308' }}>
+                    Aguardando revisão — {pipelineStatus.completedAgents}/{pipelineStatus.totalAgents} agentes
+                  </div>
+                  {pipelineStatus.currentAgent && (
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.54rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                      Próximo: {AGENT_DISPLAY_NAME[pipelineStatus.currentAgent] || pipelineStatus.currentAgent}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    const r = await fetch(`/api/agentes/pipeline/${pipelineStatus.jobId}/approve`, { method: 'POST' });
+                    const d = await r.json();
+                    if (d.success) {
+                      notify('Etapa aprovada! Pipeline continuando...', 'success');
+                      setPipelineStatus(prev => ({ ...prev, status: 'running' }));
+                      setPipelinePolling(true);
+                    } else {
+                      notify(d.error || 'Erro ao aprovar', 'error');
+                    }
+                  } catch {
+                    notify('Erro ao aprovar etapa', 'error');
+                  }
+                }}
+                style={{
+                  padding: '5px 14px', borderRadius: 6, cursor: 'pointer',
+                  background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)',
+                  color: '#22c55e', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
+                  flexShrink: 0,
+                }}
+              >
+                Aprovar e continuar
+              </button>
+            </div>
+          )}
 
           {/* Barra de progresso */}
           <div style={{ padding: '12px 22px 0' }}>
@@ -300,6 +532,120 @@ function ClientStagesPopup({ client, onClose, onStageUpdated }) {
               );
             })}
           </div>
+
+          {/* Timeline toggle */}
+          <div style={{ padding: '0 22px 16px', display: 'flex', justifyContent: 'center' }}>
+            <button
+              onClick={async () => {
+                if (!showTimeline) {
+                  setLoadingTimeline(true);
+                  try {
+                    const r = await fetch(`/api/clients/${client.id}/pipeline-timeline`);
+                    const d = await r.json();
+                    if (d.success) setTimeline(d.data);
+                  } catch {}
+                  setLoadingTimeline(false);
+                }
+                setShowTimeline(prev => !prev);
+              }}
+              style={{
+                padding: '4px 14px', borderRadius: 6, cursor: 'pointer',
+                background: showTimeline ? 'rgba(255,0,51,0.06)' : 'rgba(255,255,255,0.02)',
+                border: `1px solid ${showTimeline ? 'rgba(255,0,51,0.2)' : 'rgba(255,255,255,0.06)'}`,
+                color: showTimeline ? '#ff6680' : 'var(--text-muted)',
+                fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
+              }}
+            >
+              {loadingTimeline ? '...' : showTimeline ? 'Ocultar Timeline' : 'Ver Timeline'}
+            </button>
+          </div>
+
+          {/* Timeline visual */}
+          {showTimeline && timeline.length > 0 && (
+            <div style={{ padding: '0 22px 22px' }}>
+              <div style={{ position: 'relative', paddingLeft: 24 }}>
+                {/* Linha vertical */}
+                <div style={{
+                  position: 'absolute', left: 7, top: 4, bottom: 4, width: 2,
+                  background: 'linear-gradient(180deg, rgba(255,0,51,0.4), rgba(255,0,51,0.08))',
+                  borderRadius: 1,
+                }} />
+
+                {timeline.map((item, i) => {
+                  const isDone    = item.status === 'done';
+                  const isActive  = item.status === 'in_progress';
+                  const dotColor  = isDone ? '#22c55e' : isActive ? '#f97316' : '#525252';
+                  const dotShadow = isDone ? '0 0 6px rgba(34,197,94,0.4)' : 'none';
+
+                  return (
+                    <div
+                      key={`${item.stageKey}-${item.agentName}`}
+                      style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 12,
+                        marginBottom: i < timeline.length - 1 ? 10 : 0,
+                        opacity: 0, animation: `fadeInUp 0.35s ease-out ${i * 0.05}s both`,
+                      }}
+                    >
+                      {/* Ponto na linha */}
+                      <div style={{
+                        position: 'absolute', left: 4,
+                        width: 8, height: 8, borderRadius: '50%',
+                        background: dotColor, boxShadow: dotShadow,
+                        marginTop: 5, flexShrink: 0,
+                      }} />
+
+                      {/* Card */}
+                      <div style={{
+                        flex: 1, padding: '6px 10px', borderRadius: 6,
+                        background: 'rgba(255,255,255,0.02)',
+                        border: `1px solid rgba(255,255,255,${isDone ? '0.06' : '0.03'})`,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{
+                            fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600,
+                            color: isDone ? 'var(--text-primary)' : 'var(--text-muted)',
+                          }}>
+                            {AGENT_DISPLAY_NAME[item.agentName] || item.agentName}
+                          </span>
+                          {item.version && (
+                            <span style={{
+                              fontFamily: 'var(--font-mono)', fontSize: '0.48rem', fontWeight: 600,
+                              padding: '1px 5px', borderRadius: 3,
+                              background: 'rgba(255,0,51,0.06)', color: '#ff6680',
+                            }}>
+                              v{item.version}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 3 }}>
+                          {item.executedAt && (
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', color: 'var(--text-muted)' }}>
+                              {new Date(item.executedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                          {item.modelUsed && (
+                            <span style={{
+                              fontFamily: 'var(--font-mono)', fontSize: '0.48rem',
+                              padding: '1px 5px', borderRadius: 3,
+                              background: item.modelUsed.includes('claude') ? 'rgba(168,85,247,0.08)' : 'rgba(59,130,246,0.08)',
+                              color: item.modelUsed.includes('claude') ? '#a855f7' : '#3b82f6',
+                            }}>
+                              {item.modelUsed.includes('claude') ? 'Claude' : item.modelUsed.includes('mini') ? 'GPT-4o Mini' : 'GPT-4o'}
+                            </span>
+                          )}
+                          {!item.executedAt && (
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', color: '#525252' }}>
+                              Pendente
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -312,6 +658,18 @@ function ClientStagesPopup({ client, onClose, onStageUpdated }) {
           clientData={client}
           onClose={() => setOpenMeta(null)}
           onSaved={(updated) => onStageUpdated(client.id, openMeta.key, updated)}
+        />
+      )}
+
+      {/* Pipeline modal */}
+      {showPipeline && (
+        <PipelineModal
+          client={client}
+          onClose={() => setShowPipeline(false)}
+          onComplete={() => {
+            setShowPipeline(false);
+            onReloadClient?.(client.id);
+          }}
         />
       )}
     </>
@@ -493,6 +851,15 @@ export default function DatabasePage() {
           client={selectedClient}
           onClose={() => setSelectedClient(null)}
           onStageUpdated={handleStageUpdated}
+          onReloadClient={async (clientId) => {
+            try {
+              const r = await fetch(`/api/clients/${clientId}/stages`);
+              const j = await r.json();
+              const newStages = j.success ? j.stages : [];
+              setClients(prev => prev.map(c => c.id === clientId ? { ...c, stages: newStages } : c));
+              setSelectedClient(prev => prev?.id === clientId ? { ...prev, stages: newStages } : prev);
+            } catch {}
+          }}
         />
       )}
     </DashboardLayout>

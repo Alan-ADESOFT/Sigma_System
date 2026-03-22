@@ -1,6 +1,201 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useNotification } from '../../context/NotificationContext';
+
+const AGENT_LIST = [
+  { name: 'agente1',  label: 'Agente 01 - Diagnostico',         desc: 'Analisa dados e monta diagnostico estrategico' },
+  { name: 'agente2a', label: 'Agente 2A - Pesquisador',         desc: 'Pesquisa concorrentes na web' },
+  { name: 'agente2b', label: 'Agente 2B - Analista',            desc: 'Analisa dados dos concorrentes' },
+  { name: 'agente3',  label: 'Agente 03 - Publico-Alvo',        desc: 'Define perfil do publico' },
+  { name: 'agente4a', label: 'Agente 4A - Pesquisador Avatar',  desc: 'Pesquisa dores e linguagem do publico' },
+  { name: 'agente4b', label: 'Agente 4B - Construtor Avatar',   desc: 'Constroi avatar completo' },
+  { name: 'agente5',  label: 'Agente 05 - Posicionamento',      desc: 'Define posicionamento da marca' },
+  { name: 'agente6',  label: 'Agente 06 - Oferta',              desc: 'Estrutura oferta completa' },
+];
+
+function PromptsSection() {
+  const { notify } = useNotification();
+  const [expandedAgent, setExpandedAgent] = useState(null);
+  const [promptText, setPromptText]       = useState('');
+  const [defaultPrompt, setDefaultPrompt] = useState('');
+  const [isCustom, setIsCustom]           = useState(false);
+  const [loading, setLoading]             = useState(false);
+  const [saving, setSaving]               = useState(false);
+
+  const loadPrompt = useCallback(async (agentName) => {
+    setLoading(true);
+    try {
+      const r = await fetch('/api/agentes/prompts/' + agentName);
+      const d = await r.json();
+      if (d.success) {
+        setPromptText(d.data.prompt);
+        setDefaultPrompt(d.data.defaultPrompt);
+        setIsCustom(d.data.isCustom);
+      }
+    } catch {}
+    setLoading(false);
+  }, []);
+
+  function handleToggle(agentName) {
+    if (expandedAgent === agentName) {
+      setExpandedAgent(null);
+    } else {
+      setExpandedAgent(agentName);
+      loadPrompt(agentName);
+    }
+  }
+
+  async function handleSave() {
+    if (!expandedAgent) return;
+    setSaving(true);
+    try {
+      const r = await fetch('/api/agentes/prompts/' + expandedAgent, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: promptText }),
+      });
+      const d = await r.json();
+      if (d.success) {
+        setIsCustom(true);
+        notify('Prompt salvo!', 'success');
+      } else {
+        notify(d.error || 'Erro ao salvar', 'error');
+      }
+    } catch { notify('Erro ao salvar prompt', 'error'); }
+    setSaving(false);
+  }
+
+  async function handleReset() {
+    if (!expandedAgent || !confirm('Restaurar prompt ao padrao? A customizacao sera perdida.')) return;
+    setSaving(true);
+    try {
+      const r = await fetch('/api/agentes/prompts/' + expandedAgent, { method: 'DELETE' });
+      const d = await r.json();
+      if (d.success) {
+        setPromptText(defaultPrompt);
+        setIsCustom(false);
+        notify('Prompt restaurado ao padrao', 'success');
+      }
+    } catch { notify('Erro ao restaurar', 'error'); }
+    setSaving(false);
+  }
+
+  return (
+    <div className="glass-card" style={{ padding: '20px 24px', marginTop: 24 }}>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+          Prompts dos Agentes
+        </div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+          Customize os prompts base usados por cada agente. Alteracoes afetam todas as execucoes futuras.
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {AGENT_LIST.map(agent => (
+          <div key={agent.name}>
+            {/* Card do agente */}
+            <div
+              onClick={() => handleToggle(agent.name)}
+              style={{
+                padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
+                background: expandedAgent === agent.name ? 'rgba(255,0,51,0.03)' : 'rgba(255,255,255,0.01)',
+                border: '1px solid ' + (expandedAgent === agent.name ? 'rgba(255,0,51,0.15)' : 'rgba(255,255,255,0.05)'),
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                transition: 'all 0.15s',
+              }}
+            >
+              <div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {agent.label}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                  {agent.desc}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {expandedAgent === agent.name && isCustom && (
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: '0.48rem', fontWeight: 600,
+                    padding: '1px 6px', borderRadius: 3,
+                    background: 'rgba(249,115,22,0.1)', color: '#f97316',
+                  }}>
+                    CUSTOMIZADO
+                  </span>
+                )}
+                {expandedAgent === agent.name && !isCustom && (
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: '0.48rem', fontWeight: 600,
+                    padding: '1px 6px', borderRadius: 3,
+                    background: 'rgba(82,82,82,0.15)', color: '#525252',
+                  }}>
+                    PADRAO
+                  </span>
+                )}
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round"
+                  style={{ transform: expandedAgent === agent.name ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }}>
+                  <polyline points="6,9 12,15 18,9" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Editor expandido */}
+            {expandedAgent === agent.name && (
+              <div style={{ padding: '12px 14px', marginTop: 4, borderRadius: 8, background: 'rgba(10,10,10,0.5)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                {loading ? (
+                  <div style={{ padding: 20, textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)' }}>Carregando prompt...</div>
+                ) : (
+                  <>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: 'var(--text-muted)', marginBottom: 6 }}>
+                      Use placeholders: {'{DADOS_CLIENTE}'}, {'{OUTPUT_DIAGNOSTICO}'}, {'{OUTPUT_AVATAR}'}, etc.
+                    </div>
+                    <textarea
+                      value={promptText}
+                      onChange={e => setPromptText(e.target.value)}
+                      rows={18}
+                      style={{
+                        width: '100%', boxSizing: 'border-box', padding: '10px 12px',
+                        background: 'rgba(5,5,5,0.8)', border: '1px solid rgba(255,255,255,0.06)',
+                        borderRadius: 8, color: 'var(--text-secondary)', fontSize: '0.72rem',
+                        fontFamily: 'var(--font-mono)', lineHeight: 1.6, outline: 'none', resize: 'vertical',
+                      }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+                      {isCustom && (
+                        <button
+                          onClick={handleReset}
+                          disabled={saving}
+                          style={{
+                            padding: '5px 14px', borderRadius: 6, cursor: saving ? 'not-allowed' : 'pointer',
+                            background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)',
+                            color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
+                          }}
+                        >
+                          Restaurar Padrao
+                        </button>
+                      )}
+                      <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        style={{
+                          padding: '5px 14px', borderRadius: 6, cursor: saving ? 'not-allowed' : 'pointer',
+                          background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.25)',
+                          color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
+                        }}
+                      >
+                        {saving ? 'Salvando...' : 'Salvar Alteracoes'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const { notify } = useNotification();
@@ -8,6 +203,8 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [message, setMessage] = useState(null);
+  const [reviewMode, setReviewMode] = useState(false);
+  const [loadingReview, setLoadingReview] = useState(true);
 
   // Form para adicionar conta manual
   const [accountForm, setAccountForm] = useState({
@@ -18,6 +215,13 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
+    // Carrega estado do modo revisão
+    fetch('/api/settings/review-mode')
+      .then(r => r.json())
+      .then(d => { if (d.success) setReviewMode(d.enabled); })
+      .catch(() => {})
+      .finally(() => setLoadingReview(false));
+
     loadAccounts();
     // Verificar params de retorno do OAuth
     const params = new URLSearchParams(window.location.search);
@@ -270,6 +474,55 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+      {/* ── Prompts dos Agentes ── */}
+      <PromptsSection />
+
+      {/* ── Modo Revisão de Agentes ── */}
+      <div className="glass-card" style={{ padding: '20px 24px', marginTop: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+              Modo Revisão de Agentes
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 500 }}>
+              Quando ativado, cada etapa do pipeline precisa ser aprovada manualmente antes do próximo agente ser executado. Recomendado para clientes novos ou trabalho em equipe.
+            </div>
+          </div>
+          <button
+            disabled={loadingReview}
+            onClick={async () => {
+              const next = !reviewMode;
+              setReviewMode(next);
+              try {
+                await fetch('/api/settings/review-mode', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ enabled: next }),
+                });
+                notify(next ? 'Modo revisão ativado' : 'Modo revisão desativado', 'success');
+              } catch {
+                setReviewMode(!next);
+                notify('Erro ao salvar configuração', 'error');
+              }
+            }}
+            style={{
+              width: 48, height: 26, borderRadius: 13, cursor: 'pointer', border: 'none',
+              background: reviewMode ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.08)',
+              position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+            }}
+          >
+            <div style={{
+              width: 20, height: 20, borderRadius: '50%',
+              background: reviewMode ? '#22c55e' : '#525252',
+              position: 'absolute', top: 3,
+              left: reviewMode ? 25 : 3,
+              transition: 'all 0.2s',
+              boxShadow: reviewMode ? '0 0 8px rgba(34,197,94,0.4)' : 'none',
+            }} />
+          </button>
+        </div>
+      </div>
+
     </DashboardLayout>
   );
 }

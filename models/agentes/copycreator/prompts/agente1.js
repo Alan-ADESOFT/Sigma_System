@@ -112,7 +112,7 @@ module.exports = {
     type: 'text',
     hasWebSearch: false,
     hasLinks: false,
-    hasImages: false,
+    hasImages: true,
     order: 1,
     icon: 'Stethoscope',
     placeholders: ['{DADOS_CLIENTE}'],

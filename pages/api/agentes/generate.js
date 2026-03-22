@@ -8,7 +8,11 @@
  *   modelLevel?: 'weak' | 'medium' | 'strong',
  *   customPrompt?: string,
  *   context?: Record<string, string>,
- *   complements?: { links: string[], images: string[] }
+ *   complements?: {
+ *     links?: string[],
+ *     images?: Array<{ base64: string, mimeType: string }>,
+ *     files?: Array<{ base64: string, mimeType: string, fileName: string }>
+ *   }
  * }
  *
  * Response: {
@@ -19,6 +23,15 @@
 
 import { resolveTenantId } from '../../../infra/get-tenant-id';
 import { orchestrate }     from '../../../models/agentes/copycreator/orchestrator';
+
+// Aumenta o limite de body para suportar imagens/arquivos em base64
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '30mb',
+    },
+  },
+};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -51,6 +64,31 @@ export default async function handler(req, res) {
   try {
     console.log('[INFO][API:/api/agentes/generate] Requisição recebida', { agentName, modelLevel, inputLength: userInput.length });
 
+    // Reconstrói imagens base64 → data URLs para o Vision API
+    const processedComplements = { ...complements };
+
+    if (complements.images?.length) {
+      console.log('[INFO][API:/api/agentes/generate] Processando imagens', { count: complements.images.length });
+      processedComplements.images = complements.images.map(img => {
+        // Se já é data URL completa, usa direto; senão monta
+        if (typeof img === 'string') return img;
+        return img.base64; // Frontend já envia como data URL via readAsDataURL
+      });
+    }
+
+    // Reconstrói arquivos base64 → Buffers para o fileReader
+    if (complements.files?.length) {
+      console.log('[INFO][API:/api/agentes/generate] Processando arquivos', { count: complements.files.length });
+      processedComplements.files = complements.files.map(file => {
+        const base64Data = file.base64.split(',')[1] || file.base64;
+        return {
+          buffer: Buffer.from(base64Data, 'base64'),
+          mimeType: file.mimeType,
+          fileName: file.fileName,
+        };
+      });
+    }
+
     const result = await orchestrate({
       agentName,
       tenantId,
@@ -59,7 +97,7 @@ export default async function handler(req, res) {
       modelLevel,
       customPrompt,
       context,
-      complements,
+      complements: processedComplements,
     });
 
     console.log('[SUCESSO][API:/api/agentes/generate] Resposta enviada', { agentName, historyId: result.historyId, responseLength: result.text.length });

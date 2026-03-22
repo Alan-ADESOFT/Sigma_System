@@ -415,10 +415,14 @@ CREATE TABLE IF NOT EXISTS ai_drafts (
 CREATE INDEX IF NOT EXISTS idx_ai_drafts_tenant_status ON ai_drafts(tenant_id, status);
 
 -- Base de dados dinâmica (marca, produto, persona, etc.) por tenant
+-- Categorias: marca, produto, persona, tom_de_voz, concorrentes (tenant-level)
+--             diagnostico, concorrentes_raw, publico_alvo, avatar_raw, avatar,
+--             posicionamento, oferta (client-level — output dos agentes)
+--             prompt_override (tenant-level — prompts customizados)
 CREATE TABLE IF NOT EXISTS ai_knowledge_base (
     id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     tenant_id  TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    category   VARCHAR(100) NOT NULL,  -- 'marca' | 'produto' | 'persona' | 'tom_de_voz' | 'concorrentes'
+    category   VARCHAR(100) NOT NULL,
     key        VARCHAR(255) NOT NULL,
     value      TEXT NOT NULL,
     metadata   JSONB NOT NULL DEFAULT '{}',
@@ -437,6 +441,11 @@ CREATE INDEX IF NOT EXISTS idx_ai_knowledge_base_client ON ai_knowledge_base(cli
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_kb_client_unique
   ON ai_knowledge_base(tenant_id, client_id, category, key)
   WHERE client_id IS NOT NULL;
+
+-- Índice único para KB sem cliente (prompt overrides, dados globais do tenant)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_kb_tenant_unique
+  ON ai_knowledge_base(tenant_id, category, key)
+  WHERE client_id IS NULL;
 
 -- Históricos de IA vinculados a clientes
 ALTER TABLE ai_search_history ADD COLUMN IF NOT EXISTS client_id TEXT REFERENCES marketing_clients(id) ON DELETE SET NULL;
@@ -462,6 +471,7 @@ CREATE TABLE IF NOT EXISTS client_form_tokens (
 CREATE INDEX IF NOT EXISTS idx_form_tokens_client  ON client_form_tokens(client_id);
 CREATE INDEX IF NOT EXISTS idx_form_tokens_token   ON client_form_tokens(token);
 CREATE INDEX IF NOT EXISTS idx_form_tokens_status  ON client_form_tokens(status);
+ALTER TABLE client_form_tokens ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
 
 -- ============================================================
 -- CLIENT_FORM_RESPONSES
@@ -503,4 +513,61 @@ CREATE TABLE IF NOT EXISTS system_notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_tenant ON system_notifications(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read   ON system_notifications(tenant_id, read);
-ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS form_done           BOOLEAN NOT NULL DEFAULT false;  
+
+-- form_done já adicionado acima via ALTER na seção marketing_clients (linha 231)
+CREATE INDEX IF NOT EXISTS idx_mkt_clients_form_done ON marketing_clients(tenant_id, form_done);
+
+-- ============================================================
+-- PIPELINE_JOBS (tracking de execução do pipeline completo)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS pipeline_jobs (
+    id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id        TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    client_id        TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    status           TEXT NOT NULL DEFAULT 'running',
+    -- 'running' | 'completed' | 'failed' | 'awaiting_review' | 'approved'
+    total_agents     INTEGER NOT NULL DEFAULT 8,
+    completed_agents INTEGER NOT NULL DEFAULT 0,
+    current_agent    TEXT,
+    logs             JSONB NOT NULL DEFAULT '[]',
+    -- Array de { agentName, status, startedAt, finishedAt, error? }
+    error            TEXT,
+    started_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finished_at      TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_pipeline_jobs_client ON pipeline_jobs(client_id);
+CREATE INDEX IF NOT EXISTS idx_pipeline_jobs_status ON pipeline_jobs(status);
+
+-- ============================================================
+-- STAGE_QUALITY_SCORES (score de qualidade por etapa)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS stage_quality_scores (
+    id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    client_id    TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    stage_key    TEXT NOT NULL,
+    score        INTEGER NOT NULL CHECK (score >= 0 AND score <= 100),
+    details      JSONB NOT NULL DEFAULT '{}',
+    -- { completeness, specificity, actionability, missing_fields, weak_points }
+    suggestions  TEXT,
+    analyzed_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    version      INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_scores_client ON stage_quality_scores(client_id, stage_key);
+
+-- ============================================================
+-- STAGE_VERSIONS (snapshots manuais — criados ao "Marcar Concluído")
+-- ============================================================
+CREATE TABLE IF NOT EXISTS stage_versions (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    client_id   TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    stage_key   TEXT NOT NULL,
+    version     INTEGER NOT NULL DEFAULT 1,
+    content     TEXT NOT NULL,
+    word_count  INTEGER,
+    created_by  TEXT NOT NULL DEFAULT 'user',
+    -- 'user' (clicou "Marcar Concluído") | 'pipeline' (pipeline automático)
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_stage_versions_client ON stage_versions(client_id, stage_key);

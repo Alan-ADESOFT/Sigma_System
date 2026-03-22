@@ -11,6 +11,7 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import DashboardLayout from '../../../components/DashboardLayout';
 import StageModal from '../../../components/StageModal';
+import PipelineModal from '../../../components/PipelineModal';
 import { useNotification } from '../../../context/NotificationContext';
 import { FORM_STEPS } from '../../../assets/data/formQuestions';
 
@@ -2550,6 +2551,7 @@ export default function ClientInfoPage() {
   const [stages,     setStages    ] = useState([]);
   const [loading,    setLoading   ] = useState(true);
   const [error,      setError     ] = useState(null);
+  const [showPipelineModal, setShowPipelineModal] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -2641,14 +2643,29 @@ export default function ClientInfoPage() {
               {client.phone  && <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>{maskPhone(client.phone)}</span>}
             </div>
           </div>
-          {/* Pipeline progress */}
-          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.2rem', fontWeight: 700, color: progress === 100 ? '#22c55e' : 'var(--text-primary)' }}>
-              {progress}%
+          {/* Pipeline progress + botão */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.2rem', fontWeight: 700, color: progress === 100 ? '#22c55e' : 'var(--text-primary)' }}>
+                {progress}%
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                pipeline
+              </div>
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              pipeline
-            </div>
+            <button
+              onClick={() => setShowPipelineModal(true)}
+              style={{
+                padding: '6px 14px', borderRadius: 6, cursor: 'pointer',
+                border: client.form_done ? '1px solid rgba(255,0,51,0.3)' : '1px solid rgba(82,82,82,0.3)',
+                background: client.form_done ? 'rgba(255,0,51,0.08)' : 'rgba(82,82,82,0.08)',
+                color: client.form_done ? '#ff6680' : '#525252',
+                fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600,
+              }}
+              title={!client.form_done ? 'Aguardando formulário do cliente' : ''}
+            >
+              {'\u25B6'} Pipeline
+            </button>
           </div>
         </div>
       </div>
@@ -2693,6 +2710,19 @@ export default function ClientInfoPage() {
         {activeTab === 'observacoes'&& <TabObservacoes clientId={client.id} />}
         {activeTab === 'respostas'  && <TabRespostas clientId={client.id} client={client} />}
       </div>
+
+      {/* Pipeline Modal */}
+      {showPipelineModal && client && (
+        <PipelineModal
+          client={client}
+          onClose={() => setShowPipelineModal(false)}
+          onComplete={() => {
+            setShowPipelineModal(false);
+            setActiveTab('database');
+            load();
+          }}
+        />
+      )}
     </DashboardLayout>
   );
 }

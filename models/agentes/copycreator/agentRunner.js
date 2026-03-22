@@ -9,12 +9,15 @@
  *   6. Retorna resultado formatado
  */
 
-const { runCompletion }     = require('../../ia/completion');
-const { deepSearch }       = require('../../ia/deepSearch');
-const { withMarkdown }     = require('../../ia/markdownHelper');
-const { getAgent }         = require('./prompts/index');
-const { query, queryOne }  = require('../../../infra/db');
-const { fetchMultipleUrls } = require('../../../infra/api/scraper');
+const { runCompletion }        = require('../../ia/completion');
+const { deepSearch }          = require('../../ia/deepSearch');
+const { withMarkdown }        = require('../../ia/markdownHelper');
+const { getAgent }            = require('./prompts/index');
+const { query, queryOne }     = require('../../../infra/db');
+const { fetchMultipleUrls }   = require('../../../infra/api/scraper');
+const { analyzeMultipleImages } = require('../../../infra/api/vision');
+const { extractFromFile }     = require('../../../infra/api/fileReader');
+const { getAgentConfig, getDependencies } = require('./pipelineConfig');
 
 // ─── Placeholders dinâmicos suportados ───────────────────────────────────────
 // Mapeamento placeholder → categoria na ai_knowledge_base
@@ -82,17 +85,12 @@ function injectContext(prompt, context = {}) {
 }
 
 /**
- * Injeta complementos (links e imagens) no prompt — apenas para agentes type: text
- * @param {string} prompt
- * @param {{ links?: string[], images?: string[] }} complements
- * @returns {string}
- */
-/**
  * Injeta complementos no prompt.
- * Para links: busca o conteúdo real da URL via scraper (async).
- * Para arquivos: lista os nomes (processamento futuro).
+ * Para links: conteúdo real já buscado via scraper.
+ * Para imagens: análise visual já processada via Vision.
+ * Para arquivos: texto já extraído via fileReader.
  * @param {string} prompt
- * @param {{ links?: string[], images?: string[], linkContents?: string }} complements
+ * @param {{ links?: string[], linkContents?: string, imageAnalysis?: string, fileContents?: string, fileNames?: string[] }} complements
  * @returns {string}
  */
 function injectComplements(prompt, complements = {}) {
@@ -105,7 +103,15 @@ function injectComplements(prompt, complements = {}) {
     parts.push(`\nLINKS DE REFERÊNCIA:\n${complements.links.map((l) => `- ${l}`).join('\n')}`);
   }
 
-  if (complements.fileNames?.length) {
+  // Análise visual das imagens (já processada via Vision API)
+  if (complements.imageAnalysis) {
+    parts.push(`\nANÁLISE VISUAL (imagens fornecidas pelo cliente):\n${complements.imageAnalysis}`);
+  }
+
+  // Conteúdo extraído dos arquivos (PDF/DOCX/TXT)
+  if (complements.fileContents) {
+    parts.push(`\nCONTEÚDO DOS ARQUIVOS ANEXADOS:\n${complements.fileContents}`);
+  } else if (complements.fileNames?.length) {
     parts.push(`\nARQUIVOS ANEXADOS:\n${complements.fileNames.map((n) => `- ${n}`).join('\n')}`);
   }
 
@@ -121,17 +127,98 @@ ${parts.join('\n')}`;
   return prompt;
 }
 
+// ─── Knowledge Base do Pipeline ──────────────────────────────────────────────
+
+/**
+ * Salva o output de um agente na knowledge base do cliente
+ * @param {string} tenantId
+ * @param {string} clientId
+ * @param {string} agentName
+ * @param {string} outputText
+ * @returns {Promise<{ id: string, version: number }>}
+ */
+async function saveOutputToKB(tenantId, clientId, agentName, outputText) {
+  const pipelineCfg = getAgentConfig(agentName);
+  if (!pipelineCfg?.savesToKB) {
+    console.warn('[WARNING][AgentRunner] Agente sem savesToKB configurado', { agentName });
+    return { id: null, version: 0 };
+  }
+
+  const { category, key } = pipelineCfg.savesToKB;
+  console.log('[INFO][AgentRunner] Salvando output na KB do cliente', { agentName, category, key, clientId });
+
+  // Busca versão atual para auto-incremento
+  const existing = await queryOne(
+    `SELECT metadata->>'version' as version FROM ai_knowledge_base
+     WHERE tenant_id = $1 AND client_id = $2 AND category = $3 AND key = $4 LIMIT 1`,
+    [tenantId, clientId, category, key]
+  );
+  const newVersion = existing ? (parseInt(existing.version) || 0) + 1 : 1;
+
+  const metadata = JSON.stringify({
+    agentName,
+    generatedAt: new Date().toISOString(),
+    version: newVersion,
+  });
+
+  const row = await queryOne(
+    `INSERT INTO ai_knowledge_base (tenant_id, client_id, category, key, value, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (tenant_id, client_id, category, key) WHERE client_id IS NOT NULL
+     DO UPDATE SET value = EXCLUDED.value, metadata = EXCLUDED.metadata, updated_at = now()
+     RETURNING id`,
+    [tenantId, clientId, category, key, outputText, metadata]
+  );
+
+  console.log('[SUCESSO][AgentRunner] Output salvo na KB', { agentName, category, key, version: newVersion, id: row?.id });
+  return { id: row?.id, version: newVersion };
+}
+
+/**
+ * Carrega outputs de agentes anteriores da KB para injetar como contexto
+ * @param {string} tenantId
+ * @param {string} clientId
+ * @param {string} agentName
+ * @returns {Promise<Record<string, string>>} { '{OUTPUT_DIAGNOSTICO}': 'texto...', ... }
+ */
+async function loadDependenciesFromKB(tenantId, clientId, agentName) {
+  const deps = getDependencies(agentName);
+  if (!deps.length) return {};
+
+  console.log('[INFO][AgentRunner] Carregando dependências da KB', { agentName, dependencies: deps.map(d => d.agentName) });
+
+  const context = {};
+  for (const dep of deps) {
+    const row = await queryOne(
+      `SELECT value FROM ai_knowledge_base
+       WHERE tenant_id = $1 AND client_id = $2 AND category = $3 AND key = $4 LIMIT 1`,
+      [tenantId, clientId, dep.kb.category, dep.kb.key]
+    );
+
+    if (row?.value) {
+      context[dep.placeholder] = row.value;
+    } else {
+      console.warn('[WARNING][AgentRunner] Dependência ausente na KB', { agentName, placeholder: dep.placeholder, dependsOnAgent: dep.agentName });
+      context[dep.placeholder] = '';
+    }
+  }
+
+  const found = Object.values(context).filter(v => v).length;
+  console.log('[INFO][AgentRunner] Dependências carregadas para', { agentName, total: deps.length, found });
+  return context;
+}
+
 // ─── Salvar no histórico ──────────────────────────────────────────────────────
 
 /**
  * Salva resultado de completion no histórico de agentes
  * @returns {Promise<string>} ID do registro criado
  */
-async function saveAgentHistory(tenantId, agentName, modelUsed, promptSent, responseText, metadata = {}) {
+async function saveAgentHistory(tenantId, agentName, modelUsed, promptSent, responseText, metadata = {}, clientId = null) {
   const row = await queryOne(
-    `INSERT INTO ai_agent_history (tenant_id, agent_name, model_used, prompt_sent, response_text, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-    [tenantId, agentName, modelUsed, promptSent, responseText, JSON.stringify(metadata)]
+    `INSERT INTO ai_agent_history (tenant_id, agent_name, model_used, prompt_sent, response_text, metadata, client_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+    [tenantId, agentName, modelUsed, promptSent, responseText, JSON.stringify(metadata), clientId]
   );
   return row?.id;
 }
@@ -140,11 +227,11 @@ async function saveAgentHistory(tenantId, agentName, modelUsed, promptSent, resp
  * Salva resultado de pesquisa web no histórico de buscas
  * @returns {Promise<string>} ID do registro criado
  */
-async function saveSearchHistory(tenantId, agentName, searchQuery, resultText, citations = []) {
+async function saveSearchHistory(tenantId, agentName, searchQuery, resultText, citations = [], clientId = null) {
   const row = await queryOne(
-    `INSERT INTO ai_search_history (tenant_id, agent_name, query, result_text, citations)
-     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-    [tenantId, agentName, searchQuery, resultText, JSON.stringify(citations)]
+    `INSERT INTO ai_search_history (tenant_id, agent_name, query, result_text, citations, client_id)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [tenantId, agentName, searchQuery, resultText, JSON.stringify(citations), clientId]
   );
   return row?.id;
 }
@@ -194,13 +281,29 @@ async function runAgent({
   // 2. Carrega knowledge base (por cliente ou tenant)
   const kb = await loadKnowledgeBase(tenantId, clientId);
 
-  // 3. Monta o prompt base (editado pelo usuário ou padrão)
-  let systemPrompt = customPrompt || agentModule.getPrompt();
+  // 2b. Carrega outputs de agentes anteriores da KB (dependências do pipeline)
+  let pipelineContext = {};
+  if (clientId) {
+    pipelineContext = await loadDependenciesFromKB(tenantId, clientId, agentName);
+  }
 
-  // 4. Injeta dados dinâmicos (context + knowledge base)
-  systemPrompt = injectContext(systemPrompt, context);
+  // 3. Monta o prompt base (custom prompt > override da KB > padrão do arquivo)
+  let systemPrompt = customPrompt;
+  if (!systemPrompt) {
+    // Verifica se existe prompt override na KB do tenant
+    const promptOverride = await queryOne(
+      `SELECT value FROM ai_knowledge_base WHERE tenant_id = $1 AND category = 'prompt_override' AND key = $2 AND client_id IS NULL`,
+      [tenantId, agentName]
+    );
+    systemPrompt = promptOverride?.value || agentModule.getPrompt();
+  }
+
+  // 4. Injeta dados dinâmicos (pipeline deps + context do chamador + knowledge base)
+  //    Context do chamador tem prioridade sobre pipeline deps
+  const mergedContext = { ...pipelineContext, ...context };
+  systemPrompt = injectContext(systemPrompt, mergedContext);
   systemPrompt = injectKnowledgeBase(systemPrompt, kb);
-  console.log('[DEBUG][AgentRunner] Placeholders substituídos', { placeholders: Object.keys({ ...context, ...KB_PLACEHOLDER_MAP }) });
+  console.log('[DEBUG][AgentRunner] Placeholders substituídos', { placeholders: Object.keys({ ...mergedContext, ...KB_PLACEHOLDER_MAP }) });
 
   // 5. Busca conteúdo real dos links de referência (web scraping)
   if (complements.links?.length) {
@@ -212,7 +315,47 @@ async function runAgent({
     }
   }
 
-  // 6. Injeta complementos (links/arquivos) se agente tipo text
+  // 5b. Análise de imagens via Vision (se agente suporta e tem imagens)
+  if (agentConfig.hasImages && complements.images?.length) {
+    try {
+      console.log('[INFO][AgentRunner] Analisando imagens via Vision', { agentName, count: complements.images.length });
+      const visionResult = await analyzeMultipleImages(
+        complements.images,
+        'Analise as imagens fornecidas e extraia todas as informações visuais relevantes: cores, tipografia, estilo, elementos gráficos, textos visíveis, público percebido e qualidade de produção.',
+        { detail: 'high' }
+      );
+      if (visionResult.analysis) {
+        complements.imageAnalysis = visionResult.analysis;
+        console.log('[SUCESSO][AgentRunner] Análise visual concluída', { agentName, analysisLength: visionResult.analysis.length, tokens: visionResult.tokens });
+      }
+    } catch (err) {
+      console.error('[ERRO][AgentRunner] Falha na análise de imagens — continuando sem', { agentName, error: err.message });
+    }
+  }
+
+  // 5c. Extração de texto de arquivos (PDF/DOCX/TXT)
+  if (complements.files?.length) {
+    try {
+      console.log('[INFO][AgentRunner] Extraindo texto dos arquivos', { agentName, count: complements.files.length });
+      const fileTexts = [];
+      for (const file of complements.files) {
+        const result = await extractFromFile(file.buffer, file.mimeType, file.fileName);
+        if (result.success && result.text) {
+          fileTexts.push(`[Arquivo: ${file.fileName}]\n${result.text}`);
+        } else {
+          console.warn('[WARNING][AgentRunner] Arquivo não extraído', { fileName: file.fileName, reason: result.reason });
+        }
+      }
+      if (fileTexts.length) {
+        complements.fileContents = fileTexts.join('\n\n---\n\n');
+        console.log('[SUCESSO][AgentRunner] Texto dos arquivos extraído', { agentName, filesProcessed: fileTexts.length, totalLength: complements.fileContents.length });
+      }
+    } catch (err) {
+      console.error('[ERRO][AgentRunner] Falha na extração de arquivos — continuando sem', { agentName, error: err.message });
+    }
+  }
+
+  // 6. Injeta complementos (links/imagens/arquivos) se agente tipo text
   if (agentConfig.type === 'text') {
     systemPrompt = injectComplements(systemPrompt, complements);
   }
@@ -233,7 +376,7 @@ async function runAgent({
     citations = result.citations;
     modelUsed = process.env.AI_MODEL_SEARCH || 'gpt-4o-mini';
 
-    historyId = await saveSearchHistory(tenantId, agentName, userInput, text, citations);
+    historyId = await saveSearchHistory(tenantId, agentName, userInput, text, citations, clientId);
     console.log('[SUCESSO][AgentRunner] Pesquisa concluída', { agentName, resultLength: text.length, citationsCount: citations.length, historyId });
 
   // ── Agente de TEXTO ───────────────────────────────────────────────────────
@@ -246,8 +389,17 @@ async function runAgent({
     historyId = await saveAgentHistory(tenantId, agentName, modelUsed, systemPrompt, text, {
       userInput,
       level,
-    });
+    }, clientId);
     console.log('[SUCESSO][AgentRunner] Agente executado', { agentName, modelUsed, responseLength: text.length, historyId });
+  }
+
+  // 8. Salva output na KB do cliente (para encadeamento do pipeline)
+  if (clientId && text) {
+    try {
+      await saveOutputToKB(tenantId, clientId, agentName, text);
+    } catch (err) {
+      console.error('[ERRO][AgentRunner] Falha ao salvar output na KB — continuando', { agentName, error: err.message });
+    }
   }
 
   return {
@@ -260,4 +412,4 @@ async function runAgent({
   };
 }
 
-module.exports = { runAgent };
+module.exports = { runAgent, saveOutputToKB, loadDependenciesFromKB };

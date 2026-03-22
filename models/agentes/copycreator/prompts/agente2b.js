@@ -122,7 +122,7 @@ module.exports = {
     type: 'text',
     hasWebSearch: false,
     hasLinks: false,
-    hasImages: false,
+    hasImages: true,
     order: 3,
     icon: 'BarChart3',
     placeholders: ['{OUTPUT_PESQUISA_CONCORRENTES}'],
