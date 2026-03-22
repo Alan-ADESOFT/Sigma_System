@@ -57,28 +57,27 @@ const NAV_SECTIONS = [
     category: 'AGENTES DE IA',
     items: [
       { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '05', icon: 'edit'      },
-      { href: '/dashboard/agentes',          label: 'CopyCreator IA',         tag: '06', icon: 'brain'     },
-      { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '07', icon: 'zap'       },
+      { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '06', icon: 'zap'       },
     ],
   },
   {
     category: 'SOCIAL MEDIA',
     items: [
-      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '08', icon: 'barChart'  },
-      { href: '/dashboard/content-plan',     label: 'Planejamento',           tag: '09', icon: 'list'      },
-      { href: '/dashboard/publish',          label: 'Publicação',             tag: '10', icon: 'send'      },
+      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '07', icon: 'barChart'  },
+      { href: '/dashboard/content-plan',     label: 'Planejamento',           tag: '08', icon: 'list'      },
+      { href: '/dashboard/publish',          label: 'Publicação',             tag: '09', icon: 'send'      },
     ],
   },
   {
     category: 'TRÁFEGO',
     items: [
-      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '11', icon: 'megaphone' },
+      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '10', icon: 'megaphone' },
     ],
   },
   {
     category: 'SISTEMA',
     items: [
-      { href: '/dashboard/settings',         label: 'Configurações',          tag: '12', icon: 'settings'  },
+      { href: '/dashboard/settings',         label: 'Configurações',          tag: '11', icon: 'settings'  },
     ],
   },
 ];

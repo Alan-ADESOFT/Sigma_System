@@ -791,7 +791,7 @@ export default function SocialPage() {
         notify('Erro ao carregar pastas', 'error');
       })
       .finally(() => setLoadingFolders(false));
-  }, [selectedAccId]);
+  }, [selectedClientId]);
 
   function handleFolderCreated(folder) {
     setFolders(prev => [folder, ...prev]);
