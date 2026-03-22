@@ -1,7 +1,24 @@
+/**
+ * models/marketing.model.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ * CRUD das etapas do pipeline de marketing por cliente.
+ * Cada cliente passa por 6 etapas: diagnóstico, concorrentes, público,
+ * avatar, posicionamento e oferta. Os dados de cada etapa são armazenados
+ * como JSONB na coluna `data`.
+ *
+ * Tabela: marketing_stages  (unique: client_id + stage_key)
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 const { query, queryOne } = require('../infra/db');
 
-// ─── Stages ─────────────────────────────────────────────────────────────────
+// ─── Leitura ─────────────────────────────────────────────────────────────────
 
+/**
+ * Retorna todas as etapas de um cliente, ordenadas pela sequência do pipeline.
+ * @param {string} clientId
+ * @returns {Promise<Array>}
+ */
 async function getStagesByClient(clientId) {
   return query(
     `SELECT * FROM marketing_stages
@@ -19,6 +36,12 @@ async function getStagesByClient(clientId) {
   );
 }
 
+/**
+ * Busca uma etapa específica de um cliente.
+ * @param {string} clientId
+ * @param {string} stageKey - 'diagnosis' | 'competitors' | 'audience' | 'avatar' | 'positioning' | 'offer'
+ * @returns {Promise<Object|null>}
+ */
 async function getStage(clientId, stageKey) {
   return queryOne(
     `SELECT * FROM marketing_stages
@@ -27,13 +50,18 @@ async function getStage(clientId, stageKey) {
   );
 }
 
+// ─── Escrita ─────────────────────────────────────────────────────────────────
+
 /**
  * Upsert a stage for a client.
+ * Se a etapa já existir, atualiza status/data/notes sem apagar campos existentes
+ * (COALESCE mantém o valor anterior quando o novo é null).
  * @param {string} clientId
  * @param {string} stageKey - 'diagnosis' | 'competitors' | 'audience' | 'avatar' | 'positioning' | 'offer'
- * @param {object|null} data - JSONB output to store
- * @param {string} status   - 'pending' | 'in_progress' | 'done'
- * @param {string|null} notes
+ * @param {Object|null} data - JSONB output to store
+ * @param {string} [status='in_progress'] - 'pending' | 'in_progress' | 'done'
+ * @param {string|null} [notes=null]
+ * @returns {Promise<Object>} Stage criada/atualizada
  */
 async function upsertStage(clientId, stageKey, data, status = 'in_progress', notes = null) {
   return queryOne(
@@ -55,7 +83,11 @@ async function upsertStage(clientId, stageKey, data, status = 'in_progress', not
 }
 
 /**
- * Update only the notes of a stage.
+ * Atualiza apenas as notas de uma etapa, sem alterar status ou data.
+ * @param {string} clientId
+ * @param {string} stageKey
+ * @param {string} notes
+ * @returns {Promise<Object>} Stage atualizada
  */
 async function updateStageNotes(clientId, stageKey, notes) {
   return queryOne(
@@ -66,6 +98,8 @@ async function updateStageNotes(clientId, stageKey, notes) {
     [clientId, stageKey, notes]
   );
 }
+
+// ─── Exports ─────────────────────────────────────────────────────────────────
 
 module.exports = {
   getStagesByClient,

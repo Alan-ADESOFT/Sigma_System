@@ -1,4 +1,14 @@
-// Status do pipeline de conteudo
+/**
+ * infra/constants.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Constantes compartilhadas entre backend e frontend.
+ * Define os status, tipos de conteúdo e colunas do board Kanban.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+// ─── Status do pipeline de conteúdo ──────────────────────────────────────────
+
+/** @type {Array<{value: string, label: string, color: string}>} */
 const CONTENT_STATUSES = [
   { value: 'idea', label: 'Ideia', color: '#9CA3AF' },
   { value: 'draft', label: 'Rascunho', color: '#F59E0B' },
@@ -8,7 +18,9 @@ const CONTENT_STATUSES = [
   { value: 'failed', label: 'Falhou', color: '#EF4444' },
 ];
 
-// Tipos de conteudo Instagram
+// ─── Tipos de conteúdo Instagram ─────────────────────────────────────────────
+
+/** @type {Array<{value: string, label: string, icon: string}>} */
 const CONTENT_TYPES = [
   { value: 'post', label: 'Post', icon: 'Image' },
   { value: 'story', label: 'Story', icon: 'Circle' },
@@ -17,7 +29,9 @@ const CONTENT_TYPES = [
   { value: 'campaign', label: 'Campanha', icon: 'Megaphone' },
 ];
 
-// Colunas do Kanban
+// ─── Colunas do Kanban ───────────────────────────────────────────────────────
+
+/** @type {Array<{id: string, label: string, icon: string, color: string}>} */
 const BOARD_COLUMNS = [
   { id: 'idea', label: 'Ideia', icon: 'Lightbulb', color: '#94A3B8' },
   { id: 'draft', label: 'Rascunho', icon: 'FileEdit', color: '#F59E0B' },
@@ -26,5 +40,7 @@ const BOARD_COLUMNS = [
   { id: 'published', label: 'Publicado', icon: 'Send', color: '#8B5CF6' },
   { id: 'failed', label: 'Falhou', icon: 'AlertCircle', color: '#EF4444' },
 ];
+
+// ─── Exports ─────────────────────────────────────────────────────────────────
 
 module.exports = { CONTENT_STATUSES, CONTENT_TYPES, BOARD_COLUMNS };

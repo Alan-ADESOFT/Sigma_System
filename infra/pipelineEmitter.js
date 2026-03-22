@@ -1,10 +1,13 @@
 /**
+ * infra/pipelineEmitter.js
+ * ─────────────────────────────────────────────────────────────────────────────
  * @fileoverview EventEmitter em memória para streaming de pipeline
- * @description Map global jobId → EventEmitter para comunicação entre
+ * @description Map global jobId -> EventEmitter para comunicação entre
  * o run-all (produtor) e o stream-log SSE (consumidor).
  *
  * TODO: Em produção multi-instance, substituir por Redis Pub/Sub.
  * Funciona em single-instance (dev + deploy simples).
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 const { EventEmitter } = require('events');
@@ -12,8 +15,10 @@ const { EventEmitter } = require('events');
 /** @type {Map<string, EventEmitter>} */
 const JOB_EMITTERS = new Map();
 
+// ─── API pública ─────────────────────────────────────────────────────────────
+
 /**
- * Cria um emitter para um job e agenda limpeza após 1h
+ * Cria um emitter para um job e agenda limpeza após 1h.
  * @param {string} jobId
  * @returns {EventEmitter}
  */
@@ -27,7 +32,7 @@ function createJobEmitter(jobId) {
 }
 
 /**
- * Retorna o emitter de um job (ou null se não existir)
+ * Retorna o emitter de um job (ou null se não existir).
  * @param {string} jobId
  * @returns {EventEmitter|null}
  */
@@ -36,11 +41,13 @@ function getJobEmitter(jobId) {
 }
 
 /**
- * Remove o emitter de um job
+ * Remove o emitter de um job.
  * @param {string} jobId
  */
 function removeJobEmitter(jobId) {
   JOB_EMITTERS.delete(jobId);
 }
+
+// ─── Exports ─────────────────────────────────────────────────────────────────
 
 module.exports = { createJobEmitter, getJobEmitter, removeJobEmitter };

@@ -269,7 +269,10 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
       setChatHistory(prev => [...prev, { role: 'user', content: userPrompt }, { role: 'assistant', content: outputText }].slice(-12));
       setPromptInput('');
       notify('Rascunho gerado — revise e salve quando estiver pronto', 'success');
-    } catch (err) { notify('Falha ao executar agente. Tente novamente ou reduza o input.', 'error'); }
+    } catch (err) {
+      const msg = err.message?.includes('Limite') ? err.message : 'Falha ao executar agente. Tente novamente ou reduza o input.';
+      notify(msg, 'error');
+    }
     finally { setApplying(false); }
   }
 

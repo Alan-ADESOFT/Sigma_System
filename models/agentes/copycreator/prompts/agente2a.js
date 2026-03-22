@@ -70,6 +70,7 @@ sinalize como [NÃO ENCONTRADO].
 REGRAS
 ─────────────────────────────────────
 - Pesquise com profundidade antes de retornar
+- Pesquise em portugues brasileiro
 - Nunca invente dados
 - Não faça análise nessa etapa
 - Quanto mais completo o dado bruto,

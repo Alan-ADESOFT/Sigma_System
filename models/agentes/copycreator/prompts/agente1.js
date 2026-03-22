@@ -93,6 +93,9 @@ REGRAS
 - Nunca invente dados
 - Sinalize tudo que estiver faltando
 - Seja objetivo, direto e estratégico
+- Escreva em portugues brasileiro
+- Use markdown para formatar (## para titulos,
+  **negrito** para destaques, - para listas)
 - Esse documento vai alimentar todas as
   etapas seguintes — quanto mais preciso,
   mais forte será tudo que vem depois`;

@@ -125,6 +125,7 @@ sinalize como [DADOS INSUFICIENTES NESSA FONTE].
 REGRAS
 ─────────────────────────────────────
 - Pesquise apenas em fontes públicas e reais
+- Pesquise em portugues brasileiro
 - Nunca invente frases ou dores
 - Preserve a linguagem original do público
 - Inclua os links das fontes consultadas

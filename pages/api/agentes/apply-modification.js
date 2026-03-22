@@ -21,6 +21,7 @@ import { queryOne }         from '../../../infra/db';
 import { resolveModel }    from '../../../models/ia/completion';
 import { withMarkdown }    from '../../../models/ia/markdownHelper';
 import { extractFromFile } from '../../../infra/api/fileReader';
+import { checkRateLimit, logRateLimitEvent } from '../../../infra/rateLimit';
 
 const STAGE_LABELS = {
   diagnosis:   'Diagnóstico do Negócio',
@@ -45,6 +46,18 @@ export default async function handler(req, res) {
 
   if (!clientId || !stageKey || !operatorPrompt) {
     return res.status(400).json({ success: false, error: 'clientId, stageKey e operatorPrompt são obrigatórios' });
+  }
+
+  // Rate limit: 50 modificacoes por dia (1440 min) por tenant
+  const rateCheck = await checkRateLimit(tenantId, 'modification', 50, 1440);
+  if (!rateCheck.ok) {
+    console.log('[WARN][Modification] Rate limit atingido', { tenantId, count: rateCheck.count });
+    return res.status(429).json({
+      success: false,
+      error: `Limite diario de modificacoes atingido (${rateCheck.count}/50). Tente novamente amanha.`,
+      remaining: rateCheck.remaining,
+      retryAfter: rateCheck.resetIn,
+    });
   }
 
   try {
@@ -188,6 +201,9 @@ ${currentOutput || '(vazio)'}`;
       [tenantId, `modification_${stageKey}`, model, systemPrompt.substring(0, 2000), resultText,
        JSON.stringify({ stageKey, operatorPrompt, type: 'modification' }), clientId]
     );
+
+    // Registra evento de rate limit
+    await logRateLimitEvent(tenantId, 'modification', { clientId, stageKey });
 
     console.log('[SUCESSO][ApplyModification] Modificação aplicada', { stageKey, responseLength: resultText.length });
     return res.json({ success: true, data: { text: resultText } });

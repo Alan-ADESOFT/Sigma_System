@@ -557,3 +557,16 @@ CREATE TABLE IF NOT EXISTS stage_versions (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_stage_versions_client ON stage_versions(client_id, stage_key);
+
+-- ============================================================
+-- RATE_LIMIT_LOG (controle de limites por tenant/acao)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS rate_limit_log (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    action      TEXT NOT NULL,
+    -- 'pipeline' | 'modification' | etc.
+    metadata    JSONB NOT NULL DEFAULT '{}',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_rate_limit_tenant_action ON rate_limit_log(tenant_id, action, created_at);

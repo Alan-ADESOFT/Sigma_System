@@ -14,6 +14,7 @@ import { orchestrate }     from '../../../../models/agentes/copycreator/orchestr
 import { getExecutionOrder } from '../../../../models/agentes/copycreator/pipelineConfig';
 import { resolveModel }     from '../../../../models/ia/completion';
 import { createJobEmitter } from '../../../../infra/pipelineEmitter';
+import { checkRateLimit, logRateLimitEvent } from '../../../../infra/rateLimit';
 
 /**
  * Converte markdown básico para HTML (mesmo padrão do StageModal frontend)
@@ -71,6 +72,17 @@ export default async function handler(req, res) {
     return res.status(409).json({ success: false, error: 'Já existe um pipeline em andamento para este cliente', jobId: running.id });
   }
 
+  // Rate limit: 5 pipelines por 30 minutos por tenant
+  const rateCheck = await checkRateLimit(tenantId, 'pipeline', 5, 30);
+  if (!rateCheck.ok) {
+    console.log('[WARN][Pipeline] Rate limit atingido', { tenantId, count: rateCheck.count, resetIn: rateCheck.resetIn });
+    return res.status(429).json({
+      success: false,
+      error: `Limite de pipelines atingido (${rateCheck.count}/5 nos ultimos 30 min). Tente novamente em ${Math.ceil(rateCheck.resetIn / 60)} minuto(s).`,
+      retryAfter: rateCheck.resetIn,
+    });
+  }
+
   try {
     // Cria o registro de job
     const job = await queryOne(
@@ -79,6 +91,9 @@ export default async function handler(req, res) {
       [tenantId, clientId, 7]
     );
     const jobId = job.id;
+
+    // Registra evento de rate limit
+    await logRateLimitEvent(tenantId, 'pipeline', { clientId, jobId });
 
     console.log('[INFO][Pipeline] Pipeline iniciado', { jobId, clientId, company: client.company_name });
 

@@ -1,5 +1,23 @@
+/**
+ * models/content.model.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ * CRUD de conteúdos (posts, stories, reels, carrosseis, campanhas).
+ * Alimenta o board Kanban e o scheduler de publicação automática.
+ *
+ * Tabela: contents
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 const { query, queryOne } = require('../infra/db');
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Parseia um valor que pode ser JSON array, string CSV ou null.
+ * Garante que o retorno é sempre um Array limpo.
+ * @param {string|null} value - Valor cru do banco (coluna TEXT)
+ * @returns {string[]}
+ */
 function safeJsonArray(value) {
   if (!value) return [];
   try {
@@ -10,6 +28,11 @@ function safeJsonArray(value) {
   }
 }
 
+/**
+ * Converte uma row do banco para o formato camelCase usado pelo frontend.
+ * @param {Object} row - Row crua do PostgreSQL
+ * @returns {Object}
+ */
 function mapContent(row) {
   return {
     id: row.id,
@@ -28,6 +51,13 @@ function mapContent(row) {
   };
 }
 
+// ─── Leitura ─────────────────────────────────────────────────────────────────
+
+/**
+ * Lista todos os conteúdos do tenant, ordenados por posição no board.
+ * @param {string} tenantId
+ * @returns {Promise<Array>}
+ */
 async function getContents(tenantId) {
   const rows = await query(
     `SELECT * FROM contents WHERE tenant_id = $1 ORDER BY sort_order ASC, created_at DESC`,
@@ -36,6 +66,12 @@ async function getContents(tenantId) {
   return rows.map(mapContent);
 }
 
+/**
+ * Busca um conteúdo pelo id + tenant.
+ * @param {string} tenantId
+ * @param {string} id
+ * @returns {Promise<Object|null>}
+ */
 async function getContentById(tenantId, id) {
   const row = await queryOne(
     `SELECT * FROM contents WHERE id = $1 AND tenant_id = $2`,
@@ -44,6 +80,15 @@ async function getContentById(tenantId, id) {
   return row ? mapContent(row) : null;
 }
 
+// ─── Escrita ─────────────────────────────────────────────────────────────────
+
+/**
+ * Cria ou atualiza um conteúdo (upsert por id).
+ * Serializa hashtags e mediaUrls como JSON antes de gravar.
+ * @param {string} tenantId
+ * @param {Object} content - Dados do conteúdo vindos do frontend
+ * @returns {Promise<{success: boolean, content?: Object, error?: string}>}
+ */
 async function saveContent(tenantId, content) {
   try {
     const hashtags = JSON.stringify(content.hashtags || []);
@@ -71,14 +116,32 @@ async function saveContent(tenantId, content) {
   }
 }
 
+/**
+ * Atualiza apenas o status de um conteúdo (ex: draft → approved).
+ * @param {string} id
+ * @param {string} status
+ */
 async function updateContentStatus(id, status) {
   await query(`UPDATE contents SET status = $1 WHERE id = $2`, [status, id]);
 }
 
+/**
+ * Remove um conteúdo do tenant.
+ * @param {string} tenantId
+ * @param {string} id
+ */
 async function deleteContent(tenantId, id) {
   await query(`DELETE FROM contents WHERE id = $1 AND tenant_id = $2`, [id, tenantId]);
 }
 
+// ─── Scheduler ───────────────────────────────────────────────────────────────
+
+/**
+ * Busca posts com status 'scheduled' cuja data já passou.
+ * Inclui access_token da conta para publicação via API do Instagram.
+ * Chamado pelo cron de publicação automática.
+ * @returns {Promise<Array>} Rows cruas (não mapeadas) com dados da conta
+ */
 async function getScheduledPosts() {
   const rows = await query(
     `SELECT c.*, a.access_token, a.provider_account_id
@@ -89,6 +152,8 @@ async function getScheduledPosts() {
   );
   return rows;
 }
+
+// ─── Exports ─────────────────────────────────────────────────────────────────
 
 module.exports = {
   getContents, getContentById, saveContent,
