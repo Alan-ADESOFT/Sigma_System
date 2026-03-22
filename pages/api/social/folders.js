@@ -1,7 +1,9 @@
 /**
- * GET  /api/social/folders?accountId=<id>  → lista pastas da conta
- * POST /api/social/folders                 → cria pasta
+ * @fileoverview Endpoint: Pastas de conteudo (vinculadas a cliente ou conta)
+ * @route GET  /api/social/folders?accountId=<id>  → lista pastas (accountId = clientId ou account)
+ * @route POST /api/social/folders                 → cria pasta
  *   body: { accountId, name, description?, color? }
+ *   accountId pode ser um client_id (marketing_clients) ou account_id (accounts)
  */
 
 const { query, queryOne } = require('../../../infra/db');
@@ -12,20 +14,21 @@ export default async function handler(req, res) {
   const tenantId = await resolveTenantId(req);
 
   try {
-    /* ── GET: listar pastas de uma conta ── */
+    /* ── GET: listar pastas ── */
     if (req.method === 'GET') {
       const { accountId } = req.query;
       if (!accountId) {
         return res.status(400).json({ success: false, error: 'accountId obrigatorio' });
       }
 
+      // Tenta buscar como client_id primeiro, depois como account_id
       const rows = await query(
         `SELECT
            f.*,
            COUNT(c.id)::int AS content_count
          FROM content_folders f
          LEFT JOIN contents c ON c.folder_id = f.id
-         WHERE f.tenant_id = $1 AND f.account_id = $2
+         WHERE f.tenant_id = $1 AND (f.client_id = $2 OR f.account_id = $2)
          GROUP BY f.id
          ORDER BY f.created_at DESC`,
         [tenantId, accountId]
@@ -42,14 +45,32 @@ export default async function handler(req, res) {
       if (!accountId) return res.status(400).json({ success: false, error: 'accountId obrigatorio' });
       if (!name?.trim()) return res.status(400).json({ success: false, error: 'name obrigatorio' });
 
-      const folder = await queryOne(
-        `INSERT INTO content_folders (tenant_id, account_id, name, description, color)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING *`,
-        [tenantId, accountId, name.trim(), description || null, color || '#ff0033']
+      // Detecta se o ID e de um cliente marketing ou de uma conta Instagram
+      const isClient = await queryOne(
+        'SELECT id FROM marketing_clients WHERE id = $1 AND tenant_id = $2',
+        [accountId, tenantId]
       );
 
-      console.log('[SUCESSO][API:/api/social/folders] Pasta criada', { folderId: folder.id, name: name.trim() });
+      let folder;
+      if (isClient) {
+        // Cria pasta vinculada ao cliente
+        folder = await queryOne(
+          `INSERT INTO content_folders (tenant_id, client_id, name, description, color)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING *`,
+          [tenantId, accountId, name.trim(), description || null, color || '#ff0033']
+        );
+      } else {
+        // Fallback: cria pasta vinculada a conta Instagram (compatibilidade)
+        folder = await queryOne(
+          `INSERT INTO content_folders (tenant_id, account_id, name, description, color)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING *`,
+          [tenantId, accountId, name.trim(), description || null, color || '#ff0033']
+        );
+      }
+
+      console.log('[SUCESSO][API:/api/social/folders] Pasta criada', { folderId: folder.id, name: name.trim(), isClient: !!isClient });
       return res.status(201).json({ success: true, folder });
     }
 

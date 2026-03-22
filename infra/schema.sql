@@ -96,6 +96,11 @@ CREATE TABLE IF NOT EXISTS content_folders (
 CREATE INDEX IF NOT EXISTS idx_folders_tenant  ON content_folders(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_folders_account ON content_folders(account_id);
 
+-- Coluna client_id em content_folders (pastas vinculadas a clientes de marketing)
+ALTER TABLE content_folders ALTER COLUMN account_id DROP NOT NULL;
+ALTER TABLE content_folders ADD COLUMN IF NOT EXISTS client_id TEXT REFERENCES marketing_clients(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_folders_client ON content_folders(client_id);
+
 -- Coluna folder_id em contents (pode ser nula para conteúdos avulsos)
 ALTER TABLE contents ADD COLUMN IF NOT EXISTS folder_id TEXT REFERENCES content_folders(id) ON DELETE SET NULL;
 
