@@ -180,6 +180,12 @@ export default function PipelineModal({ client, onClose, onComplete, onBackgroun
       const d = await r.json();
       if (!d.success) { setErrorMsg(d.error || 'Erro ao iniciar'); setPhase('error'); return; }
       addLog('> Pipeline ativo [job:' + d.jobId.substring(0, 8) + ']', 'system');
+      if (d.rateLimit) {
+        addLog('> Pipelines restantes: ' + d.rateLimit.remaining + '/' + d.rateLimit.limit + ' (' + d.rateLimit.window + ')', 'system');
+        if (d.rateLimit.remaining <= 1) {
+          notify('Atencao: ' + d.rateLimit.remaining + ' pipeline(s) restante(s) nos proximos 30 min', 'warning');
+        }
+      }
       startPolling();
       connectSSE(d.jobId);
     } catch (err) { setErrorMsg(err.message); setPhase('error'); }

@@ -205,8 +205,9 @@ ${currentOutput || '(vazio)'}`;
     // Registra evento de rate limit
     await logRateLimitEvent(tenantId, 'modification', { clientId, stageKey });
 
-    console.log('[SUCESSO][ApplyModification] Modificação aplicada', { stageKey, responseLength: resultText.length });
-    return res.json({ success: true, data: { text: resultText } });
+    const modRemaining = Math.max(0, 50 - (rateCheck.count + 1));
+    console.log('[SUCESSO][ApplyModification] Modificação aplicada', { stageKey, responseLength: resultText.length, modRemaining });
+    return res.json({ success: true, data: { text: resultText }, rateLimit: { remaining: modRemaining, limit: 50, window: '24h' } });
 
   } catch (err) {
     console.error('[ERRO][ApplyModification]', { error: err.message });

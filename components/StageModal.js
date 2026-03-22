@@ -268,7 +268,14 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
       if (editorRef.current) { editorRef.current.innerHTML = mdToHtml(outputText); editorRef.current.scrollTop = 0; setSavedN(false); }
       setChatHistory(prev => [...prev, { role: 'user', content: userPrompt }, { role: 'assistant', content: outputText }].slice(-12));
       setPromptInput('');
-      notify('Rascunho gerado — revise e salve quando estiver pronto', 'success');
+      const rl = d.rateLimit;
+      if (rl && rl.remaining <= 10) {
+        notify('Rascunho gerado — ' + rl.remaining + '/' + rl.limit + ' modificacoes restantes hoje', 'warning');
+      } else if (rl) {
+        notify('Rascunho gerado — ' + rl.remaining + '/' + rl.limit + ' modificacoes restantes hoje', 'success');
+      } else {
+        notify('Rascunho gerado — revise e salve quando estiver pronto', 'success');
+      }
     } catch (err) {
       const msg = err.message?.includes('Limite') ? err.message : 'Falha ao executar agente. Tente novamente ou reduza o input.';
       notify(msg, 'error');

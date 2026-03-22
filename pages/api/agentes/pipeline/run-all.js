@@ -110,7 +110,9 @@ export default async function handler(req, res) {
       }
     });
 
-    return res.json({ success: true, jobId });
+    // remaining = limite - (count+1) porque acabamos de registrar 1 evento
+    const pipelineRemaining = Math.max(0, 5 - (rateCheck.count + 1));
+    return res.json({ success: true, jobId, rateLimit: { remaining: pipelineRemaining, limit: 5, window: '30 min' } });
   } catch (err) {
     console.error('[ERRO][Pipeline] Erro ao iniciar pipeline', { error: err.message });
     return res.status(500).json({ success: false, error: err.message });

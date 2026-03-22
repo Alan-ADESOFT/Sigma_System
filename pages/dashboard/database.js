@@ -244,7 +244,9 @@ function ClientStagesPopup({ client, onClose, onStageUpdated, onReloadClient }) 
         notify(d.error || 'Erro ao iniciar pipeline', 'error');
         return;
       }
-      notify('Pipeline iniciado para ' + (client?.company_name || 'cliente') + ' — acompanhe o progresso', 'info', 8000);
+      const rl = d.rateLimit;
+      const rlMsg = rl ? ' (' + rl.remaining + '/' + rl.limit + ' restantes em ' + rl.window + ')' : '';
+      notify('Pipeline iniciado para ' + (client?.company_name || 'cliente') + rlMsg, rl && rl.remaining <= 1 ? 'warning' : 'info', 8000);
       setPipelineStatus({ status: 'running', completedAgents: 0, totalAgents: 8, currentAgent: 'agente1' });
       setPipelinePolling(true);
     } catch (err) {
