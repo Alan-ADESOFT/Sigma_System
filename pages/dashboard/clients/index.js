@@ -100,6 +100,156 @@ function ActionBtn({ title, onClick, color = 'var(--text-muted)', children }) {
 }
 
 /* ─────────────────────────────────────────────────────────
+   Modal: Enviar Formulário via WhatsApp (Z-API)
+   Gera token → mostra mensagem editável → envia via Z-API
+───────────────────────────────────────────────────────── */
+function WhatsAppFormModal({ client, onClose, onSent, notify }) {
+  const [step, setStep]       = useState('generating');
+  const [link, setLink]       = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError]     = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        console.log('[INFO][Frontend:WhatsAppModal] Gerando token', { clientId: client.id });
+        notify('# Gerando link do formulário...', 'info');
+        const res = await fetch('/api/form/generate-token', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId: client.id }),
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error);
+        setLink(json.link);
+        setMessage(
+          `Olá, *${client.company_name}*! 👋\n\n` +
+          `Preparamos um formulário estratégico para entender a fundo o seu negócio.\n\n` +
+          `Este é o *raio-X do seu negócio* — com ele, a Sigma consegue construir um posicionamento, estratégia e narrativa sob medida para você.\n\n` +
+          `⏱ Tempo estimado: *25 a 40 minutos*\n` +
+          `📋 São 11 etapas, mas você pode salvar e continuar depois.\n\n` +
+          `Seu link exclusivo (válido por *7 dias*):\n` +
+          `👉 ${json.link}\n\n` +
+          `Responda com profundidade — quanto mais detalhes, mais precisa será a estratégia. 🎯`
+        );
+        setStep('ready');
+        console.log('[SUCESSO][Frontend:WhatsAppModal] Token gerado', { link: json.link });
+      } catch (err) {
+        console.error('[ERRO][Frontend:WhatsAppModal] Falha ao gerar token', { error: err.message });
+        notify('! Erro ao gerar link: ' + err.message, 'error');
+        setError(err.message);
+        setStep('ready');
+      }
+    })();
+  }, []);
+
+  async function handleSend() {
+    if (!message.trim()) { notify('! Mensagem não pode estar vazia.', 'error'); return; }
+    const phone = client.phone.replace(/\D/g, '');
+    const phoneWithCountry = phone.startsWith('55') ? phone : `55${phone}`;
+    setStep('sending'); setError(null);
+    try {
+      console.log('[INFO][Frontend:WhatsAppModal] Enviando via Z-API', { clientId: client.id });
+      notify('# Enviando mensagem via WhatsApp...', 'info');
+      const res = await fetch('/api/form/send-whatsapp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: client.id, phone: phoneWithCountry, message }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
+      setStep('done');
+      notify('> Formulário enviado para ' + client.company_name + ' via WhatsApp.', 'success');
+      console.log('[SUCESSO][Frontend:WhatsAppModal] Mensagem enviada', { clientId: client.id });
+      if (onSent) onSent();
+      setTimeout(() => onClose(), 1500);
+    } catch (err) {
+      console.error('[ERRO][Frontend:WhatsAppModal] Falha no envio', { error: err.message });
+      notify('! Falha ao enviar: ' + err.message, 'error');
+      setError(err.message);
+      setStep('ready');
+    }
+  }
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 100,
+      background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+    }}>
+      <div onClick={e => e.stopPropagation()} className="glass-card animate-scale-in"
+        style={{ width: '100%', maxWidth: 520, padding: '24px', position: 'relative' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: 'rgba(37,211,102,0.1)', border: '1px solid rgba(37,211,102,0.25)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="#25D366">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+                <path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 0 0 .612.616l4.573-1.453A11.949 11.949 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.336 0-4.512-.752-6.278-2.03l-.346-.27-3.277 1.042 1.076-3.2-.293-.372A9.953 9.953 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>Enviar Formulário</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>{client.company_name} · {client.phone || 'sem telefone'}</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 28, height: 28, borderRadius: 6, border: 'none', cursor: 'pointer',
+            background: 'rgba(255,255,255,0.04)', color: 'var(--text-muted)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg></button>
+        </div>
+
+        {step === 'generating' && (
+          <div style={{ textAlign: 'center', padding: '30px 0' }}>
+            <div className="spinner" style={{ margin: '0 auto 12px' }} />
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Gerando link exclusivo...</div>
+          </div>
+        )}
+
+        {(step === 'ready' || step === 'sending') && (
+          <>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Mensagem (editável)</label>
+              <textarea value={message} onChange={e => setMessage(e.target.value)} disabled={step === 'sending'} rows={12}
+                style={{ width: '100%', padding: '12px 14px', boxSizing: 'border-box', background: 'rgba(10,10,10,0.8)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.78rem', fontFamily: 'var(--font-sans)', outline: 'none', resize: 'vertical', lineHeight: 1.55, minHeight: 200 }} />
+            </div>
+            {error && (
+              <div style={{ padding: '8px 12px', borderRadius: 6, marginBottom: 14, background: 'rgba(255,0,51,0.06)', border: '1px solid rgba(255,0,51,0.15)', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--error)' }}>! {error}</div>
+            )}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 6, background: 'rgba(17,17,17,0.9)', border: '1px solid rgba(255,255,255,0.06)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 500, cursor: 'pointer', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Cancelar</button>
+              <button onClick={handleSend} disabled={step === 'sending' || !message.trim()} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 6,
+                background: 'linear-gradient(135deg, #1a8c44, #25D366)', border: '1px solid rgba(37,211,102,0.4)',
+                color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
+                cursor: step === 'sending' ? 'not-allowed' : 'pointer', opacity: step === 'sending' ? 0.6 : 1, transition: 'all 0.2s',
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+                  <path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 0 0 .612.616l4.573-1.453A11.949 11.949 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.336 0-4.512-.752-6.278-2.03l-.346-.27-3.277 1.042 1.076-3.2-.293-.372A9.953 9.953 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
+                </svg>
+                {step === 'sending' ? 'Enviando...' : 'Enviar via WhatsApp'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 'done' && (
+          <div style={{ textAlign: 'center', padding: '30px 0' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', margin: '0 auto 14px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', color: 'var(--success)' }}>✓</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color: 'var(--success)', marginBottom: 4 }}>Mensagem enviada!</div>
+            <div style={{ fontFamily: 'var(--font-sans)', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{client.company_name} recebeu o formulário via WhatsApp.</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
    Modal — Novo Cliente (campos básicos)
 ───────────────────────────────────────────────────────── */
 const INP_STYLE = {
@@ -812,10 +962,11 @@ function DeleteConfirm({ client, onClose, onConfirm, deleting }) {
 /* ─────────────────────────────────────────────────────────
    Linha da tabela
 ───────────────────────────────────────────────────────── */
-function ClientRow({ client, onEdit, onDelete, isOdd }) {
+function ClientRow({ client, onEdit, onDelete, isOdd, notify }) {
   const router   = useRouter();
   const services = Array.isArray(client.services) ? client.services : [];
   const ticket   = parseTicket(client.avg_ticket);
+  const [showWaModal, setShowWaModal] = useState(false);
 
   return (
     <tr style={{ background: isOdd ? 'rgba(255,255,255,0.01)' : 'transparent' }}>
@@ -903,6 +1054,15 @@ function ClientRow({ client, onEdit, onDelete, isOdd }) {
       {/* Ações */}
       <td style={{ padding: '10px 14px', verticalAlign: 'middle' }}>
         <div style={{ display: 'flex', gap: 2 }}>
+          <ActionBtn title="Enviar Formulário via WhatsApp" color="#25D366" onClick={() => {
+            if (!client.phone) { notify('! Cadastre o telefone do cliente antes de enviar.', 'error'); return; }
+            setShowWaModal(true);
+          }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'inherit' }}>
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+              <path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 0 0 .612.616l4.573-1.453A11.949 11.949 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.336 0-4.512-.752-6.278-2.03l-.346-.27-3.277 1.042 1.076-3.2-.293-.372A9.953 9.953 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
+            </svg>
+          </ActionBtn>
           <ActionBtn title="Ver cliente" color="#3b82f6" onClick={() => router.push(`/dashboard/clients/${client.id}`)}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
@@ -921,6 +1081,14 @@ function ClientRow({ client, onEdit, onDelete, isOdd }) {
             </svg>
           </ActionBtn>
         </div>
+        {showWaModal && (
+          <WhatsAppFormModal
+            client={client}
+            notify={notify}
+            onClose={() => setShowWaModal(false)}
+            onSent={() => setShowWaModal(false)}
+          />
+        )}
       </td>
     </tr>
   );
@@ -1196,6 +1364,7 @@ export default function ClientsPage() {
                         isOdd={i % 2 !== 0}
                         onEdit={setEditTarget}
                         onDelete={setDeleteTarget}
+                        notify={notify}
                       />
                     ))}
                   </tbody>

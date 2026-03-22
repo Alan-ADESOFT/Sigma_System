@@ -395,6 +395,339 @@ function ThreeDotMenu({ user, logout }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
+   NotificationBell — sino de notificações com dropdown e polling automático.
+   Busca /api/notifications a cada 30s. Mostra badge vermelho com contagem.
+   Dropdown com lista de notificações ou "Nenhuma notificação" quando vazio.
+───────────────────────────────────────────────────────────────────────────── */
+function NotificationBell() {
+  const [open, setOpen]                 = useState(false);
+  const [tab, setTab]                   = useState('unread'); // 'unread' | 'all'
+  const [notifications, setNotifications] = useState([]);
+  const [allNotifications, setAllNotifications] = useState([]);
+  const [unreadCount, setUnreadCount]   = useState(0);
+  const [loading, setLoading]           = useState(false);
+  const dropdownRef                     = useRef(null);
+
+  // Busca notificações não lidas
+  async function fetchNotifications() {
+    try {
+      const res  = await fetch('/api/notifications');
+      const json = await res.json();
+      if (json.success) {
+        setNotifications(json.notifications || []);
+        setUnreadCount(json.unreadCount || 0);
+      }
+    } catch (err) {
+      console.error('[ERRO][NotificationBell] Falha ao buscar notificações', err.message);
+    }
+  }
+
+  // Busca todas as notificações (lidas + não lidas)
+  async function fetchAllNotifications() {
+    try {
+      const res  = await fetch('/api/notifications?filter=all');
+      const json = await res.json();
+      if (json.success) {
+        setAllNotifications(json.notifications || []);
+        setUnreadCount(json.unreadCount || 0);
+      }
+    } catch (err) {
+      console.error('[ERRO][NotificationBell] Falha ao buscar todas as notificações', err.message);
+    }
+  }
+
+  // Polling: busca ao montar e a cada 30 segundos
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fecha dropdown ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    if (open) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  // Marca uma notificação como lida
+  async function markRead(id) {
+    try {
+      await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'markRead', id }),
+      });
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      setAllNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error('[ERRO][NotificationBell] Falha ao marcar como lida', err.message);
+    }
+  }
+
+  // Marca todas como lidas
+  async function markAllRead() {
+    try {
+      await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'markRead' }),
+      });
+      setNotifications([]);
+      setAllNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+    } catch (err) {
+      console.error('[ERRO][NotificationBell] Falha ao marcar todas como lidas', err.message);
+    }
+  }
+
+  // Ícone de tipo da notificação
+  function typeIcon(type) {
+    if (type === 'form_submitted') return '✓';
+    if (type === 'form_started')   return '✏';
+    if (type === 'form_sent')      return '📋';
+    if (type === 'token_expired')  return '⏱';
+    return '●';
+  }
+
+  // Cor do tipo
+  function typeColor(type) {
+    if (type === 'form_submitted') return 'var(--success)';
+    if (type === 'form_started')   return 'var(--warning)';
+    if (type === 'token_expired')  return 'var(--error)';
+    return 'var(--info)';
+  }
+
+  return (
+    <div ref={dropdownRef} style={{ position: 'relative' }}>
+      {/* Botão sino */}
+      <button
+        onClick={() => { setOpen(v => !v); if (!open) fetchNotifications(); }}
+        title="Notificações"
+        style={{
+          position: 'relative',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 30, height: 30, borderRadius: 6,
+          background: open ? 'rgba(255,0,51,0.12)' : 'rgba(255,0,51,0.06)',
+          border: open ? '1px solid rgba(255,0,51,0.25)' : '1px solid rgba(255,0,51,0.12)',
+          cursor: 'pointer',
+          color: unreadCount > 0 ? 'var(--brand-300)' : 'var(--text-muted)',
+          transition: 'all 0.15s',
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+
+        {/* Badge de contagem */}
+        {unreadCount > 0 && (
+          <span style={{
+            position: 'absolute', top: 2, right: 2,
+            minWidth: 14, height: 14, borderRadius: 7,
+            background: 'var(--brand-500)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'var(--font-mono)', fontSize: '0.5rem', fontWeight: 700,
+            color: '#fff', lineHeight: 1,
+            padding: '0 3px',
+          }}>
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0,
+          marginTop: 8, width: 340,
+          background: 'linear-gradient(145deg, rgba(17,17,17,0.98), rgba(10,10,10,0.99))',
+          border: '1px solid rgba(255,255,255,0.06)',
+          borderRadius: 10, overflow: 'hidden',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+          zIndex: 200,
+          animation: 'scaleIn 0.2s ease-out',
+        }}>
+          {/* Header do dropdown */}
+          <div style={{
+            padding: '10px 14px 0',
+            borderBottom: '1px solid rgba(255,255,255,0.04)',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginBottom: 10,
+            }}>
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600,
+                letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)',
+              }}>
+                Notificações
+              </span>
+              {tab === 'unread' && notifications.length > 0 && (
+                <button
+                  onClick={markAllRead}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontFamily: 'var(--font-mono)', fontSize: '0.58rem',
+                    color: 'var(--brand-500)', letterSpacing: '0.04em',
+                  }}
+                >
+                  Limpar todas
+                </button>
+              )}
+            </div>
+
+            {/* Tabs: Não lidas / Todas */}
+            <div style={{ display: 'flex', gap: 0 }}>
+              {[
+                { key: 'unread', label: 'Não lidas' },
+                { key: 'all',    label: 'Todas' },
+              ].map(t => (
+                <button
+                  key={t.key}
+                  onClick={() => {
+                    setTab(t.key);
+                    if (t.key === 'all') fetchAllNotifications();
+                    else fetchNotifications();
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '7px 0',
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: tab === t.key
+                      ? '2px solid var(--brand-500)'
+                      : '2px solid transparent',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.6rem',
+                    fontWeight: tab === t.key ? 600 : 400,
+                    color: tab === t.key ? 'var(--brand-400)' : 'var(--text-muted)',
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {t.label}
+                  {t.key === 'unread' && unreadCount > 0 && (
+                    <span style={{
+                      marginLeft: 5,
+                      padding: '1px 5px',
+                      borderRadius: 8,
+                      background: 'rgba(255,0,51,0.15)',
+                      color: 'var(--brand-400)',
+                      fontSize: '0.5rem',
+                      fontWeight: 700,
+                    }}>
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Lista */}
+          <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+            {(() => {
+              const list = tab === 'all' ? allNotifications : notifications;
+              if (list.length === 0) {
+                return (
+                  <div style={{ padding: '32px 14px', textAlign: 'center' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto 10px', display: 'block', opacity: 0.5 }}>
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    </svg>
+                    <div style={{
+                      fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
+                      color: 'var(--text-muted)', letterSpacing: '0.04em',
+                    }}>
+                      {tab === 'all' ? 'Nenhuma notificação ainda' : 'Nenhuma notificação não lida'}
+                    </div>
+                  </div>
+                );
+              }
+              return list.map(n => {
+                const isRead = n.read;
+                return (
+                  <div
+                    key={n.id}
+                    style={{
+                      display: 'flex', gap: 10, padding: '10px 14px',
+                      borderBottom: '1px solid rgba(255,255,255,0.02)',
+                      cursor: !isRead ? 'pointer' : 'default',
+                      opacity: isRead ? 0.55 : 1,
+                      transition: 'background 0.15s, opacity 0.15s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    onClick={() => { if (!isRead) markRead(n.id); }}
+                    title={isRead ? 'Já lida' : 'Clique para marcar como lida'}
+                  >
+                    {/* Ícone do tipo */}
+                    <div style={{
+                      width: 28, height: 28, borderRadius: 6, flexShrink: 0,
+                      background: `${typeColor(n.type)}15`,
+                      border: `1px solid ${typeColor(n.type)}30`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '0.7rem',
+                    }}>
+                      {typeIcon(n.type)}
+                    </div>
+
+                    {/* Conteúdo */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontFamily: 'var(--font-mono)', fontSize: '0.68rem',
+                        fontWeight: isRead ? 400 : 600,
+                        color: isRead ? 'var(--text-secondary)' : 'var(--text-primary)',
+                        marginBottom: 2,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {n.title}
+                      </div>
+                      <div style={{
+                        fontFamily: 'var(--font-sans)', fontSize: '0.72rem',
+                        color: 'var(--text-secondary)', lineHeight: 1.4,
+                        overflow: 'hidden', textOverflow: 'ellipsis',
+                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                      }}>
+                        {n.message}
+                      </div>
+                      <div style={{
+                        fontFamily: 'var(--font-mono)', fontSize: '0.52rem',
+                        color: 'var(--text-muted)', marginTop: 4,
+                        letterSpacing: '0.04em',
+                      }}>
+                        {n.company_name && <span>{n.company_name} · </span>}
+                        {new Date(n.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+
+                    {/* Dot de não lida — só aparece se não foi lida */}
+                    {!isRead && (
+                      <div style={{
+                        width: 6, height: 6, borderRadius: '50%',
+                        background: 'var(--brand-500)', flexShrink: 0, marginTop: 4,
+                      }} />
+                    )}
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
    Topbar — barra superior com navegação de contexto e controles de usuário
    IMPORTANTE: overflow: 'visible' é necessário para que o dropdown do
    ThreeDotMenu não seja cortado pelo overflow:hidden do .glass-card pai.
@@ -444,6 +777,9 @@ function Topbar({ activeTab, user, logout }) {
           <span className="label-micro" style={{ color: '#22c55e' }}>SYNC</span>
         </div>
       </div>
+
+      {/* Notificações */}
+      <NotificationBell />
 
       {/* Divisor vertical */}
       <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.06)', margin: '0 8px' }} />

@@ -127,6 +127,617 @@ function PlaceholderTab({ label }) {
   );
 }
 
+/* ═══════════════════════════════════════════════════════════
+   BOTÃO + POPUP: ENVIAR FORMULÁRIO VIA WHATSAPP (Z-API)
+   1. Clica → gera token → abre popup com mensagem editável
+   2. No popup o operador revisa/edita a mensagem
+   3. Clica "Enviar" → dispara via Z-API (send-text)
+   Fica na aba Respostas e na coluna Ações da listagem.
+═══════════════════════════════════════════════════════════ */
+function WhatsAppFormModal({ client, onClose, onSent }) {
+  const { notify } = useNotification();
+  const [step, setStep]       = useState('generating'); // 'generating' | 'ready' | 'sending' | 'done'
+  const [link, setLink]       = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError]     = useState(null);
+
+  // Ao abrir: gera o token e monta a mensagem template
+  useEffect(() => {
+    (async () => {
+      try {
+        console.log('[INFO][Frontend:WhatsAppFormModal] Gerando token', { clientId: client.id });
+        notify('# Gerando link do formulário...', 'info');
+        const res = await fetch('/api/form/generate-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId: client.id }),
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error);
+
+        setLink(json.link);
+        setMessage(
+          `Olá, *${client.company_name}*! 👋\n\n` +
+          `Preparamos um formulário estratégico para entender a fundo o seu negócio.\n\n` +
+          `Este é o *raio-X do seu negócio* — com ele, a Sigma consegue construir um posicionamento, estratégia e narrativa sob medida para você.\n\n` +
+          `⏱ Tempo estimado: *25 a 40 minutos*\n` +
+          `📋 São 11 etapas, mas você pode salvar e continuar depois.\n\n` +
+          `Seu link exclusivo (válido por *7 dias*):\n` +
+          `👉 ${json.link}\n\n` +
+          `Responda com profundidade — quanto mais detalhes, mais precisa será a estratégia. 🎯`
+        );
+        setStep('ready');
+        console.log('[SUCESSO][Frontend:WhatsAppFormModal] Token gerado', { link: json.link });
+      } catch (err) {
+        console.error('[ERRO][Frontend:WhatsAppFormModal] Falha ao gerar token', { error: err.message });
+        notify('! Erro ao gerar link: ' + err.message, 'error');
+        setError(err.message);
+        setStep('ready');
+      }
+    })();
+  }, []);
+
+  async function handleSend() {
+    if (!message.trim()) {
+      notify('! Mensagem não pode estar vazia.', 'error');
+      return;
+    }
+
+    const phone = client.phone.replace(/\D/g, '');
+    const phoneWithCountry = phone.startsWith('55') ? phone : `55${phone}`;
+
+    setStep('sending');
+    setError(null);
+    try {
+      console.log('[INFO][Frontend:WhatsAppFormModal] Enviando via Z-API', { clientId: client.id });
+      notify('# Enviando mensagem via WhatsApp...', 'info');
+
+      const res = await fetch('/api/form/send-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: client.id,
+          phone: phoneWithCountry,
+          message,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
+
+      setStep('done');
+      notify('> Formulário enviado para ' + client.company_name + ' via WhatsApp.', 'success');
+      console.log('[SUCESSO][Frontend:WhatsAppFormModal] Mensagem enviada', { clientId: client.id });
+      if (onSent) onSent();
+
+      // Fecha automaticamente após 1.5s
+      setTimeout(() => onClose(), 1500);
+    } catch (err) {
+      console.error('[ERRO][Frontend:WhatsAppFormModal] Falha no envio', { error: err.message });
+      notify('! Falha ao enviar: ' + err.message, 'error');
+      setError(err.message);
+      setStep('ready');
+    }
+  }
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 100,
+      background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 20,
+    }}>
+      <div
+        onClick={e => e.stopPropagation()}
+        className="glass-card animate-scale-in"
+        style={{ width: '100%', maxWidth: 520, padding: '24px', position: 'relative' }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: 'rgba(37,211,102,0.1)', border: '1px solid rgba(37,211,102,0.25)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="#25D366">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+                <path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 0 0 .612.616l4.573-1.453A11.949 11.949 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.336 0-4.512-.752-6.278-2.03l-.346-.27-3.277 1.042 1.076-3.2-.293-.372A9.953 9.953 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Enviar Formulário
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+                {client.company_name} · {client.phone || 'sem telefone'}
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 28, height: 28, borderRadius: 6, border: 'none', cursor: 'pointer',
+            background: 'rgba(255,255,255,0.04)', color: 'var(--text-muted)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        {/* Estado: gerando */}
+        {step === 'generating' && (
+          <div style={{ textAlign: 'center', padding: '30px 0' }}>
+            <div className="spinner" style={{ margin: '0 auto 12px' }} />
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+              Gerando link exclusivo...
+            </div>
+          </div>
+        )}
+
+        {/* Estado: pronto para editar/enviar */}
+        {(step === 'ready' || step === 'sending') && (
+          <>
+            {/* Textarea editável */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{
+                display: 'block', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
+                letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6,
+              }}>
+                Mensagem (editável)
+              </label>
+              <textarea
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                disabled={step === 'sending'}
+                rows={12}
+                style={{
+                  width: '100%', padding: '12px 14px', boxSizing: 'border-box',
+                  background: 'rgba(10,10,10,0.8)', border: '1px solid rgba(255,255,255,0.06)',
+                  borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.78rem',
+                  fontFamily: 'var(--font-sans)', outline: 'none', resize: 'vertical',
+                  lineHeight: 1.55, minHeight: 200,
+                }}
+              />
+            </div>
+
+            {/* Erro */}
+            {error && (
+              <div style={{
+                padding: '8px 12px', borderRadius: 6, marginBottom: 14,
+                background: 'rgba(255,0,51,0.06)', border: '1px solid rgba(255,0,51,0.15)',
+                fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--error)',
+              }}>
+                ! {error}
+              </div>
+            )}
+
+            {/* Botões */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={onClose} style={{
+                padding: '8px 16px', borderRadius: 6,
+                background: 'rgba(17,17,17,0.9)', border: '1px solid rgba(255,255,255,0.06)',
+                color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.68rem',
+                fontWeight: 500, cursor: 'pointer', letterSpacing: '0.04em', textTransform: 'uppercase',
+              }}>
+                Cancelar
+              </button>
+              <button
+                onClick={handleSend}
+                disabled={step === 'sending' || !message.trim()}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '8px 16px', borderRadius: 6,
+                  background: 'linear-gradient(135deg, #1a8c44, #25D366)',
+                  border: '1px solid rgba(37,211,102,0.4)',
+                  color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '0.68rem',
+                  fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
+                  cursor: step === 'sending' ? 'not-allowed' : 'pointer',
+                  opacity: step === 'sending' ? 0.6 : 1,
+                  transition: 'all 0.2s',
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+                  <path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 0 0 .612.616l4.573-1.453A11.949 11.949 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.336 0-4.512-.752-6.278-2.03l-.346-.27-3.277 1.042 1.076-3.2-.293-.372A9.953 9.953 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
+                </svg>
+                {step === 'sending' ? 'Enviando...' : 'Enviar via WhatsApp'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Estado: enviado com sucesso */}
+        {step === 'done' && (
+          <div style={{ textAlign: 'center', padding: '30px 0' }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: '50%', margin: '0 auto 14px',
+              background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '1.2rem',
+            }}>
+              ✓
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color: 'var(--success)', marginBottom: 4 }}>
+              Mensagem enviada!
+            </div>
+            <div style={{ fontFamily: 'var(--font-sans)', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+              {client.company_name} recebeu o formulário via WhatsApp.
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* Botão que abre o popup WhatsAppFormModal */
+function SendFormButton({ client, onSent, size = 'md' }) {
+  const { notify } = useNotification();
+  const [showModal, setShowModal] = useState(false);
+
+  function handleClick() {
+    if (!client.phone) {
+      notify('! Cadastre o telefone do cliente antes de enviar.', 'error');
+      return;
+    }
+    setShowModal(true);
+  }
+
+  const isSmall = size === 'sm';
+
+  return (
+    <>
+      <button
+        onClick={handleClick}
+        title="Enviar formulário via WhatsApp"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: isSmall ? '6px 10px' : '8px 14px', borderRadius: 6,
+          background: 'linear-gradient(135deg, var(--brand-600), var(--brand-500))',
+          border: '1px solid rgba(255,0,51,0.4)',
+          color: '#fff',
+          fontFamily: 'var(--font-mono)', fontSize: isSmall ? '0.6rem' : '0.68rem', fontWeight: 600,
+          letterSpacing: '0.04em', textTransform: 'uppercase',
+          cursor: 'pointer',
+          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+      >
+        <svg width={isSmall ? 12 : 14} height={isSmall ? 12 : 14} viewBox="0 0 24 24" fill="currentColor">
+          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+          <path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 0 0 .612.616l4.573-1.453A11.949 11.949 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.336 0-4.512-.752-6.278-2.03l-.346-.27-3.277 1.042 1.076-3.2-.293-.372A9.953 9.953 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
+        </svg>
+        Enviar Formulário
+      </button>
+      {showModal && (
+        <WhatsAppFormModal
+          client={client}
+          onClose={() => setShowModal(false)}
+          onSent={() => { setShowModal(false); if (onSent) onSent(); }}
+        />
+      )}
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TAB: RESPOSTAS DO FORMULÁRIO
+   Mostra status do formulário e respostas quando submetido.
+═══════════════════════════════════════════════════════════ */
+function TabRespostas({ clientId, client }) {
+  const { notify } = useNotification();
+  const [status, setStatus]   = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Carrega status do formulário ao montar
+  useEffect(() => {
+    loadStatus();
+  }, [clientId]);
+
+  async function loadStatus() {
+    setLoading(true);
+    try {
+      console.log('[INFO][Frontend:TabRespostas] Carregando status do formulário', { clientId });
+      const res = await fetch(`/api/clients/${clientId}/form-status`);
+      const json = await res.json();
+
+      if (json.success) {
+        setStatus(json);
+      } else {
+        setStatus({ hasToken: false, formStatus: 'not_sent' });
+      }
+    } catch (err) {
+      console.error('[ERRO][Frontend:TabRespostas] Falha ao carregar status', { error: err.message });
+      setStatus({ hasToken: false, formStatus: 'not_sent' });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div style={{ padding: '60px 0', textAlign: 'center' }}>
+        <div className="spinner" style={{ margin: '0 auto 12px' }} />
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+          Carregando status do formulário...
+        </div>
+      </div>
+    );
+  }
+
+  // ── Estado: nunca enviou ──
+  if (!status || status.formStatus === 'not_sent') {
+    return (
+      <div style={{ padding: '40px 0', textAlign: 'center' }}>
+        <div className="glass-card" style={{ maxWidth: 480, margin: '0 auto', padding: '40px 32px' }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: '50%', margin: '0 auto 16px',
+            background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </div>
+          <h3 style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
+            Formulário não enviado
+          </h3>
+          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.5 }}>
+            O cliente ainda não recebeu o link do formulário de briefing.
+          </p>
+          <SendFormButton client={client} onSent={() => loadStatus()} />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Estado: enviado mas não abriu ──
+  if (status.formStatus === 'sent') {
+    return (
+      <div style={{ maxWidth: 600 }}>
+        <div className="glass-card" style={{ padding: '24px' }}>
+          {/* Badge */}
+          <div style={{ marginBottom: 16 }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px',
+              borderRadius: 20, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.25)',
+              fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
+              letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--info)',
+            }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--info)' }} />
+              Link enviado — aguardando resposta
+            </span>
+          </div>
+
+          {/* Info */}
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 16 }}>
+            <div>
+              <Label>Válido até</Label>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-primary)' }}>
+                {status.token?.expiresAt
+                  ? new Date(status.token.expiresAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                  : '—'}
+              </div>
+            </div>
+          </div>
+
+          {/* Progress bar 0% */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Progresso
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>0%</span>
+            </div>
+            <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,0,51,0.1)' }}>
+              <div style={{ width: '0%', height: '100%', borderRadius: 2, background: 'var(--brand-500)', transition: 'width 0.5s' }} />
+            </div>
+          </div>
+
+          <SendFormButton client={client} onSent={() => loadStatus()} size="sm" />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Estado: rascunho (em andamento) ──
+  if (status.formStatus === 'draft') {
+    const pct = Math.round(((status.draft?.currentStep || 1) - 1) / 11 * 100);
+    return (
+      <div style={{ maxWidth: 600 }}>
+        <div className="glass-card" style={{ padding: '24px' }}>
+          {/* Badge */}
+          <div style={{ marginBottom: 16 }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px',
+              borderRadius: 20, background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.25)',
+              fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
+              letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--warning)',
+            }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--warning)' }} />
+              Em andamento
+            </span>
+          </div>
+
+          {/* Info */}
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 16 }}>
+            <div>
+              <Label>Etapa atual</Label>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-primary)' }}>
+                {status.draft?.currentStep || 1} de 11
+              </div>
+            </div>
+            <div>
+              <Label>Válido até</Label>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-primary)' }}>
+                {status.token?.expiresAt
+                  ? new Date(status.token.expiresAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                  : '—'}
+              </div>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Progresso
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--warning)' }}>{pct}%</span>
+            </div>
+            <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,0,51,0.1)' }}>
+              <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: 'var(--warning)', transition: 'width 0.5s' }} />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Estado: submetido ──
+  if (status.formStatus === 'submitted') {
+    const data = status.draft?.data || {};
+    const steps = [
+      { num: 1,  title: 'Informações do Negócio' },
+      { num: 2,  title: 'Produto / Serviço Principal' },
+      { num: 3,  title: 'Público-Alvo' },
+      { num: 4,  title: 'Concorrência' },
+      { num: 5,  title: 'Marca e Identidade' },
+      { num: 6,  title: 'Comunicação e Tom de Voz' },
+      { num: 7,  title: 'Canais e Presença Digital' },
+      { num: 8,  title: 'Histórico de Marketing' },
+      { num: 9,  title: 'Objetivos e Metas' },
+      { num: 10, title: 'Orçamento e Recursos' },
+      { num: 11, title: 'Informações Adicionais' },
+    ];
+
+    return (
+      <div style={{ maxWidth: 700 }}>
+        {/* Badge verde */}
+        <div style={{ marginBottom: 20 }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px',
+            borderRadius: 20, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)',
+            fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
+            letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--success)',
+          }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%', background: 'var(--success)',
+              animation: 'syncPulse 2s infinite',
+            }} />
+            Formulário recebido
+          </span>
+          {status.draft?.submittedAt && (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-secondary)', marginLeft: 12 }}>
+              Recebido em {new Date(status.draft.submittedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+        </div>
+
+        {/* Progress bar 100% */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Progresso
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--success)' }}>100%</span>
+          </div>
+          <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,0,51,0.1)' }}>
+            <div style={{ width: '100%', height: '100%', borderRadius: 2, background: 'var(--success)', transition: 'width 0.5s' }} />
+          </div>
+        </div>
+
+        {/* Respostas por etapa — cards colapsáveis */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {steps.map(step => (
+            <StepCard key={step.num} step={step} data={data} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+/* Card colapsável para cada etapa do formulário — usado dentro de TabRespostas */
+function StepCard({ step, data }) {
+  const [open, setOpen] = useState(false);
+
+  // Filtra respostas desta etapa: chaves que começam com "X." onde X é o número
+  const prefix = `${step.num}.`;
+  const entries = Object.entries(data)
+    .filter(([key]) => key.startsWith(prefix))
+    .sort(([a], [b]) => {
+      const na = parseFloat(a);
+      const nb = parseFloat(b);
+      return na - nb;
+    });
+
+  const hasAnswers = entries.some(([, val]) => val && (typeof val === 'string' ? val.trim() : true));
+
+  return (
+    <div className="glass-card" style={{ overflow: 'hidden' }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          width: '100%', padding: '12px 16px', border: 'none', cursor: 'pointer',
+          background: 'transparent', color: 'var(--text-primary)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 700,
+            color: 'var(--brand-500)', width: 20, textAlign: 'center',
+          }}>
+            {String(step.num).padStart(2, '0')}
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 600 }}>
+            {step.title}
+          </span>
+          {!hasAnswers && (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.55rem', color: 'var(--text-muted)' }}>
+              (sem respostas)
+            </span>
+          )}
+        </div>
+        <svg
+          width="12" height="12" viewBox="0 0 24 24" fill="none"
+          stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{ padding: '0 16px 16px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          {entries.length === 0 ? (
+            <div style={{ padding: '12px 0', fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+              — Nenhuma resposta nesta etapa
+            </div>
+          ) : (
+            entries.map(([key, val]) => (
+              <div key={key} style={{ padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                <div style={{
+                  fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
+                  color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4,
+                }}>
+                  Pergunta {key}
+                </div>
+                <div style={{
+                  fontFamily: 'var(--font-sans)', fontSize: '0.8rem', color: val ? 'var(--text-primary)' : 'var(--text-muted)',
+                  lineHeight: 1.5, whiteSpace: 'pre-wrap',
+                }}>
+                  {Array.isArray(val) ? val.join(', ') : (val || '—')}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const INP = {
   width: '100%', padding: '8px 11px', boxSizing: 'border-box',
   background: 'rgba(10,10,10,0.8)', border: '1px solid rgba(255,255,255,0.06)',
@@ -1690,7 +2301,7 @@ export default function ClientInfoPage() {
         {activeTab === 'anexos'     && <TabAnexos clientId={client.id} />}
         {activeTab === 'financeiro' && <TabFinanceiro clientId={client.id} clientServices={client.services || []} />}
         {activeTab === 'observacoes'&& <TabObservacoes clientId={client.id} />}
-        {activeTab === 'respostas'  && <PlaceholderTab label="Respostas" />}
+        {activeTab === 'respostas'  && <TabRespostas clientId={client.id} client={client} />}
       </div>
     </DashboardLayout>
   );

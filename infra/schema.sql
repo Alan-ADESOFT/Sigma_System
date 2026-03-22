@@ -185,7 +185,7 @@ DO $$
 DECLARE
     t TEXT;
 BEGIN
-    FOR t IN SELECT unnest(ARRAY['tenants','accounts','contents','collections','settings','analytics','content_folders','marketing_clients','marketing_stages'])
+    FOR t IN SELECT unnest(ARRAY['tenants','accounts','contents','collections','settings','analytics','content_folders','marketing_clients','marketing_stages','client_form_tokens','client_form_responses'])
     LOOP
         EXECUTE format('
             DROP TRIGGER IF EXISTS trg_%s_updated_at ON %s;
@@ -440,3 +440,65 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_kb_client_unique
 -- Históricos de IA vinculados a clientes
 ALTER TABLE ai_search_history ADD COLUMN IF NOT EXISTS client_id TEXT REFERENCES marketing_clients(id) ON DELETE SET NULL;
 ALTER TABLE ai_agent_history  ADD COLUMN IF NOT EXISTS client_id TEXT REFERENCES marketing_clients(id) ON DELETE SET NULL;
+
+-- ============================================================
+-- CLIENT_FORM_TOKENS
+-- Token único gerado por cliente para acesso ao formulário público.
+-- Um token = um cliente = uso único = expira em 7 dias.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS client_form_tokens (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    client_id   TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    token       TEXT NOT NULL UNIQUE,         -- UUID seguro gerado no backend
+    status      TEXT NOT NULL DEFAULT 'pending',
+    -- 'pending' | 'used' | 'expired'
+    expires_at  TIMESTAMPTZ NOT NULL,         -- criado_at + 7 dias
+    used_at     TIMESTAMPTZ,                  -- preenchido quando o form for enviado
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_form_tokens_client  ON client_form_tokens(client_id);
+CREATE INDEX IF NOT EXISTS idx_form_tokens_token   ON client_form_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_form_tokens_status  ON client_form_tokens(status);
+
+-- ============================================================
+-- CLIENT_FORM_RESPONSES
+-- Respostas do formulário enviado pelo cliente.
+-- Salva rascunho (status='draft') e resposta final (status='submitted').
+-- ============================================================
+CREATE TABLE IF NOT EXISTS client_form_responses (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    token_id    TEXT NOT NULL REFERENCES client_form_tokens(id) ON DELETE CASCADE,
+    client_id   TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    status      TEXT NOT NULL DEFAULT 'draft',
+    -- 'draft' | 'submitted'
+    data        JSONB NOT NULL DEFAULT '{}',  -- todas as respostas em JSON
+    current_step INTEGER NOT NULL DEFAULT 1,  -- etapa atual do wizard (1-11)
+    submitted_at TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(token_id)
+);
+CREATE INDEX IF NOT EXISTS idx_form_responses_client ON client_form_responses(client_id);
+CREATE INDEX IF NOT EXISTS idx_form_responses_status ON client_form_responses(status);
+
+-- ============================================================
+-- SYSTEM_NOTIFICATIONS
+-- Notificações internas do sistema (ex: cliente preencheu formulário).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS system_notifications (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    type        TEXT NOT NULL,
+    -- 'form_submitted' | 'form_started' | 'token_expired' | etc.
+    title       TEXT NOT NULL,
+    message     TEXT NOT NULL,
+    client_id   TEXT REFERENCES marketing_clients(id) ON DELETE SET NULL,
+    read        BOOLEAN NOT NULL DEFAULT false,
+    metadata    JSONB DEFAULT '{}',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_tenant ON system_notifications(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_read   ON system_notifications(tenant_id, read);
