@@ -44,7 +44,7 @@ A empresa **TechCorp** domina o mercado com **45% de market share**.
 ### Pontos Fracos
 - Site desatualizado
 
-Retorne APENAS o texto formatado, sem explicacoes.`;
+Retorne APENAS o texto formatado, sem explicacoes e completo nao resuma , nao mude nada do contexto apenas aplique as formatações.`;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Metodo nao permitido' });

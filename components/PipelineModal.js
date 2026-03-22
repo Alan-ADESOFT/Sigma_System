@@ -1,10 +1,7 @@
 /**
  * components/PipelineModal.js
- * ─────────────────────────────────────────────────────────────────────────────
- * Modal fullscreen de execução do pipeline completo.
- * Mostra lista de agentes à esquerda, streaming à direita.
- * Verifica pré-condições: form_done e pipeline já executado.
- * ─────────────────────────────────────────────────────────────────────────────
+ * Modal fullscreen de execucao do pipeline completo.
+ * Lista de agentes a esquerda, output com typing animation a direita.
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -12,75 +9,72 @@ import { useNotification } from '../context/NotificationContext';
 import styles from '../assets/style/pipelineModal.module.css';
 
 const AGENTS = [
-  { name: 'agente1',  num: '01', label: 'Diagnóstico do Negócio' },
+  { name: 'agente1',  num: '01',  label: 'Diagnostico do Negocio' },
   { name: 'agente2a', num: '02A', label: 'Pesquisa de Concorrentes' },
-  { name: 'agente2b', num: '02B', label: 'Análise de Concorrentes' },
-  { name: 'agente3',  num: '03', label: 'Público-Alvo' },
+  { name: 'agente2b', num: '02B', label: 'Analise de Concorrentes' },
+  { name: 'agente3',  num: '03',  label: 'Publico-Alvo' },
   { name: 'agente4a', num: '04A', label: 'Pesquisa de Avatar' },
-  { name: 'agente4b', num: '04B', label: 'Construção do Avatar' },
-  { name: 'agente5',  num: '05', label: 'Posicionamento da Marca' },
+  { name: 'agente4b', num: '04B', label: 'Construcao do Avatar' },
+  { name: 'agente5',  num: '05',  label: 'Posicionamento da Marca' },
 ];
 
 export default function PipelineModal({ client, onClose, onComplete }) {
   const { notify } = useNotification();
-  const [phase, setPhase]             = useState('checking'); // checking | blocked | already_done | ready | running | done | error
+  const [phase, setPhase]               = useState('checking');
   const [completedJob, setCompletedJob] = useState(null);
-  const [jobId, setJobId]             = useState(null);
+  const [jobId, setJobId]               = useState(null);
   const [selectedAgent, setSelectedAgent] = useState(0);
-  const [agentStatuses, setAgentStatuses] = useState(AGENTS.map(() => 'waiting')); // waiting | running | done | failed
+  const [agentStatuses, setAgentStatuses] = useState(AGENTS.map(() => 'waiting'));
   const [connectorActive, setConnectorActive] = useState(-1);
-  const [streamedText, setStreamedText] = useState('');
-  const [logs, setLogs]               = useState([]);
-  const [errorMsg, setErrorMsg]       = useState('');
+  const [displayedText, setDisplayedText] = useState('');
+  const [agentOutputs, setAgentOutputs]   = useState({});
+  const [logs, setLogs]                   = useState([]);
+  const [errorMsg, setErrorMsg]           = useState('');
 
-  const logEndRef    = useRef(null);
-  const streamEndRef = useRef(null);
-  const sseRef       = useRef(null);
-  const pollingRef   = useRef(null);
-  const startTimeRef = useRef(null);
+  const logEndRef     = useRef(null);
+  const streamEndRef  = useRef(null);
+  const pollingRef    = useRef(null);
+  const startTimeRef  = useRef(null);
+  const typingRef     = useRef(null);
 
-  // Auto-scroll
   useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs]);
-  useEffect(() => { streamEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [streamedText]);
+  useEffect(() => { streamEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [displayedText]);
+  useEffect(() => { return () => { if (pollingRef.current) clearInterval(pollingRef.current); if (typingRef.current) clearInterval(typingRef.current); }; }, []);
+  useEffect(() => { checkPreConditions(); }, []);
 
-  // Cleanup on unmount
+  // Quando clica em um agente concluido, mostra o output com typing
   useEffect(() => {
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, []);
+    const agentName = AGENTS[selectedAgent]?.name;
+    const output = agentOutputs[agentName];
+    if (output && agentStatuses[selectedAgent] === 'done') {
+      typeText(output);
+    }
+  }, [selectedAgent]);
 
-  // Check pré-condições ao montar
-  useEffect(() => {
-    checkPreConditions();
-  }, []);
+  function typeText(text) {
+    if (typingRef.current) clearInterval(typingRef.current);
+    setDisplayedText('');
+    let i = 0;
+    const speed = Math.max(1, Math.floor(2000 / text.length)); // ajusta velocidade pelo tamanho
+    typingRef.current = setInterval(() => {
+      i += 3; // 3 chars por tick para velocidade
+      if (i >= text.length) {
+        setDisplayedText(text);
+        clearInterval(typingRef.current);
+      } else {
+        setDisplayedText(text.substring(0, i));
+      }
+    }, speed);
+  }
 
   async function checkPreConditions() {
-    // 1. Form não preenchido?
-    if (!client.form_done) {
-      setPhase('blocked');
-      return;
-    }
-
-    // 2. Pipeline já executado?
+    if (!client.form_done) { setPhase('blocked'); return; }
     try {
-      const r = await fetch(`/api/agentes/pipeline/status?clientId=${client.id}`);
+      const r = await fetch('/api/agentes/pipeline/status?clientId=' + client.id);
       const d = await r.json();
-      if (d.success && d.data?.status === 'completed') {
-        setCompletedJob(d.data);
-        setPhase('already_done');
-        return;
-      }
-      // Se está running, reconecta
-      if (d.success && d.data?.status === 'running') {
-        setJobId(d.data.jobId);
-        setPhase('running');
-        startPolling(d.data.jobId);
-        connectSSE(d.data.jobId);
-        return;
-      }
+      if (d.success && d.data?.status === 'completed') { setCompletedJob(d.data); setPhase('already_done'); return; }
+      if (d.success && d.data?.status === 'running') { setJobId(d.data.jobId); setPhase('running'); startPolling(d.data.jobId); connectSSE(d.data.jobId); return; }
     } catch {}
-
     setPhase('ready');
   }
 
@@ -88,48 +82,32 @@ export default function PipelineModal({ client, onClose, onComplete }) {
     const elapsed = startTimeRef.current ? Math.floor((Date.now() - startTimeRef.current) / 1000) : 0;
     const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
     const ss = String(elapsed % 60).padStart(2, '0');
-    setLogs(prev => [...prev, { message, type, time: `${mm}:${ss}` }]);
+    setLogs(prev => [...prev, { message, type, time: mm + ':' + ss }]);
   }
 
   async function handleStart() {
     setPhase('running');
     startTimeRef.current = Date.now();
     addLog('Iniciando pipeline...');
-
     try {
-      const r = await fetch('/api/agentes/pipeline/run-all', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: client.id }),
-      });
+      const r = await fetch('/api/agentes/pipeline/run-all', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: client.id }) });
       const d = await r.json();
-      if (!d.success) {
-        setErrorMsg(d.error || 'Erro ao iniciar');
-        setPhase('error');
-        return;
-      }
-
+      if (!d.success) { setErrorMsg(d.error || 'Erro ao iniciar'); setPhase('error'); return; }
       setJobId(d.jobId);
-      addLog('Pipeline iniciado — conectando stream...');
+      addLog('Pipeline iniciado');
       startPolling(d.jobId);
       connectSSE(d.jobId);
-
-    } catch (err) {
-      setErrorMsg(err.message);
-      setPhase('error');
-    }
+    } catch (err) { setErrorMsg(err.message); setPhase('error'); }
   }
 
   function startPolling(jId) {
     pollingRef.current = setInterval(async () => {
       try {
-        const r = await fetch(`/api/agentes/pipeline/status?clientId=${client.id}`);
+        const r = await fetch('/api/agentes/pipeline/status?clientId=' + client.id);
         const d = await r.json();
         if (!d.success || !d.data) return;
-
         const { status, completedAgents, currentAgent } = d.data;
 
-        // Atualiza statuses dos agentes
         setAgentStatuses(prev => {
           const next = [...prev];
           for (let i = 0; i < AGENTS.length; i++) {
@@ -140,13 +118,11 @@ export default function PipelineModal({ client, onClose, onComplete }) {
           return next;
         });
 
-        // Seleciona automaticamente o agente ativo
         if (currentAgent) {
           const idx = AGENTS.findIndex(a => a.name === currentAgent);
-          if (idx >= 0) setSelectedAgent(idx);
+          if (idx >= 0) { setSelectedAgent(idx); setDisplayedText(''); }
         }
 
-        // Anima connector quando agente muda
         if (completedAgents > 0) {
           setConnectorActive(completedAgents - 1);
           setTimeout(() => setConnectorActive(-1), 800);
@@ -156,54 +132,60 @@ export default function PipelineModal({ client, onClose, onComplete }) {
           clearInterval(pollingRef.current);
           setAgentStatuses(AGENTS.map(() => 'done'));
           setPhase('done');
-          addLog('Pipeline concluído com sucesso!', 'success');
+          addLog('Pipeline concluido!', 'success');
         } else if (status === 'failed') {
           clearInterval(pollingRef.current);
           setErrorMsg(d.data.error || 'Erro no pipeline');
           setPhase('error');
-          addLog(`Erro: ${d.data.error || 'desconhecido'}`, 'error');
+          addLog('Erro: ' + (d.data.error || 'desconhecido'), 'error');
         }
       } catch {}
     }, 3000);
   }
 
   function connectSSE(jId) {
-    // Pequeno delay para dar tempo do emitter ser criado no backend
     setTimeout(() => {
       try {
-        const evtSource = new EventSource(`/api/agentes/stream-log?jobId=${jId}`);
-        sseRef.current = evtSource;
-
+        const evtSource = new EventSource('/api/agentes/stream-log?jobId=' + jId);
         evtSource.onmessage = (e) => {
           try {
             const data = JSON.parse(e.data);
-            switch (data.type) {
-              case 'agent_start':
-                addLog(`Iniciando ${data.agentName}...`);
-                setStreamedText('');
-                break;
-              case 'agent_done':
-                addLog(`${data.agentName} concluído (${data.textLength} chars)`, 'success');
-                break;
-              case 'pipeline_done':
-                evtSource.close();
-                break;
-              case 'pipeline_error':
-                addLog(`Erro: ${data.message}`, 'error');
-                evtSource.close();
-                break;
+            if (data.type === 'agent_start') {
+              addLog('Executando ' + data.agentName + '...');
+              setDisplayedText('');
+            } else if (data.type === 'agent_done') {
+              addLog(data.agentName + ' concluido (' + data.textLength + ' chars)', 'success');
+              // Busca o output salvo para exibir com typing
+              fetchAgentOutput(data.agentName);
+            } else if (data.type === 'pipeline_done') {
+              evtSource.close();
+            } else if (data.type === 'pipeline_error') {
+              addLog('Erro: ' + data.message, 'error');
+              evtSource.close();
             }
           } catch {}
         };
-
-        evtSource.onerror = () => {
-          evtSource.close();
-        };
+        evtSource.onerror = () => evtSource.close();
       } catch {}
     }, 1000);
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  async function fetchAgentOutput(agentName) {
+    try {
+      const r = await fetch('/api/agentes/history?type=agent&agentName=' + agentName + '&limit=1');
+      const d = await r.json();
+      if (d.success && d.data?.[0]?.response_text) {
+        const text = d.data[0].response_text;
+        setAgentOutputs(prev => ({ ...prev, [agentName]: text }));
+        // Se este agente esta selecionado, inicia typing
+        const idx = AGENTS.findIndex(a => a.name === agentName);
+        if (idx >= 0) {
+          setSelectedAgent(idx);
+          typeText(text);
+        }
+      }
+    } catch {}
+  }
 
   return (
     <div className={styles.backdrop} onClick={onClose}>
@@ -213,13 +195,11 @@ export default function PipelineModal({ client, onClose, onComplete }) {
           <div className={styles.headerLeft}>
             <span className={styles.badge}>PIPELINE</span>
             <span className={styles.clientName}>{client.company_name}</span>
-            <span className={styles.subtitle}>Pipeline de 7 agentes \u00B7 Gera\u00E7\u00E3o \u00FAnica de rascunhos</span>
+            <span className={styles.subtitle}>Pipeline de 7 agentes - Geracao de rascunhos</span>
           </div>
           <div className={styles.headerRight}>
             {phase === 'ready' && (
-              <button className={styles.btnStart} onClick={handleStart}>
-                \u25B6 Iniciar Pipeline
-              </button>
+              <button className={styles.btnStart} onClick={handleStart}>Iniciar Pipeline</button>
             )}
             <button className={styles.btnClose} onClick={onClose}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
@@ -229,7 +209,7 @@ export default function PipelineModal({ client, onClose, onComplete }) {
 
         {/* Body */}
         <div className={styles.body}>
-          {/* Coluna esquerda — lista de agentes (só aparece quando não é tela de bloqueio) */}
+          {/* Coluna esquerda */}
           {(phase === 'ready' || phase === 'running' || phase === 'done' || phase === 'error') && (
             <div className={styles.agentList}>
               {AGENTS.map((agent, i) => {
@@ -245,7 +225,7 @@ export default function PipelineModal({ client, onClose, onComplete }) {
                       <div className={styles.agentName}>{agent.label}</div>
                       <div className={`${styles.agentStatus} ${st === 'waiting' ? styles.statusWaiting : st === 'running' ? styles.statusRunning : st === 'done' ? styles.statusDone : styles.statusFailed}`}>
                         <span className={`${styles.dot} ${st === 'waiting' ? styles.dotWaiting : st === 'running' ? styles.dotRunning : st === 'done' ? styles.dotDone : styles.dotFailed}`} />
-                        {st === 'waiting' ? 'AGUARDANDO' : st === 'running' ? 'RODANDO...' : st === 'done' ? 'CONCLU\u00CDDO' : 'FALHOU'}
+                        {st === 'waiting' ? 'AGUARDANDO' : st === 'running' ? 'RODANDO...' : st === 'done' ? 'CONCLUIDO' : 'FALHOU'}
                       </div>
                     </div>
                     {i < AGENTS.length - 1 && (
@@ -259,7 +239,6 @@ export default function PipelineModal({ client, onClose, onComplete }) {
 
           {/* Coluna direita */}
           <div className={styles.mainArea}>
-            {/* Tela de bloqueio: form não preenchido */}
             {phase === 'blocked' && (
               <div className={styles.blocked}>
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="1.5" strokeLinecap="round">
@@ -267,63 +246,57 @@ export default function PipelineModal({ client, onClose, onComplete }) {
                 </svg>
                 <div className={styles.blockedTitle}>Pipeline bloqueado</div>
                 <div className={styles.blockedDesc}>
-                  O cliente ainda n\u00E3o preencheu o formul\u00E1rio de briefing.
-                  Envie o link do formul\u00E1rio e aguarde a resposta para liberar o pipeline.
+                  O cliente ainda nao preencheu o formulario de briefing.
+                  Envie o link do formulario e aguarde a resposta para liberar.
                 </div>
               </div>
             )}
 
-            {/* Tela de bloqueio: pipeline já executado */}
             {phase === 'already_done' && (
               <div className={styles.blocked}>
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ff0033" strokeWidth="1.5" strokeLinecap="round">
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
                 </svg>
-                <div className={styles.blockedTitle} style={{ color: '#ff6680' }}>Pipeline j\u00E1 executado</div>
+                <div className={styles.blockedTitle} style={{ color: '#ff6680' }}>Pipeline ja executado</div>
                 <div className={styles.blockedDesc}>
                   O pipeline deste cliente foi executado
-                  {completedJob?.finishedAt ? ` em ${new Date(completedJob.finishedAt).toLocaleDateString('pt-BR')}` : ''}.
+                  {completedJob?.finishedAt ? ' em ' + new Date(completedJob.finishedAt).toLocaleDateString('pt-BR') : ''}.
                   Acesse cada etapa na Base de Dados para editar os rascunhos.
                 </div>
                 <button className={styles.btnGo} onClick={() => { onComplete?.(); onClose(); }}>
-                  Ver Base de Dados \u2192
+                  Ver Base de Dados
                 </button>
               </div>
             )}
 
-            {/* Tela de pré-execução */}
             {phase === 'ready' && (
               <div className={styles.preRun}>
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ff6680" strokeWidth="1.5" strokeLinecap="round">
                   <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/>
                   <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>
-                  <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>
                 </svg>
                 <div className={styles.preRunTitle}>Pronto para iniciar</div>
                 <div className={styles.preRunDesc}>
-                  O pipeline vai analisar os dados do formul\u00E1rio de {client.company_name} e gerar rascunhos para todas as 8 etapas estrat\u00E9gicas.
+                  O pipeline vai analisar os dados do formulario de {client.company_name} e gerar rascunhos para as 5 etapas estrategicas.
                 </div>
                 <div className={styles.preRunList}>
-                  \u2022 Diagn\u00F3stico \u2022 Concorrentes \u2022 P\u00FAblico-Alvo \u2022 Avatar<br/>
-                  \u2022 Posicionamento + 2 etapas de pesquisa
+                  Diagnostico - Concorrentes - Publico-Alvo - Avatar - Posicionamento
                 </div>
                 <div className={styles.preRunDesc}>
-                  Os rascunhos ficar\u00E3o dispon\u00EDveis para edi\u00E7\u00E3o na Base de Dados.
+                  Os rascunhos ficarao disponiveis para edicao na Base de Dados.
                 </div>
                 <button className={styles.btnStart} onClick={handleStart}>
-                  \u25B6 Iniciar Pipeline
+                  Iniciar Pipeline
                 </button>
               </div>
             )}
 
-            {/* Tela de checking */}
             {phase === 'checking' && (
               <div className={styles.preRun}>
-                <div className={styles.preRunDesc}>Verificando pré-condições...</div>
+                <div className={styles.preRunDesc}>Verificando...</div>
               </div>
             )}
 
-            {/* Streaming durante execução */}
             {phase === 'running' && (
               <>
                 <div className={styles.streamHeader}>
@@ -333,9 +306,9 @@ export default function PipelineModal({ client, onClose, onComplete }) {
                   </div>
                 </div>
                 <div className={styles.streamBody}>
-                  {streamedText ? (
+                  {displayedText ? (
                     <div className={`${styles.streamText} ${styles.streamCursor}`}>
-                      {streamedText}
+                      {displayedText}
                     </div>
                   ) : (
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: '#525252' }}>
@@ -356,25 +329,23 @@ export default function PipelineModal({ client, onClose, onComplete }) {
               </>
             )}
 
-            {/* Tela de sucesso */}
             {phase === 'done' && (
               <div className={styles.success}>
                 <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10" opacity="0.3"/>
                   <polyline points="9 12 12 15 16 10" className={styles.checkIcon}/>
                 </svg>
-                <div className={styles.successTitle}>Pipeline conclu\u00EDdo com sucesso!</div>
+                <div className={styles.successTitle}>Pipeline concluido!</div>
                 <div className={styles.successDesc}>
                   Rascunhos gerados e salvos na Base de Dados.<br/>
-                  Agora voc\u00EA pode editar cada etapa manualmente.
+                  Agora voce pode editar cada etapa manualmente.
                 </div>
                 <button className={styles.btnGo} onClick={() => { onComplete?.(); onClose(); }}>
-                  Ir para Base de Dados \u2192
+                  Ir para Base de Dados
                 </button>
               </div>
             )}
 
-            {/* Tela de erro */}
             {phase === 'error' && (
               <div className={styles.blocked}>
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ff3333" strokeWidth="1.5" strokeLinecap="round">
