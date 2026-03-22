@@ -203,7 +203,7 @@ function ClientStagesPopup({ client, onClose, onStageUpdated, onReloadClient }) 
     if (!pipelinePolling) return;
     const interval = setInterval(async () => {
       const data = await checkPipelineStatus();
-      if (data && data.status !== 'running' && data.status !== 'awaiting_review') {
+      if (data && data.status !== 'running') {
         setPipelinePolling(false);
         clearInterval(interval);
         if (data.status === 'completed') {
@@ -325,57 +325,6 @@ function ClientStagesPopup({ client, onClose, onStageUpdated, onReloadClient }) 
                   </div>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* Status: Aguardando revisão */}
-          {pipelineStatus?.status === 'awaiting_review' && (
-            <div style={{
-              margin: '0 22px', padding: '10px 14px', borderRadius: 8,
-              background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  width: 8, height: 8, borderRadius: '50%', background: '#eab308',
-                  animation: 'pulse 1.5s ease-in-out infinite',
-                }} />
-                <div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.64rem', fontWeight: 600, color: '#eab308' }}>
-                    Aguardando revisão — {pipelineStatus.completedAgents}/{pipelineStatus.totalAgents} agentes
-                  </div>
-                  {pipelineStatus.currentAgent && (
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.54rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                      Próximo: {AGENT_DISPLAY_NAME[pipelineStatus.currentAgent] || pipelineStatus.currentAgent}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <button
-                onClick={async () => {
-                  try {
-                    const r = await fetch(`/api/agentes/pipeline/${pipelineStatus.jobId}/approve`, { method: 'POST' });
-                    const d = await r.json();
-                    if (d.success) {
-                      notify('Etapa aprovada! Pipeline continuando...', 'success');
-                      setPipelineStatus(prev => ({ ...prev, status: 'running' }));
-                      setPipelinePolling(true);
-                    } else {
-                      notify(d.error || 'Erro ao aprovar', 'error');
-                    }
-                  } catch {
-                    notify('Erro ao aprovar etapa', 'error');
-                  }
-                }}
-                style={{
-                  padding: '5px 14px', borderRadius: 6, cursor: 'pointer',
-                  background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)',
-                  color: '#22c55e', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
-                  flexShrink: 0,
-                }}
-              >
-                Aprovar e continuar
-              </button>
             </div>
           )}
 

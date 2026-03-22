@@ -19,6 +19,7 @@
 import { resolveTenantId }  from '../../../infra/get-tenant-id';
 import { queryOne }         from '../../../infra/db';
 import { resolveModel }    from '../../../models/ia/completion';
+import { withMarkdown }    from '../../../models/ia/markdownHelper';
 import { extractFromFile } from '../../../infra/api/fileReader';
 
 const STAGE_LABELS = {
@@ -124,7 +125,7 @@ ${currentOutput || '(vazio)'}`;
         }
       }
       if (fileTexts.length) {
-        systemPrompt += `\n\nARQUIVOS ANEXADOS PELO OPERADOR:\n${fileTexts.join('\n---\n')}`;
+        systemPrompt += `\n\nDOCUMENTOS ANEXADOS (${fileTexts.length} arquivo(s) — texto extraido automaticamente, use esses dados quando o operador mencionar arquivos/documentos):\n${fileTexts.join('\n---\n')}`;
       }
     }
 
@@ -139,13 +140,16 @@ ${currentOutput || '(vazio)'}`;
         { detail: 'high' }
       );
       if (visionResult.analysis) {
-        systemPrompt += `\n\nANÁLISE DAS IMAGENS ANEXADAS:\n${visionResult.analysis}`;
+        systemPrompt += `\n\nIMAGENS ANEXADAS (${images.length} imagem(ns) — descricao gerada automaticamente, use esses dados quando o operador mencionar imagens):\n${visionResult.analysis}`;
       }
     }
 
-    console.log('[INFO][ApplyModification] Executando modificação', { clientId, stageKey, promptLength: operatorPrompt.length, historyLength: chatHistory?.length || 0 });
+    // Aplica instrucoes de formatacao markdown
+    systemPrompt = withMarkdown(systemPrompt);
 
-    // Monta mensagens multi-turn (chat com histórico)
+    console.log('[INFO][ApplyModification] Executando modificacao', { clientId, stageKey, promptLength: operatorPrompt.length, historyLength: chatHistory?.length || 0 });
+
+    // Monta mensagens multi-turn (chat com historico)
     const model = resolveModel('medium');
     const messages = [{ role: 'system', content: systemPrompt }];
 

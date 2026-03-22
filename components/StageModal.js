@@ -146,10 +146,13 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
         if (statusOverride) setStageStatus(statusOverride);
         onSaved?.({ ...stage, notes: html, ...(statusOverride ? { status: statusOverride } : {}) });
         if (statusOverride === 'done') {
+          // Versao: salva snapshot ao concluir
           fetch('/api/clients/' + clientId + '/stages/save-version', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stageKey: meta.key, content: editorRef.current?.innerText || '' }) }).catch(() => {});
           triggerScore(editorRef.current?.innerText || '');
           notify('Etapa concluida!', 'success');
         } else if (statusOverride === 'in_progress') {
+          // Historico: salva snapshot ao salvar rascunho
+          fetch('/api/clients/' + clientId + '/stages/save-version', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stageKey: meta.key, content: editorRef.current?.innerText || '', createdBy: 'rascunho' }) }).catch(() => {});
           notify('Rascunho salvo!', 'success');
         } else {
           notify('Notas salvas', 'success');

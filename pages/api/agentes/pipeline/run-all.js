@@ -140,50 +140,10 @@ async function runPipeline(tenantId, clientId, client, jobId) {
 
   const userInput = clientJson + formData;
 
-  // Verifica se modo revisão está ativo
-  const reviewSetting = await queryOne(
-    `SELECT value FROM settings WHERE tenant_id = $1 AND key = 'review_mode_enabled'`,
-    [tenantId]
-  );
-  const reviewMode = reviewSetting?.value === 'true';
-  if (reviewMode) console.log('[INFO][Pipeline] Modo revisão ATIVO', { jobId });
-
   for (const { agentName, config } of executionOrder) {
     const startedAt = new Date().toISOString();
 
     try {
-      // Modo revisão: pausar antes de cada agente (exceto o primeiro)
-      if (reviewMode && config.order > 1) {
-        console.log('[INFO][Pipeline] Aguardando revisão antes de', { jobId, agentName });
-        await queryOne(
-          `UPDATE pipeline_jobs SET status = 'awaiting_review', current_agent = $1 WHERE id = $2`,
-          [agentName, jobId]
-        );
-
-        // Poll até ser aprovado (check a cada 3s, timeout 30min)
-        const maxWait = 30 * 60 * 1000;
-        const startWait = Date.now();
-        let approved = false;
-        while (Date.now() - startWait < maxWait) {
-          await new Promise(r => setTimeout(r, 3000));
-          const job = await queryOne('SELECT status FROM pipeline_jobs WHERE id = $1', [jobId]);
-          if (job?.status === 'approved') {
-            approved = true;
-            await queryOne(`UPDATE pipeline_jobs SET status = 'running' WHERE id = $1`, [jobId]);
-            break;
-          }
-          if (job?.status === 'failed') return; // pipeline foi cancelado externamente
-        }
-        if (!approved) {
-          await queryOne(
-            `UPDATE pipeline_jobs SET status = 'failed', error = 'Timeout de revisão (30min)', finished_at = now() WHERE id = $1`,
-            [jobId]
-          );
-          return;
-        }
-        console.log('[INFO][Pipeline] Revisão aprovada, continuando', { jobId, agentName });
-      }
-
       // Atualiza job: agente atual
       await queryOne(
         `UPDATE pipeline_jobs SET current_agent = $1, status = 'running' WHERE id = $2`,
@@ -202,13 +162,13 @@ async function runPipeline(tenantId, clientId, client, jobId) {
         context: { '{DADOS_CLIENTE}': clientJson },
       });
 
-      // Salva no marketing_stages (converte markdown → HTML para exibição no editor)
+      // Salva no marketing_stages como in_progress (rascunho para revisao)
       const notesHtml = markdownToHtml(result.text);
       await queryOne(
         `INSERT INTO marketing_stages (client_id, stage_key, status, data, notes)
-         VALUES ($1, $2, 'done', $3, $4)
+         VALUES ($1, $2, 'in_progress', $3, $4)
          ON CONFLICT (client_id, stage_key)
-         DO UPDATE SET status = 'done', data = EXCLUDED.data, notes = EXCLUDED.notes, updated_at = now()`,
+         DO UPDATE SET status = 'in_progress', data = EXCLUDED.data, notes = EXCLUDED.notes, updated_at = now()`,
         [clientId, config.stageKey, JSON.stringify({ agentOutput: result.text, agentName, generatedAt: new Date().toISOString() }), notesHtml]
       );
 

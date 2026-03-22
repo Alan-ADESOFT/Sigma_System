@@ -202,8 +202,6 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [message, setMessage] = useState(null);
-  const [reviewMode, setReviewMode] = useState(false);
-  const [loadingReview, setLoadingReview] = useState(true);
 
   // Form para adicionar conta manual
   const [accountForm, setAccountForm] = useState({
@@ -214,13 +212,6 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
-    // Carrega estado do modo revisão
-    fetch('/api/settings/review-mode')
-      .then(r => r.json())
-      .then(d => { if (d.success) setReviewMode(d.enabled); })
-      .catch(() => {})
-      .finally(() => setLoadingReview(false));
-
     loadAccounts();
     // Verificar params de retorno do OAuth
     const params = new URLSearchParams(window.location.search);
@@ -476,51 +467,6 @@ export default function SettingsPage() {
       {/* ── Prompts dos Agentes ── */}
       <PromptsSection />
 
-      {/* ── Modo Revisão de Agentes ── */}
-      <div className="glass-card" style={{ padding: '20px 24px', marginTop: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
-              Modo Revisão de Agentes
-            </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 500 }}>
-              Quando ativado, cada etapa do pipeline precisa ser aprovada manualmente antes do próximo agente ser executado. Recomendado para clientes novos ou trabalho em equipe.
-            </div>
-          </div>
-          <button
-            disabled={loadingReview}
-            onClick={async () => {
-              const next = !reviewMode;
-              setReviewMode(next);
-              try {
-                await fetch('/api/settings/review-mode', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ enabled: next }),
-                });
-                notify(next ? 'Modo revisão ativado' : 'Modo revisão desativado', 'success');
-              } catch {
-                setReviewMode(!next);
-                notify('Erro ao salvar configuração', 'error');
-              }
-            }}
-            style={{
-              width: 48, height: 26, borderRadius: 13, cursor: 'pointer', border: 'none',
-              background: reviewMode ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.08)',
-              position: 'relative', transition: 'background 0.2s', flexShrink: 0,
-            }}
-          >
-            <div style={{
-              width: 20, height: 20, borderRadius: '50%',
-              background: reviewMode ? '#22c55e' : '#525252',
-              position: 'absolute', top: 3,
-              left: reviewMode ? 25 : 3,
-              transition: 'all 0.2s',
-              boxShadow: reviewMode ? '0 0 8px rgba(34,197,94,0.4)' : 'none',
-            }} />
-          </button>
-        </div>
-      </div>
 
     </DashboardLayout>
   );

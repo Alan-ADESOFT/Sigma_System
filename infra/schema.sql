@@ -525,7 +525,7 @@ CREATE TABLE IF NOT EXISTS pipeline_jobs (
     tenant_id        TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     client_id        TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
     status           TEXT NOT NULL DEFAULT 'running',
-    -- 'running' | 'completed' | 'failed' | 'awaiting_review' | 'approved'
+    -- 'running' | 'completed' | 'failed'
     total_agents     INTEGER NOT NULL DEFAULT 7,
     completed_agents INTEGER NOT NULL DEFAULT 0,
     current_agent    TEXT,
