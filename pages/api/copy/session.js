@@ -19,15 +19,19 @@ export default async function handler(req, res) {
       const clientId = req.query.clientId || null;
       if (!folderId) return res.status(400).json({ success: false, error: 'folderId e obrigatorio' });
 
-      console.log('[INFO][API:copy/session] GET sessoes', { folderId, clientId, tenantId });
+      const activeId = req.query.activeId || null; // Chat especifico para carregar historico
+      console.log('[INFO][API:copy/session] GET sessoes', { folderId, clientId, activeId, tenantId });
 
       const { sessions, active } = await getOrCreateSession(folderId, tenantId, clientId);
       const structures = await getStructures(tenantId);
-      const history = active ? await getHistory(active.id, 10) : [];
+
+      // Se activeId especificado, carrega historico dele; senao do ultimo chat
+      const historyTarget = activeId ? sessions.find(s => s.id === activeId) : active;
+      const history = historyTarget ? await getHistory(historyTarget.id, 10) : [];
 
       return res.json({
         success: true,
-        data: { sessions, active, structures, history },
+        data: { sessions, active: historyTarget || active, structures, history },
       });
     }
 

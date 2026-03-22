@@ -174,15 +174,13 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
     setActiveSessionId(sessionId);
     const s = sessions.find(x => x.id === sessionId);
     if (s) restoreSession(s);
-    // Reload history for this chat
+    // Recarrega historico deste chat especifico via activeId
     try {
-      const r = await fetch('/api/copy/session?folderId=' + folder.id + (clientId ? '&clientId=' + clientId : ''));
+      const r = await fetch('/api/copy/session?folderId=' + folder.id + '&activeId=' + sessionId + (clientId ? '&clientId=' + clientId : ''));
       const d = await r.json();
       if (d.success) {
-        const hist = d.data.sessions.find(x => x.id === sessionId);
-        // Load history of this specific session
-        const hr = await fetch('/api/copy/session?folderId=' + folder.id);
-        // Actually just reload history inline
+        setSessions(d.data.sessions);
+        setHistory(d.data.history || []);
       }
     } catch {}
   }
@@ -229,7 +227,7 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
     try {
       await fetch('/api/copy/session?sessionId=' + activeSessionId, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ output_text: editorRef.current?.innerText || '', status: 'saved', tone: toneInput, structure_id: selectedStructureId || null, model_used: selectedModel }),
+        body: JSON.stringify({ output_text: editorRef.current?.innerText || '', status: 'saved', tone: toneInput, structure_id: selectedStructureId || null, model_used: selectedModel, metadata: { questionAnswers } }),
       });
       setSaved(true);
       setHistoryDraftLabel(null);
