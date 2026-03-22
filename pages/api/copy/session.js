@@ -1,51 +1,45 @@
 /**
- * @fileoverview Endpoint: Sessao de copy (workspace)
- * @route GET /api/copy/session?contentId=xxx → busca/cria sessao + estruturas + historico + clientes
- * @route PUT /api/copy/session?sessionId=xxx → atualiza campos da sessao
+ * @fileoverview Endpoint: Sessoes de copy (workspace)
+ * @route GET    /api/copy/session?folderId=xxx&clientId=yyy → busca/cria sessoes da pasta
+ * @route PUT    /api/copy/session?sessionId=xxx             → atualiza campos da sessao
+ * @route POST   /api/copy/session                           → cria novo chat na pasta
  */
 
 import { resolveTenantId } from '../../../infra/get-tenant-id';
 import { query } from '../../../infra/db';
-import { getOrCreateSession, updateSession, getHistory, getStructures } from '../../../models/copy/copySession';
+import { getOrCreateSession, createChat, updateSession, getHistory, getStructures } from '../../../models/copy/copySession';
 
 export default async function handler(req, res) {
   const tenantId = await resolveTenantId(req);
 
   try {
-    // ── GET: busca/cria sessao com dados complementares ──
+    // ── GET: busca/cria sessoes com dados complementares ──
     if (req.method === 'GET') {
-      const { contentId } = req.query;
-      if (!contentId) return res.status(400).json({ success: false, error: 'contentId e obrigatorio' });
+      const folderId = req.query.folderId || req.query.contentId; // compatibilidade
+      const clientId = req.query.clientId || null;
+      if (!folderId) return res.status(400).json({ success: false, error: 'folderId e obrigatorio' });
 
-      console.log('[INFO][API:copy/session] GET sessao', { contentId, tenantId });
+      console.log('[INFO][API:copy/session] GET sessoes', { folderId, clientId, tenantId });
 
-      // Busca ou cria sessao
-      const session = await getOrCreateSession(contentId, tenantId);
-
-      // Estruturas disponiveis
+      const { sessions, active } = await getOrCreateSession(folderId, tenantId, clientId);
       const structures = await getStructures(tenantId);
-
-      // Historico da sessao (ultimos 10)
-      const history = await getHistory(session.id, 10);
-
-      // Todos os clientes (para select de base de dados)
-      const clients = await query(
-        `SELECT id, company_name, niche, main_product, avg_ticket, form_done, logo_url
-         FROM marketing_clients
-         WHERE tenant_id = $1
-         ORDER BY company_name ASC`,
-        [tenantId]
-      );
+      const history = active ? await getHistory(active.id, 10) : [];
 
       return res.json({
         success: true,
-        data: {
-          session,
-          structures,
-          history,
-          clients,
-        },
+        data: { sessions, active, structures, history },
       });
+    }
+
+    // ── POST: cria novo chat na pasta ──
+    if (req.method === 'POST') {
+      const { folderId, clientId, title } = req.body;
+      if (!folderId) return res.status(400).json({ success: false, error: 'folderId e obrigatorio' });
+
+      console.log('[INFO][API:copy/session] POST novo chat', { folderId, clientId });
+
+      const session = await createChat(folderId, tenantId, clientId, title);
+      return res.status(201).json({ success: true, data: session });
     }
 
     // ── PUT: atualiza campos da sessao ──

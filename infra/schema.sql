@@ -601,15 +601,17 @@ CREATE INDEX IF NOT EXISTS idx_copy_structures_tenant
   ON copy_structures(tenant_id, active, sort_order);
 
 -- ============================================================
--- COPY_SESSIONS (cada copy gerada em uma pasta/conteudo)
--- Vincula uma copy ao conteudo da pasta social existente.
+-- COPY_SESSIONS (cada chat de copy dentro de uma pasta)
+-- Cada pasta pode ter multiplos chats independentes.
 -- Armazena o estado completo do workspace.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS copy_sessions (
     id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    content_id      TEXT REFERENCES contents(id) ON DELETE CASCADE,
-    -- Vinculado ao conteudo da pasta social existente
+    folder_id       TEXT REFERENCES content_folders(id) ON DELETE CASCADE,
+    -- Vinculado a pasta do gerador de copy
+    title           VARCHAR(255) NOT NULL DEFAULT 'Chat 1',
+    -- Nome do chat dentro da pasta
     client_id       TEXT REFERENCES marketing_clients(id) ON DELETE SET NULL,
     -- Cliente cujas bases de dados sao usadas como contexto
     structure_id    TEXT REFERENCES copy_structures(id) ON DELETE SET NULL,
@@ -621,18 +623,18 @@ CREATE TABLE IF NOT EXISTS copy_sessions (
     output_text     TEXT,
     -- A copy gerada (rascunho atual)
     tone            VARCHAR(100),
-    -- Tom selecionado (direto, formal, descontraido, etc.)
+    -- Tom livre digitado pelo operador
     status          VARCHAR(50) NOT NULL DEFAULT 'draft',
     -- 'draft' | 'saved' | 'published'
     metadata        JSONB NOT NULL DEFAULT '{}',
     -- { images: [], files: [], additionalPrompt: '' }
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE(content_id)
-    -- Um conteudo tem exatamente uma sessao de copy ativa
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_copy_sessions_tenant
   ON copy_sessions(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_copy_sessions_folder
+  ON copy_sessions(folder_id);
 CREATE INDEX IF NOT EXISTS idx_copy_sessions_client
   ON copy_sessions(client_id);
 

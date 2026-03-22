@@ -11,33 +11,60 @@ const { query, queryOne } = require('../../infra/db');
 // ── Sessoes ──────────────────────────────────────────────────
 
 /**
- * Busca ou cria uma sessao de copy para um conteudo
- * @param {string} contentId - ID do conteudo (contents.id)
+ * Busca sessoes de uma pasta ou cria a primeira
+ * @param {string} folderId - ID da pasta (content_folders.id)
  * @param {string} tenantId - ID do tenant
- * @returns {Promise<object>} Sessao completa
+ * @param {string} [clientId] - ID do cliente para pre-selecionar
+ * @returns {Promise<{ sessions: Array, active: object }>} Todas as sessoes + sessao ativa
  */
-async function getOrCreateSession(contentId, tenantId) {
-  console.log('[INFO][CopySession] getOrCreateSession', { contentId, tenantId });
+async function getOrCreateSession(folderId, tenantId, clientId) {
+  console.log('[INFO][CopySession] getOrCreateSession', { folderId, tenantId, clientId });
 
-  // Tenta buscar sessao existente
-  let session = await queryOne(
-    `SELECT * FROM copy_sessions WHERE content_id = $1 AND tenant_id = $2`,
-    [contentId, tenantId]
+  // Busca todas as sessoes da pasta
+  let sessions = await query(
+    `SELECT * FROM copy_sessions WHERE folder_id = $1 AND tenant_id = $2 ORDER BY created_at ASC`,
+    [folderId, tenantId]
   );
 
-  if (session) {
-    console.log('[INFO][CopySession] Sessao encontrada', { sessionId: session.id });
-    return session;
+  if (sessions.length > 0) {
+    console.log('[INFO][CopySession] Sessoes encontradas', { count: sessions.length });
+    return { sessions, active: sessions[sessions.length - 1] };
   }
 
-  // Cria nova sessao com defaults
-  session = await queryOne(
-    `INSERT INTO copy_sessions (tenant_id, content_id, status)
-     VALUES ($1, $2, 'draft') RETURNING *`,
-    [tenantId, contentId]
+  // Cria primeira sessao com defaults
+  const session = await queryOne(
+    `INSERT INTO copy_sessions (tenant_id, folder_id, title, client_id, status)
+     VALUES ($1, $2, 'Chat 1', $3, 'draft') RETURNING *`,
+    [tenantId, folderId, clientId || null]
   );
 
-  console.log('[SUCESSO][CopySession] Sessao criada', { sessionId: session.id, contentId });
+  console.log('[SUCESSO][CopySession] Sessao criada', { sessionId: session.id, folderId });
+  return { sessions: [session], active: session };
+}
+
+/**
+ * Cria novo chat na pasta
+ * @param {string} folderId - ID da pasta
+ * @param {string} tenantId - ID do tenant
+ * @param {string} [clientId] - ID do cliente
+ * @param {string} [title] - Nome do chat
+ * @returns {Promise<object>} Nova sessao criada
+ */
+async function createChat(folderId, tenantId, clientId, title) {
+  const count = await queryOne(
+    'SELECT COUNT(*)::int AS count FROM copy_sessions WHERE folder_id = $1',
+    [folderId]
+  );
+  const chatNum = (count?.count || 0) + 1;
+  const chatTitle = title || ('Chat ' + chatNum);
+
+  const session = await queryOne(
+    `INSERT INTO copy_sessions (tenant_id, folder_id, title, client_id, status)
+     VALUES ($1, $2, $3, $4, 'draft') RETURNING *`,
+    [tenantId, folderId, chatTitle, clientId || null]
+  );
+
+  console.log('[SUCESSO][CopySession] Novo chat criado', { sessionId: session.id, title: chatTitle });
   return session;
 }
 
@@ -160,6 +187,7 @@ async function getStructures(tenantId) {
 
 module.exports = {
   getOrCreateSession,
+  createChat,
   updateSession,
   saveToHistory,
   getHistory,
