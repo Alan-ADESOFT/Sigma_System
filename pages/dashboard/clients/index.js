@@ -841,7 +841,7 @@ function EditModal({ client, onClose, onSave, notify }) {
             </div>
             <div>
               <Lbl>Telefone</Lbl>
-              <input value={form.phone} onChange={h('phone')} placeholder="(11) 99999-9999" style={INP_STYLE} />
+              <input value={form.phone} onChange={e => setForm(p => ({ ...p, phone: maskPhone(e.target.value) }))} placeholder="(11) 99999-9999" style={INP_STYLE} />
             </div>
             <div>
               <Lbl>Ticket Médio</Lbl>
@@ -998,7 +998,7 @@ function ClientRow({ client, onEdit, onDelete, isOdd, notify }) {
         )}
         {client.phone && (
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', color: 'var(--text-muted)' }}>
-            {client.phone}
+            {maskPhone(client.phone)}
           </div>
         )}
         {!client.email && !client.phone && (

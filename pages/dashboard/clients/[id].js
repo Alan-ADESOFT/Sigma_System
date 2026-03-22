@@ -89,6 +89,16 @@ function TabIcon({ d }) {
   );
 }
 
+/* Máscara de telefone (11) 99999-9999 */
+function maskPhone(v) {
+  let d = (v || '').replace(/\D/g, '').slice(0, 11);
+  if (!d) return '';
+  if (d.length <= 2)  return `(${d}`;
+  if (d.length <= 6)  return `(${d.slice(0,2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+  return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+}
+
 /* Box "Como funciona" — reutilizado em todas as abas (exceto Info) */
 function HowItWorks({ children }) {
   return (
@@ -173,14 +183,28 @@ function WhatsAppFormModal({ client, onClose, onSent }) {
 
         setLink(json.link);
         setMessage(
-          `Olá, *${client.company_name}*! 👋\n\n` +
-          `Preparamos um formulário estratégico para entender a fundo o seu negócio.\n\n` +
-          `Este é o *raio-X do seu negócio* — com ele, a Sigma consegue construir um posicionamento, estratégia e narrativa sob medida para você.\n\n` +
-          `⏱ Tempo estimado: *25 a 40 minutos*\n` +
-          `📋 São 11 etapas, mas você pode salvar e continuar depois.\n\n` +
-          `Seu link exclusivo (válido por *7 dias*):\n` +
-          `👉 ${json.link}\n\n` +
-          `Responda com profundidade — quanto mais detalhes, mais precisa será a estratégia. 🎯`
+          `⚠️ *SIGMA HACKER // ACESSO ATIVADO*\n\n` +
+          `Olá, *${client.company_name}*.\n\n` +
+          `Isso não é um formulário.\n` +
+          `É um *raio-X do seu negócio*.\n\n` +
+          `O que você escrever aqui… define o nível da estratégia que você vai receber.\n\n` +
+          `⏱ 25 a 40 min\n` +
+          `📋 11 etapas (pode pausar e continuar)\n\n` +
+          `⸻\n\n` +
+          `🔐 *RESTRIÇÃO DE ACESSO*\n\n` +
+          `Esse link foi gerado só pra você.\n\n` +
+          `1 pessoa.\n` +
+          `1 dispositivo.\n` +
+          `7 dias.\n\n` +
+          `Se trocar de aparelho ou encaminhar…\n` +
+          `o sistema bloqueia.\n\n` +
+          `⸻\n\n` +
+          `Aqui não entra resposta rasa.\n\n` +
+          `Ou você joga no raso…\n` +
+          `ou você extrai o que poucos têm acesso.\n\n` +
+          `⸻\n\n` +
+          `👉 *LINK DO FORMULÁRIO* 🔓\n` +
+          `${json.link}`
         );
         setStep('ready');
         console.log('[SUCESSO][Frontend:WhatsAppFormModal] Token gerado', { link: json.link });
@@ -265,7 +289,7 @@ function WhatsAppFormModal({ client, onClose, onSent }) {
                 Enviar Formulário
               </div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
-                {client.company_name} · {client.phone || 'sem telefone'}
+                {client.company_name} · {client.phone ? maskPhone(client.phone) : 'sem telefone'}
               </div>
             </div>
           </div>
@@ -1348,7 +1372,7 @@ function TabInfo({ client, onSave }) {
         </div>
         <div>
           <Label>Telefone</Label>
-          <input value={form.phone} onChange={h('phone')} placeholder="(11) 99999-9999" style={INP} />
+          <input value={maskPhone(form.phone)} onChange={e => { setForm(p => ({ ...p, phone: maskPhone(e.target.value) })); setSaved(false); }} placeholder="(11) 99999-9999" style={INP} />
         </div>
         <div>
           <Label>Região / Mercado</Label>
@@ -1366,44 +1390,6 @@ function TabInfo({ client, onSave }) {
           </div>
         </div>
       </div>
-
-      <Divider />
-
-      {/* ── Produto / Status ── */}
-      <SectionTitle>Produto & Status</SectionTitle>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, marginBottom: 20 }}>
-        <div>
-          <Label>Produto / Serviço principal</Label>
-          <input value={form.main_product} onChange={h('main_product')} placeholder="Mentoria, Curso, Consultoria..." style={INP} />
-        </div>
-        <div>
-          <Label>Status</Label>
-          <select value={form.status} onChange={h('status')} style={{ ...INP, width: 'auto', minWidth: 120 }}>
-            <option value="active">Ativo</option>
-            <option value="inactive">Inativo</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Motivo inativação — sempre visível se existir, editável quando inativo */}
-      {(form.status === 'inactive' || form.inactive_reason) && (
-        <div style={{ marginTop: 12 }}>
-          <Label>Motivo da Inativação</Label>
-          {form.status === 'inactive' ? (
-            <input
-              value={form.inactive_reason}
-              onChange={h('inactive_reason')}
-              placeholder="Descreva o motivo da inativação..."
-              style={INP}
-            />
-          ) : (
-            <div style={{ padding: '8px 12px', borderRadius: 6, background: 'rgba(255,185,0,0.06)', border: '1px solid rgba(255,185,0,0.18)' }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'rgba(255,185,0,0.6)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Histórico — motivo de inativação anterior</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'rgba(255,185,0,0.85)' }}>{form.inactive_reason}</div>
-            </div>
-          )}
-        </div>
-      )}
 
       <Divider />
 
@@ -2652,7 +2638,7 @@ export default function ClientInfoPage() {
               {client.niche  && <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>{client.niche}</span>}
               {client.region && <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>{client.region}</span>}
               {client.email  && <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>{client.email}</span>}
-              {client.phone  && <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>{client.phone}</span>}
+              {client.phone  && <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>{maskPhone(client.phone)}</span>}
             </div>
           </div>
           {/* Pipeline progress */}

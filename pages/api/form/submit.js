@@ -26,9 +26,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: 'Token e data são obrigatórios' });
     }
 
-    // Token deve estar 'pending' para submeter
+    // Token deve estar 'pending' ou 'in_progress' para submeter
     const result = await validateToken(token);
-    if (!result.valid) {
+    const canSubmit = result.valid || result.reason === 'in_progress';
+    if (!canSubmit) {
       console.log('[INFO][API:/api/form/submit] Token inválido para submissão', { reason: result.reason });
       return res.status(403).json({ success: false, error: 'Token inválido ou expirado', reason: result.reason });
     }
@@ -38,8 +39,11 @@ export default async function handler(req, res) {
     // Submete o formulário (salva dados + marca token como usado)
     await submitForm(tokenId, clientId, tenantId, data);
 
-    // As respostas ficam em client_form_responses — NÃO sobrescrevem
-    // os dados de marketing_clients (cadastro base do operador)
+    // Marca form_done = true no cliente (fonte de verdade para aba Respostas)
+    await query(
+      `UPDATE marketing_clients SET form_done = true, updated_at = now() WHERE id = $1`,
+      [clientId]
+    );
 
     // Notifica o operador
     await createNotification(

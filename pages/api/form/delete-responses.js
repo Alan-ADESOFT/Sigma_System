@@ -43,16 +43,13 @@ export default async function handler(req, res) {
     }
 
     if (!sections || sections.length === 0) {
-      // Apaga TUDO — remove a response, resumo IA e reseta o token
-      await query(`DELETE FROM client_form_responses WHERE id = $1`, [response.id]);
+      // Apaga TUDO — respostas, resumo IA, tokens e reseta form_done
+      await query(`DELETE FROM client_form_responses WHERE token_id IN (SELECT id FROM client_form_tokens WHERE client_id = $1)`, [clientId]);
       await query(`DELETE FROM client_form_summaries WHERE client_id = $1`, [clientId]);
-      await query(
-        `UPDATE client_form_tokens SET status = 'pending', used_at = NULL, updated_at = now()
-         WHERE client_id = $1 AND (status = 'used' OR status = 'in_progress')`,
-        [clientId]
-      );
+      await query(`DELETE FROM client_form_tokens WHERE client_id = $1`, [clientId]);
+      await query(`UPDATE marketing_clients SET form_done = false, updated_at = now() WHERE id = $1`, [clientId]);
 
-      console.log('[SUCESSO][API:delete-responses] Todas as respostas e resumo IA deletados', { clientId });
+      console.log('[SUCESSO][API:delete-responses] Tudo limpo — respostas, resumo, tokens, form_done', { clientId });
       return res.json({ success: true, message: 'Todas as respostas foram apagadas.' });
     }
 

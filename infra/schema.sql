@@ -228,6 +228,7 @@ ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS phone                TEXT
 ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS status               TEXT NOT NULL DEFAULT 'prospect';
 ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS logo_url             TEXT;
 ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS observations         TEXT;
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS form_done           BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS important_links      JSONB DEFAULT '[]';
 ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS services             JSONB DEFAULT '[]';
 
@@ -502,3 +503,4 @@ CREATE TABLE IF NOT EXISTS system_notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_tenant ON system_notifications(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read   ON system_notifications(tenant_id, read);
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS form_done           BOOLEAN NOT NULL DEFAULT false;  

@@ -25,9 +25,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: 'Token e data são obrigatórios' });
     }
 
-    // Valida que o token ainda está ativo
+    // Valida que o token ainda está ativo (pending ou in_progress)
     const result = await validateToken(token);
-    if (!result.valid) {
+    const canSave = result.valid || result.reason === 'in_progress';
+    if (!canSave) {
       console.log('[INFO][API:/api/form/save-draft] Token inválido para salvar rascunho', { reason: result.reason });
       return res.status(403).json({ success: false, error: 'Token inválido ou expirado', reason: result.reason });
     }

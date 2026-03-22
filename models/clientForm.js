@@ -111,57 +111,72 @@ async function markTokenAsUsed(tokenId) {
 }
 
 /**
- * Consulta o status completo do formulário de um cliente — sem gerar token.
- * Busca o token mais recente + response vinculada.
- * Usado pela aba Respostas para mostrar o estado atual.
+ * Consulta o status do formulário de um cliente.
+ * Lógica simples: form_done no marketing_clients é a fonte de verdade.
+ * Token serve apenas para controle de acesso na página pública.
  */
 async function getFormStatusForClient(clientId) {
   console.log('[INFO][ClientForm:getFormStatusForClient] Consultando status do formulário', { clientId });
 
-  // Token mais recente do cliente (qualquer status)
+  // Verifica se o cliente tem form_done = true
+  const client = await queryOne(
+    `SELECT form_done FROM marketing_clients WHERE id = $1`,
+    [clientId]
+  );
+
+  if (client?.form_done) {
+    // Busca as respostas submetidas
+    const response = await queryOne(
+      `SELECT r.* FROM client_form_responses r
+       JOIN client_form_tokens t ON t.id = r.token_id
+       WHERE t.client_id = $1 AND r.status = 'submitted'
+       ORDER BY r.submitted_at DESC LIMIT 1`,
+      [clientId]
+    );
+
+    return {
+      formStatus: 'submitted',
+      draft: response ? {
+        data: response.data,
+        currentStep: response.current_step,
+        status: response.status,
+        submittedAt: response.submitted_at,
+      } : null,
+    };
+  }
+
+  // Verifica se existe um token ativo (link enviado mas não respondido)
   const token = await queryOne(
     `SELECT * FROM client_form_tokens
-     WHERE client_id = $1
+     WHERE client_id = $1 AND status IN ('pending', 'in_progress')
      ORDER BY created_at DESC LIMIT 1`,
     [clientId]
   );
 
   if (!token) {
-    return { hasToken: false, formStatus: 'not_sent', token: null, draft: null };
+    return { formStatus: 'not_sent' };
   }
 
-  // Response vinculada ao token (se existir)
-  const response = await queryOne(
+  // Verifica se expirou
+  if (new Date(token.expires_at) <= new Date()) {
+    return { formStatus: 'expired', token: { expiresAt: token.expires_at } };
+  }
+
+  // Verifica se tem rascunho em andamento
+  const draft = await queryOne(
     `SELECT * FROM client_form_responses WHERE token_id = $1`,
     [token.id]
   );
 
-  let formStatus = 'sent'; // token existe mas form não foi aberto
-  if (response && response.status === 'submitted') formStatus = 'submitted';
-  else if (response && response.status === 'draft') formStatus = 'draft';
-
-  // Se o token expirou e o form não foi submetido, marca como expirado
-  if (token.status === 'expired' || (token.status === 'pending' && new Date(token.expires_at) <= new Date())) {
-    if (formStatus !== 'submitted') formStatus = 'expired';
+  if (draft) {
+    return {
+      formStatus: 'draft',
+      token: { expiresAt: token.expires_at },
+      draft: { currentStep: draft.current_step, data: draft.data },
+    };
   }
 
-  return {
-    hasToken: true,
-    formStatus,
-    token: {
-      id: token.id,
-      value: token.token,
-      status: token.status,
-      expiresAt: token.expires_at,
-      createdAt: token.created_at,
-    },
-    draft: response ? {
-      data: response.data,
-      currentStep: response.current_step,
-      status: response.status,
-      submittedAt: response.submitted_at,
-    } : null,
-  };
+  return { formStatus: 'sent', token: { expiresAt: token.expires_at } };
 }
 
 /**
