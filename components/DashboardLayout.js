@@ -37,41 +37,48 @@ const NAV_SECTIONS = [
   {
     category: 'PAINEL',
     items: [
-      { href: '/dashboard',                  label: 'Dashboard',              tag: '01', icon: 'home'         },
+      { href: '/dashboard',                  label: 'Dashboard',              tag: '01', icon: 'home'      },
     ],
   },
   {
     category: 'FINANÇAS',
     items: [
-      { href: '/dashboard/financeiro',       label: 'Financeiro',             tag: '02', icon: 'chart'        },
+      { href: '/dashboard/financeiro',       label: 'Financeiro',             tag: '02', icon: 'chart'     },
     ],
   },
   {
     category: 'DADOS',
     items: [
-      { href: '/dashboard/clients',          label: 'Clientes',               tag: '03', icon: 'users'        },
-      { href: '/dashboard/database',         label: 'Base de Dados',          tag: '04', icon: 'database'     },
+      { href: '/dashboard/clients',          label: 'Clientes',               tag: '03', icon: 'users'     },
+      { href: '/dashboard/database',         label: 'Base de Dados',          tag: '04', icon: 'database'  },
+    ],
+  },
+  {
+    category: 'AGENTES DE IA',
+    items: [
+      { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '05', icon: 'edit'      },
+      { href: '/dashboard/agentes',          label: 'CopyCreator IA',         tag: '06', icon: 'brain'     },
+      { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '07', icon: 'zap'       },
     ],
   },
   {
     category: 'SOCIAL MEDIA',
     items: [
-      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '05', icon: 'barChart'     },
-      { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '06', icon: 'edit'         },
-      { href: '/dashboard/content-plan',     label: 'Planejamento de Conteúdo', tag: '07', icon: 'list'      },
-      { href: '/dashboard/publish',          label: 'Publicação',             tag: '08', icon: 'send'         },
+      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '08', icon: 'barChart'  },
+      { href: '/dashboard/content-plan',     label: 'Planejamento',           tag: '09', icon: 'list'      },
+      { href: '/dashboard/publish',          label: 'Publicação',             tag: '10', icon: 'send'      },
     ],
   },
   {
     category: 'TRÁFEGO',
     items: [
-      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '09', icon: 'megaphone'    },
+      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '11', icon: 'megaphone' },
     ],
   },
   {
     category: 'SISTEMA',
     items: [
-      { href: '/dashboard/settings',         label: 'Configurações',          tag: '10', icon: 'settings'     },
+      { href: '/dashboard/settings',         label: 'Configurações',          tag: '12', icon: 'settings'  },
     ],
   },
 ];
@@ -168,6 +175,11 @@ const ICONS = {
       <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/>
       <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/>
       <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M17.599 6.5a3 3 0 0 0 .399-1.375"/><path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/><path d="M3.477 10.896a4 4 0 0 1 .585-.396"/><path d="M19.938 10.5a4 4 0 0 1 .585.396"/><path d="M6 18a4 4 0 0 1-1.967-.516"/><path d="M19.967 17.484A4 4 0 0 1 18 18"/>
+    </svg>
+  ),
+  zap: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
     </svg>
   ),
   /* Ícone do botão de colapso — chevron esquerdo */

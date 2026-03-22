@@ -1,0 +1,206 @@
+/* Dashboard de Tokens — tema SIGMA */
+
+/* ── Header ── */
+.header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+.headerLeft {}
+.title { font-family: var(--font-mono); font-size: 1.25rem; font-weight: 700; letter-spacing: 0.04em; color: var(--text-primary); margin-bottom: 4px; }
+.subtitle { font-size: 14px; color: var(--text-secondary); }
+
+/* Seletor de periodo */
+.periodGroup { display: flex; gap: 4px; align-items: center; }
+.periodPill {
+  padding: 5px 12px; border-radius: 6px; cursor: pointer;
+  background: transparent; border: 1px solid var(--border-default);
+  font-family: var(--font-mono); font-size: 0.6rem; font-weight: 600;
+  color: var(--text-muted); transition: all 0.15s;
+}
+.periodPill:hover { border-color: var(--border-hover); }
+.periodPillActive {
+  composes: periodPill;
+  border-color: rgba(255,0,51,0.3); background: rgba(255,0,51,0.06);
+  color: var(--brand-300);
+}
+.dateInput {
+  padding: 4px 8px; border-radius: 4px;
+  background: rgba(10,10,10,0.6); border: 1px solid rgba(255,255,255,0.07);
+  color: var(--text-primary); font-family: var(--font-mono); font-size: 0.58rem;
+  outline: none;
+}
+.dateInput:focus { border-color: var(--border-accent); }
+
+/* ── KPI Grid ── */
+.kpiGrid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 16px; margin-bottom: 24px;
+}
+@media (max-width: 900px) { .kpiGrid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 500px) { .kpiGrid { grid-template-columns: 1fr; } }
+
+.kpiCard {
+  padding: 20px; border-radius: 12px; position: relative; overflow: hidden;
+  background: linear-gradient(145deg, rgba(17,17,17,0.95), rgba(10,10,10,0.98));
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.kpiCard::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+}
+.kpiIcon {
+  position: absolute; top: 16px; right: 16px;
+  width: 20px; height: 20px; opacity: 0.7;
+}
+.kpiValue {
+  font-family: var(--font-mono); font-size: 1.8rem; font-weight: 700;
+  margin-bottom: 4px; line-height: 1;
+}
+.kpiLabel {
+  font-family: var(--font-mono); font-size: 0.56rem; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
+}
+.kpiNote {
+  font-family: var(--font-mono); font-size: 0.5rem;
+  color: var(--text-muted); margin-top: 6px; font-style: italic;
+}
+
+/* ── Grafico ── */
+.chartCard {
+  padding: 20px; border-radius: 12px; margin-bottom: 24px;
+  background: linear-gradient(145deg, rgba(17,17,17,0.95), rgba(10,10,10,0.98));
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.chartTitle {
+  font-family: var(--font-mono); font-size: 0.62rem; font-weight: 600;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-muted);
+  margin-bottom: 16px;
+}
+.chartWrap { width: 100%; height: 200px; position: relative; }
+.chartSvg { width: 100%; height: 100%; }
+.chartBar { transition: opacity 0.15s; cursor: pointer; }
+.chartBar:hover { opacity: 0.9; }
+.chartTooltip {
+  position: absolute; padding: 6px 10px; border-radius: 6px;
+  background: rgba(10,10,10,0.95); border: 1px solid rgba(255,255,255,0.1);
+  font-family: var(--font-mono); font-size: 0.52rem; color: var(--text-secondary);
+  pointer-events: none; white-space: nowrap; z-index: 10;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+/* ── Breakdown grid ── */
+.breakdownGrid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 16px; margin-bottom: 24px;
+}
+@media (max-width: 700px) { .breakdownGrid { grid-template-columns: 1fr; } }
+
+.breakdownCard {
+  padding: 20px; border-radius: 12px;
+  background: linear-gradient(145deg, rgba(17,17,17,0.95), rgba(10,10,10,0.98));
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.breakdownTitle { composes: chartTitle; }
+.breakdownRow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.breakdownRow:last-child { border-bottom: none; }
+.breakdownLabel {
+  font-family: var(--font-mono); font-size: 0.62rem; font-weight: 600;
+  color: var(--text-secondary); min-width: 120px; flex-shrink: 0;
+}
+.breakdownBarWrap {
+  flex: 1; height: 4px; background: rgba(255,255,255,0.04);
+  border-radius: 2px; overflow: hidden;
+}
+.breakdownBarFill {
+  height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, var(--action-primary), var(--brand-300));
+  transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+}
+.breakdownValue {
+  font-family: var(--font-mono); font-size: 0.56rem; font-weight: 700;
+  color: var(--text-primary); min-width: 50px; text-align: right; flex-shrink: 0;
+}
+.breakdownPct {
+  font-family: var(--font-mono); font-size: 0.48rem;
+  color: var(--text-muted); min-width: 32px; text-align: right; flex-shrink: 0;
+}
+.providerBadge {
+  font-family: var(--font-mono); font-size: 0.42rem; font-weight: 600;
+  padding: 1px 5px; border-radius: 3px;
+}
+
+/* ── Tabela ── */
+.tableCard {
+  padding: 20px; border-radius: 12px; margin-bottom: 24px;
+  background: linear-gradient(145deg, rgba(17,17,17,0.95), rgba(10,10,10,0.98));
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.tableTitle { composes: chartTitle; }
+.table { width: 100%; border-collapse: collapse; }
+.th {
+  font-family: var(--font-mono); font-size: 0.5rem; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
+  text-align: left; padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.td {
+  font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-secondary);
+  padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.03);
+  vertical-align: middle;
+}
+.tr:hover .td { background: rgba(255,255,255,0.01); }
+.opBadge {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 6px; border-radius: 4px;
+  font-family: var(--font-mono); font-size: 0.48rem; font-weight: 600;
+}
+.paginationRow {
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: 8px; margin-top: 12px;
+}
+.pageBtn {
+  padding: 4px 10px; border-radius: 4px; cursor: pointer;
+  background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06);
+  font-family: var(--font-mono); font-size: 0.56rem; color: var(--text-muted);
+  transition: all 0.15s;
+}
+.pageBtn:hover { border-color: var(--border-hover); color: var(--text-secondary); }
+.pageBtn:disabled { opacity: 0.3; cursor: not-allowed; }
+.pageInfo {
+  font-family: var(--font-mono); font-size: 0.5rem; color: var(--text-muted);
+}
+
+/* ── Empty + Loading ── */
+.emptyState {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 60px 20px; text-align: center; gap: 14px;
+}
+.emptyTitle {
+  font-family: var(--font-mono); font-size: 0.88rem; font-weight: 700;
+  color: var(--text-primary);
+}
+.emptyDesc {
+  font-family: var(--font-mono); font-size: 0.68rem;
+  color: var(--text-secondary); line-height: 1.6; max-width: 400px;
+}
+.emptyBtn {
+  padding: 8px 18px; border-radius: 8px;
+  border: 1px solid rgba(255,0,51,0.25);
+  background: rgba(255,0,51,0.06); color: var(--brand-300);
+  font-family: var(--font-mono); font-size: 0.68rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; margin-top: 8px;
+}
+.emptyBtn:hover { background: rgba(255,0,51,0.12); border-color: rgba(255,0,51,0.4); }
+
+.skeleton {
+  background: linear-gradient(90deg, #111 0%, #1a1a1a 40%, rgba(255,0,51,0.06) 50%, #1a1a1a 60%, #111 100%);
+  background-size: 200% 100%; border-radius: 6px;
+  animation: skeletonShimmer 1.8s infinite;
+}
+@keyframes skeletonShimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+/* Stagger de entrada */
+.fadeIn1 { animation: fadeInUp 0.4s ease-out both; animation-delay: 0ms; }
+.fadeIn2 { animation: fadeInUp 0.4s ease-out both; animation-delay: 80ms; }
+.fadeIn3 { animation: fadeInUp 0.4s ease-out both; animation-delay: 160ms; }
+.fadeIn4 { animation: fadeInUp 0.4s ease-out both; animation-delay: 240ms; }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
