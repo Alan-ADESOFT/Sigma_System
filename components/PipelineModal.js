@@ -1,11 +1,12 @@
 /**
  * components/PipelineModal.js
- * Pipeline com typing animation, transicoes entre agentes e console hacking.
+ * Pipeline com blur overlay, fake typing, transicoes entre agentes e console hacking.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNotification } from '../context/NotificationContext';
 import styles from '../assets/style/pipelineModal.module.css';
+import pipelineFakePhrases from '../assets/data/pipelineFakePhrases';
 
 const AGENTS = [
   { name: 'agente1',  num: '01',  label: 'Diagnostico do Negocio' },
@@ -22,7 +23,7 @@ function ts() {
   return [n.getHours(), n.getMinutes(), n.getSeconds()].map(v => String(v).padStart(2, '0')).join(':');
 }
 
-export default function PipelineModal({ client, onClose, onComplete }) {
+export default function PipelineModal({ client, onClose, onComplete, onBackgroundClose }) {
   const { notify } = useNotification();
   const [phase, setPhase]                 = useState('checking');
   const [completedJob, setCompletedJob]   = useState(null);
@@ -35,20 +36,54 @@ export default function PipelineModal({ client, onClose, onComplete }) {
   const [transitionMsg, setTransitionMsg] = useState('');
   const [transitionSub, setTransitionSub] = useState('');
   const [agentOutputs, setAgentOutputs]   = useState({});
+  const [hiddenOutputs, setHiddenOutputs] = useState({});
   const [logs, setLogs]                   = useState([]);
   const [errorMsg, setErrorMsg]           = useState('');
   const [lastDoneCount, setLastDoneCount] = useState(0);
+  const [revealing, setRevealing]         = useState(false);
+  const [revealed, setRevealed]           = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+
+  // Blur badge state per agent: 'generating' | 'transitioning' | 'completed' | null
+  const [blurPhases, setBlurPhases]       = useState({});
 
   const logEndRef    = useRef(null);
   const streamEndRef = useRef(null);
   const pollingRef   = useRef(null);
   const typingRef    = useRef(null);
+  const fakeTypingRef = useRef(null);
 
   useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs]);
   useEffect(() => { streamEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [displayedText]);
-  useEffect(() => { return () => { if (pollingRef.current) clearInterval(pollingRef.current); if (typingRef.current) clearInterval(typingRef.current); }; }, []);
+  useEffect(() => { return () => { if (pollingRef.current) clearInterval(pollingRef.current); if (typingRef.current) clearInterval(typingRef.current); if (fakeTypingRef.current) clearInterval(fakeTypingRef.current); }; }, []);
   useEffect(() => { checkPreConditions(); }, []);
 
+  /* ── Fake typing — gera texto falso com efeito typewriter ── */
+  function startFakeTyping(agentName) {
+    if (fakeTypingRef.current) clearInterval(fakeTypingRef.current);
+    const phrases = pipelineFakePhrases[agentName] || pipelineFakePhrases.agente1;
+    const fullText = phrases.join('\n');
+    setDisplayedText('');
+    setIsTyping(true);
+    let i = 0;
+    fakeTypingRef.current = setInterval(() => {
+      i += 1;
+      if (i >= fullText.length) {
+        // Loop: restart from beginning
+        i = 0;
+        setDisplayedText('');
+      } else {
+        setDisplayedText(fullText.substring(0, i));
+      }
+    }, 30);
+  }
+
+  function stopFakeTyping() {
+    if (fakeTypingRef.current) { clearInterval(fakeTypingRef.current); fakeTypingRef.current = null; }
+    setIsTyping(false);
+  }
+
+  /* ── Real text typewriter (for reveal) ── */
   const typeText = useCallback((text, onDone) => {
     if (typingRef.current) clearInterval(typingRef.current);
     setDisplayedText('');
@@ -75,20 +110,50 @@ export default function PipelineModal({ client, onClose, onComplete }) {
     setTimeout(() => {
       setShowTransition(false);
       if (callback) callback();
-    }, 2000);
+    }, 1500);
   }
 
   function handleSelectAgent(idx) {
     if (showTransition) return;
     setSelectedAgent(idx);
-    const output = agentOutputs[AGENTS[idx]?.name];
-    if (output && agentStatuses[idx] === 'done') {
-      typeText(output);
+    const agentName = AGENTS[idx]?.name;
+    if (revealed || phase === 'done' || phase === 'already_done') {
+      // After reveal: show real text
+      const output = hiddenOutputs[agentName] || agentOutputs[agentName];
+      if (output) {
+        stopFakeTyping();
+        setDisplayedText(output);
+      } else {
+        setDisplayedText('');
+      }
+    } else if (agentStatuses[idx] === 'running') {
+      // Running: show fake typing
+      startFakeTyping(agentName);
+    } else if (agentStatuses[idx] === 'done') {
+      // Done but not revealed: show static fake text with blur
+      stopFakeTyping();
+      const phrases = pipelineFakePhrases[agentName] || pipelineFakePhrases.agente1;
+      setDisplayedText(phrases.join('\n'));
     } else {
-      if (typingRef.current) clearInterval(typingRef.current);
+      stopFakeTyping();
       setDisplayedText('');
-      setIsTyping(false);
     }
+  }
+
+  function handleCloseAttempt() {
+    if (phase === 'running') {
+      setShowCloseConfirm(true);
+    } else {
+      onClose();
+    }
+  }
+
+  function handleConfirmClose() {
+    setShowCloseConfirm(false);
+    // Notify parent that pipeline is running in background
+    onBackgroundClose?.(client.id);
+    notify('Pipeline rodando em segundo plano — voce sera notificado', 'info', 8000);
+    onClose();
   }
 
   function addLog(message, type = 'log') {
@@ -100,7 +165,7 @@ export default function PipelineModal({ client, onClose, onComplete }) {
     try {
       const r = await fetch('/api/agentes/pipeline/status?clientId=' + client.id);
       const d = await r.json();
-      if (d.success && d.data?.status === 'completed') { setCompletedJob(d.data); setPhase('already_done'); return; }
+      if (d.success && d.data?.status === 'completed') { setCompletedJob(d.data); setPhase('already_done'); setRevealed(true); return; }
       if (d.success && d.data?.status === 'running') { setPhase('running'); startPolling(); connectSSE(d.data.jobId); return; }
     } catch {}
     setPhase('ready');
@@ -148,7 +213,8 @@ export default function PipelineModal({ client, onClose, onComplete }) {
           setAgentStatuses(AGENTS.map(() => 'done'));
           addLog('> Pipeline concluido com sucesso', 'success');
           addLog('> ' + AGENTS.length + ' rascunhos gerados', 'success');
-          setTimeout(() => setPhase('done'), 2000);
+          // Trigger reveal
+          triggerReveal();
         } else if (status === 'failed') {
           clearInterval(pollingRef.current);
           setErrorMsg(d.data.error || 'Erro');
@@ -157,6 +223,23 @@ export default function PipelineModal({ client, onClose, onComplete }) {
         }
       } catch {}
     }, 3000);
+  }
+
+  function triggerReveal() {
+    stopFakeTyping();
+    setRevealing(true);
+    // After 1.2s animation, show success
+    setTimeout(() => {
+      setRevealed(true);
+      setRevealing(false);
+      // Show the first agent output
+      const firstOutput = hiddenOutputs[AGENTS[0]?.name];
+      if (firstOutput) {
+        setSelectedAgent(0);
+        setDisplayedText(firstOutput);
+      }
+      setTimeout(() => setPhase('done'), 1200);
+    }, 1200);
   }
 
   function connectSSE(jId) {
@@ -170,16 +253,17 @@ export default function PipelineModal({ client, onClose, onComplete }) {
             if (data.type === 'agent_start') {
               const idx = AGENTS.findIndex(a => a.name === data.agentName);
               addLog('> Executando ' + AGENTS[idx]?.label + ' [' + data.agentName + ']', 'system');
-              if (!showTransition && idx >= 0) {
+              if (idx >= 0) {
                 setSelectedAgent(idx);
-                setDisplayedText('');
-                setIsTyping(false);
+                setBlurPhases(prev => ({ ...prev, [data.agentName]: 'generating' }));
+                startFakeTyping(data.agentName);
               }
             } else if (data.type === 'agent_done') {
               const doneIdx = AGENTS.findIndex(a => a.name === data.agentName);
               const doneLabel = AGENTS[doneIdx]?.label || data.agentName;
               addLog('> ' + doneLabel + ' concluido [' + data.textLength + ' chars]', 'success');
-              fetchAndType(data.agentName, doneIdx);
+              // Fetch and store real output (hidden)
+              fetchAndStore(data.agentName, doneIdx);
             } else if (data.type === 'pipeline_done') {
               evtSource.close();
             } else if (data.type === 'pipeline_error') {
@@ -193,29 +277,49 @@ export default function PipelineModal({ client, onClose, onComplete }) {
     }, 2000);
   }
 
-  async function fetchAndType(agentName, doneIdx) {
+  async function fetchAndStore(agentName, doneIdx) {
     try {
       const r = await fetch('/api/agentes/history?type=agent&agentName=' + agentName + '&limit=1');
       const d = await r.json();
       if (d.success && d.data?.[0]?.response_text) {
         const text = d.data[0].response_text;
+        setHiddenOutputs(prev => ({ ...prev, [agentName]: text }));
         setAgentOutputs(prev => ({ ...prev, [agentName]: text }));
 
+        // Update blur phase to completed
+        setBlurPhases(prev => ({ ...prev, [agentName]: 'completed' }));
+
         if (doneIdx >= 0) {
-          setSelectedAgent(doneIdx);
-          typeText(text, () => {
-            // Apos terminar typing, mostra transicao para proximo agente
-            const nextIdx = doneIdx + 1;
-            if (nextIdx < AGENTS.length) {
-              const fromLabel = AGENTS[doneIdx].label;
-              const toLabel = AGENTS[nextIdx].label;
-              addLog('> Transmitindo dados para ' + toLabel + '...', 'transition');
-              showAgentTransition(fromLabel, toLabel, () => {
-                setSelectedAgent(nextIdx);
-                setDisplayedText('');
-              });
-            }
-          });
+          // Show transition then move to next agent
+          const nextIdx = doneIdx + 1;
+          if (nextIdx < AGENTS.length) {
+            stopFakeTyping();
+            // Show static fake text for the done agent
+            const phrases = pipelineFakePhrases[agentName] || pipelineFakePhrases.agente1;
+            setDisplayedText(phrases.join('\n'));
+
+            // Brief pause then transition
+            const fromLabel = AGENTS[doneIdx].label;
+            const toLabel = AGENTS[nextIdx].label;
+            addLog('> Transmitindo dados para ' + toLabel + '...', 'transition');
+
+            // Set transitioning phase
+            setBlurPhases(prev => ({ ...prev, [agentName]: 'transitioning' }));
+            setTimeout(() => {
+              setBlurPhases(prev => ({ ...prev, [agentName]: 'completed' }));
+            }, 1500);
+
+            showAgentTransition(fromLabel, toLabel, () => {
+              setSelectedAgent(nextIdx);
+              startFakeTyping(AGENTS[nextIdx].name);
+              setBlurPhases(prev => ({ ...prev, [AGENTS[nextIdx].name]: 'generating' }));
+            });
+          } else {
+            // Last agent done — stop fake typing, keep blur
+            stopFakeTyping();
+            const phrases = pipelineFakePhrases[agentName] || pipelineFakePhrases.agente1;
+            setDisplayedText(phrases.join('\n'));
+          }
         }
       }
     } catch {}
@@ -223,8 +327,21 @@ export default function PipelineModal({ client, onClose, onComplete }) {
 
   const doneCount = agentStatuses.filter(s => s === 'done').length;
 
+  // Determine current blur state for selected agent
+  const selectedAgentName = AGENTS[selectedAgent]?.name;
+  const currentBlurPhase = blurPhases[selectedAgentName];
+  const showBlur = phase === 'running' && !revealed && !revealing &&
+    (currentBlurPhase === 'generating' || currentBlurPhase === 'completed' || currentBlurPhase === 'transitioning');
+  const blurAmount = currentBlurPhase === 'completed' ? 6 : 8;
+
+  // Badge text
+  let blurBadgeText = '';
+  if (currentBlurPhase === 'generating') blurBadgeText = 'Ao finalizar, voce visualiza o resultado.';
+  else if (currentBlurPhase === 'transitioning') blurBadgeText = 'Passando dados para o proximo agente \u2192';
+  else if (currentBlurPhase === 'completed') blurBadgeText = 'Concluido \u2014 visualize ao finalizar o pipeline';
+
   return (
-    <div className={styles.backdrop} onClick={onClose}>
+    <div className={styles.backdrop} onClick={handleCloseAttempt}>
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
         <div className={styles.header}>
           <div className={styles.headerLeft}>
@@ -239,7 +356,7 @@ export default function PipelineModal({ client, onClose, onComplete }) {
                 {doneCount}/{AGENTS.length} agentes
               </span>
             )}
-            <button className={styles.btnClose} onClick={onClose}>
+            <button className={styles.btnClose} onClick={handleCloseAttempt}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
             </button>
           </div>
@@ -310,7 +427,7 @@ export default function PipelineModal({ client, onClose, onComplete }) {
                   </div>
                   <div className={styles.streamProgress}>Agente {Math.min(doneCount + 1, AGENTS.length)} de {AGENTS.length}</div>
                 </div>
-                <div className={styles.streamBody}>
+                <div className={styles.streamBody} style={{ position: 'relative' }}>
                   {/* Transition overlay */}
                   {showTransition && (
                     <div className={styles.transitionOverlay}>
@@ -328,6 +445,50 @@ export default function PipelineModal({ client, onClose, onComplete }) {
                     </div>
                   ) : null}
                   <div ref={streamEndRef} />
+
+                  {/* Blur overlay */}
+                  {showBlur && (
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      backdropFilter: 'blur(' + blurAmount + 'px)',
+                      WebkitBackdropFilter: 'blur(' + blurAmount + 'px)',
+                      background: 'rgba(5,5,5,0.4)',
+                      zIndex: 10,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'opacity 1.2s ease, backdrop-filter 0.6s ease',
+                      opacity: 1,
+                    }}>
+                      <div style={{
+                        padding: '8px 16px',
+                        borderRadius: 8,
+                        background: 'rgba(255,0,51,0.06)',
+                        border: '1px solid rgba(255,0,51,0.15)',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '0.72rem',
+                        fontStyle: 'italic',
+                        color: 'var(--text-muted)',
+                        animation: currentBlurPhase === 'transitioning' ? 'blurBadgePulse 1s ease-in-out infinite' : 'none',
+                      }}>
+                        {blurBadgeText}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reveal animation overlay */}
+                  {revealing && (
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      backdropFilter: 'blur(8px)',
+                      WebkitBackdropFilter: 'blur(8px)',
+                      background: 'rgba(5,5,5,0.4)',
+                      zIndex: 10,
+                      animation: 'blurReveal 1.2s ease forwards',
+                    }} />
+                  )}
                 </div>
                 <div className={styles.logArea}>
                   {logs.map((log, i) => (
@@ -362,6 +523,28 @@ export default function PipelineModal({ client, onClose, onComplete }) {
             )}
           </div>
         </div>
+
+        {/* Modal de confirmacao ao fechar durante execucao */}
+        {showCloseConfirm && (
+          <div onClick={() => setShowCloseConfirm(false)} style={{ position: 'absolute', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div onClick={e => e.stopPropagation()} style={{ width: 420, padding: '28px 32px', borderRadius: 12, background: 'linear-gradient(145deg, rgba(14,14,14,0.99), rgba(8,8,8,0.99))', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>Pipeline em execucao</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 20 }}>
+                O pipeline esta rodando em segundo plano.<br/>
+                Fechar esta janela nao interrompe a execucao.<br/>
+                Voce recebera uma notificacao ao finalizar.
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button onClick={() => setShowCloseConfirm(false)} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600, cursor: 'pointer' }}>
+                  Continuar acompanhando
+                </button>
+                <button onClick={handleConfirmClose} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid rgba(255,0,51,0.25)', background: 'rgba(255,0,51,0.08)', color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer' }}>
+                  Fechar mesmo assim
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

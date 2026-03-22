@@ -245,7 +245,7 @@ function WhatsAppFormModal({ client, onClose, onSent }) {
       if (!json.success) throw new Error(json.error);
 
       setStep('done');
-      notify('> Formulário enviado para ' + client.company_name + ' via WhatsApp.', 'success');
+      notify('Link enviado para ' + client.company_name + ' via WhatsApp', 'success');
       console.log('[SUCESSO][Frontend:WhatsAppFormModal] Mensagem enviada', { clientId: client.id });
       if (onSent) onSent();
 
@@ -253,7 +253,7 @@ function WhatsAppFormModal({ client, onClose, onSent }) {
       setTimeout(() => onClose(), 1500);
     } catch (err) {
       console.error('[ERRO][Frontend:WhatsAppFormModal] Falha no envio', { error: err.message });
-      notify('! Falha ao enviar: ' + err.message, 'error');
+      notify('Falha ao enviar WhatsApp — verifique se o numero esta correto', 'error');
       setError(err.message);
       setStep('ready');
     }

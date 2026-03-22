@@ -32,9 +32,6 @@ export default async function handler(req, res) {
     // Apaga versoes
     await query('DELETE FROM stage_versions WHERE client_id = $1', [clientId]);
 
-    // Apaga scores
-    await query('DELETE FROM stage_quality_scores WHERE client_id = $1 AND tenant_id = $2', [clientId, tenantId]);
-
     // Apaga KB do cliente (output dos agentes)
     await query('DELETE FROM ai_knowledge_base WHERE client_id = $1 AND tenant_id = $2', [clientId, tenantId]);
 

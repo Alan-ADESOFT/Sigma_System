@@ -188,12 +188,12 @@ export default function FormWizard({ token, clientData, draft }) {
 
       if (result.success) {
         console.log('[FORM] Formulário enviado com sucesso');
-        notify('Formulário enviado com sucesso!', 'success');
+        notify('Formulario enviado! Retornaremos em breve.', 'success');
         try { localStorage.removeItem(`form_draft_${token}`); } catch {}
         setCurrentStep('done');
       } else {
         console.error('[FORM] Erro no submit', result);
-        notify('Falha ao enviar. Seus dados estão salvos. Tente novamente.', 'error', 6000);
+        notify('Erro ao enviar. Seus dados estao salvos. Tente novamente.', 'error');
         setIsSubmitting(false);
       }
     } catch (err) {

@@ -101,3 +101,15 @@
 .checkIcon { stroke-dasharray: 24; stroke-dashoffset: 24; animation: checkDraw 0.6s ease-out 0.2s forwards; }
 @keyframes scanLine { 0% { top: 0; } 100% { top: 100%; } }
 .scanLine { position: absolute; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,0,51,0.15), transparent); animation: scanLine 3s linear infinite; pointer-events: none; z-index: 1; }
+
+/* Blur badge pulse (transition between agents) */
+@keyframes blurBadgePulse {
+  0%, 100% { border-color: rgba(255,0,51,0.15); }
+  50% { border-color: rgba(255,0,51,0.5); box-shadow: 0 0 12px rgba(255,0,51,0.15); }
+}
+
+/* Reveal animation — blur fades out */
+@keyframes blurReveal {
+  0% { opacity: 1; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  100% { opacity: 0; backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); }
+}

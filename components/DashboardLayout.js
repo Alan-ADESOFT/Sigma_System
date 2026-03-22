@@ -492,6 +492,7 @@ function NotificationBell() {
     if (type === 'form_started')   return '✏';
     if (type === 'form_sent')      return '📋';
     if (type === 'token_expired')  return '⏱';
+    if (type === 'pipeline_done')  return '✓';
     return '●';
   }
 
@@ -500,6 +501,7 @@ function NotificationBell() {
     if (type === 'form_submitted') return 'var(--success)';
     if (type === 'form_started')   return 'var(--warning)';
     if (type === 'token_expired')  return 'var(--error)';
+    if (type === 'pipeline_done')  return 'var(--success)';
     return 'var(--info)';
   }
 

@@ -90,10 +90,10 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [versionsData, setVersionsData]     = useState([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
+  const [viewingHistoryItem, setViewingHistoryItem] = useState(null);
+  const [historyDraftLabel, setHistoryDraftLabel]   = useState(null);
   const [compareVersion, setCompareVersion] = useState(null);
 
-  const [qualityScore, setQualityScore]     = useState(null);
-  const [showSuggestions, setShowSuggestions] = useState(false);
   const [improving, setImproving]           = useState(false);
 
   useEffect(() => {
@@ -114,11 +114,6 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
     return () => clearInterval(id);
   }, []);
 
-  useEffect(() => {
-    if (!clientId || !meta?.key) return;
-    fetch('/api/clients/' + clientId + '/score?stageKey=' + meta.key)
-      .then(r => r.json()).then(d => { if (d.success && d.data) setQualityScore(d.data); }).catch(() => {});
-  }, [clientId, meta?.key]);
 
   function execCmd(cmd) { editorRef.current?.focus(); document.execCommand(cmd, false, null); }
   function handleEditorInput() { setSavedN(false); }
@@ -143,12 +138,12 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
       const json = await res.json();
       if (json.success) {
         setSavedN(true);
+        setHistoryDraftLabel(null);
         if (statusOverride) setStageStatus(statusOverride);
         onSaved?.({ ...stage, notes: html, ...(statusOverride ? { status: statusOverride } : {}) });
         if (statusOverride === 'done') {
           // Versao: salva snapshot ao concluir
           fetch('/api/clients/' + clientId + '/stages/save-version', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stageKey: meta.key, content: editorRef.current?.innerText || '' }) }).catch(() => {});
-          triggerScore(editorRef.current?.innerText || '');
           notify('Etapa concluida!', 'success');
         } else if (statusOverride === 'in_progress') {
           // Historico: salva snapshot ao salvar rascunho
@@ -172,15 +167,10 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
 
   async function handleCopy() {
     const text = editorRef.current?.innerText || '';
-    if (!text.trim()) { notify('Nada para copiar', 'warning'); return; }
-    try { await navigator.clipboard.writeText(text); notify('Copiado!', 'success'); } catch { notify('Erro ao copiar', 'error'); }
+    if (!text.trim()) { notify('O editor esta vazio — gere ou escreva um conteudo primeiro', 'warning'); return; }
+    try { await navigator.clipboard.writeText(text); notify('Texto copiado', 'success'); } catch { notify('Erro ao copiar', 'error'); }
   }
 
-  function triggerScore(outputText) {
-    if (!clientId || !outputText) return;
-    fetch('/api/clients/' + clientId + '/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stageKey: meta.key, outputText }) })
-      .then(() => { setTimeout(() => { fetch('/api/clients/' + clientId + '/score?stageKey=' + meta.key).then(r => r.json()).then(d => { if (d.success && d.data) setQualityScore(d.data); }).catch(() => {}); }, 5000); }).catch(() => {});
-  }
 
   const loadHistory = useCallback(async () => {
     setLoadingHistory(true);
@@ -189,11 +179,16 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
 
   useEffect(() => { if (showHistory && historyTab === 'history') loadHistory(); }, [showHistory, historyTab, loadHistory]);
 
-  function useHistoryItem(item) {
+  function applyHistoryAsDraft(item) {
     if (!item || !editorRef.current) return;
+    // mdToHtml escapa HTML antes de formatar — mesmo padrão usado no restante do componente
     editorRef.current.innerHTML = mdToHtml(item.response_text || '');
-    setSavedN(false); setShowHistory(false);
-    notify('Resultado carregado', 'info');
+    const dateLabel = new Date(item.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    setHistoryDraftLabel(dateLabel);
+    setSavedN(false);
+    setViewingHistoryItem(null);
+    setShowHistory(false);
+    notify('Rascunho carregado do historico de ' + dateLabel + '. Clique em Salvar para confirmar.', 'info');
   }
 
   const loadVersions = useCallback(async () => {
@@ -236,16 +231,16 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
           sel.removeAllRanges();
         }
         setSavedN(false);
-        notify('Trecho melhorado!', 'success');
+        notify('Texto refinado pelo assistente', 'success');
       } else {
         // Modo full: corrige apenas acentos, semantica e conjugacoes
         const r = await fetch('/api/agentes/improve-text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: fullText, mode: 'full' }) });
         const d = await r.json();
         if (!d.success) throw new Error(d.error);
         if (editorRef.current) { editorRef.current.innerHTML = mdToHtml(d.data.text); setSavedN(false); }
-        notify('Texto corrigido!', 'success');
+        notify('Texto refinado pelo assistente', 'success');
       }
-    } catch (err) { notify('Erro: ' + err.message, 'error'); }
+    } catch (err) { notify('Falha ao executar agente. Tente novamente ou reduza o input.', 'error'); }
     finally { setImproving(false); }
   }
 
@@ -273,8 +268,8 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
       if (editorRef.current) { editorRef.current.innerHTML = mdToHtml(outputText); editorRef.current.scrollTop = 0; setSavedN(false); }
       setChatHistory(prev => [...prev, { role: 'user', content: userPrompt }, { role: 'assistant', content: outputText }].slice(-12));
       setPromptInput('');
-      notify('Modificacao aplicada!', 'success');
-    } catch (err) { notify('Erro: ' + err.message, 'error'); }
+      notify('Rascunho gerado — revise e salve quando estiver pronto', 'success');
+    } catch (err) { notify('Falha ao executar agente. Tente novamente ou reduza o input.', 'error'); }
     finally { setApplying(false); }
   }
 
@@ -298,7 +293,6 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {qualityScore && <button onClick={() => setShowSuggestions(!showSuggestions)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, cursor: 'pointer', background: qualityScore.score >= 80 ? 'rgba(34,197,94,0.1)' : qualityScore.score >= 50 ? 'rgba(249,115,22,0.1)' : 'rgba(255,51,51,0.1)', border: '1px solid ' + (qualityScore.score >= 80 ? 'rgba(34,197,94,0.3)' : qualityScore.score >= 50 ? 'rgba(249,115,22,0.3)' : 'rgba(255,51,51,0.3)'), fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 700, color: qualityScore.score >= 80 ? '#22c55e' : qualityScore.score >= 50 ? '#f97316' : '#ff3333' }}>{qualityScore.score}</button>}
             <StatusBadge status={stageStatus} />
             <div style={{ display: 'flex', gap: 3 }}>
               {Object.entries(STATUS_CFG).map(([s, c]) => <button key={s} onClick={() => changeStatus(s)} style={{ padding: '3px 9px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (stageStatus === s ? c.border : 'rgba(255,255,255,0.06)'), background: stageStatus === s ? c.bg : 'transparent', color: stageStatus === s ? c.color : 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.58rem' }}>{c.label}</button>)}
@@ -308,16 +302,6 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
             </button>
           </div>
         </div>
-
-        {/* SUGESTOES */}
-        {showSuggestions && qualityScore && (
-          <div style={{ padding: '10px 22px', borderBottom: '1px solid rgba(255,255,255,0.04)', background: 'rgba(255,255,255,0.01)', flexShrink: 0 }}>
-            <div style={{ display: 'flex', gap: 16, marginBottom: 6 }}>
-              {[{ l: 'Completude', v: qualityScore.details?.completeness }, { l: 'Especificidade', v: qualityScore.details?.specificity }, { l: 'Acionabilidade', v: qualityScore.details?.actionability }].map(m => m.v != null && <div key={m.l} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{m.l}</span><span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 700, color: m.v >= 80 ? '#22c55e' : m.v >= 50 ? '#f97316' : '#ff3333' }}>{m.v}</span></div>)}
-            </div>
-            {qualityScore.suggestions && <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{qualityScore.suggestions}</div>}
-          </div>
-        )}
 
         {/* BODY */}
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -379,7 +363,7 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
                     {historyTab === 'history' && (<>
                       {loadingHistory && <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-muted)', padding: 12 }}>Carregando...</div>}
                       {!loadingHistory && historyData.length === 0 && <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-muted)', padding: 12 }}>Nenhuma execucao</div>}
-                      {historyData.map(item => <div key={item.id} onClick={() => useHistoryItem(item)} style={{ padding: '6px 8px', marginBottom: 4, borderRadius: 6, cursor: 'pointer', background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.05)', transition: 'all 0.15s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,0,51,0.15)'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; }}>
+                      {historyData.map(item => <div key={item.id} onClick={() => setViewingHistoryItem(item)} style={{ padding: '6px 8px', marginBottom: 4, borderRadius: 6, cursor: 'pointer', background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.05)', transition: 'all 0.15s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,0,51,0.15)'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}><span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', fontWeight: 600, color: '#ff6680' }}>{item.agent_name}</span><span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.48rem', color: 'var(--text-muted)' }}>{new Date(item.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span></div>
                         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.54rem', color: 'var(--text-secondary)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{(item.response_text || '').substring(0, 150)}</div>
                       </div>)}
@@ -433,6 +417,11 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
 
             {/* Editor */}
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+              {historyDraftLabel && (
+                <div style={{ position: 'absolute', top: 8, right: 12, zIndex: 15, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 6, background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.25)', fontFamily: 'var(--font-mono)', fontSize: '0.52rem', fontWeight: 600, color: 'var(--warning)' }}>
+                  Rascunho do historico &mdash; {historyDraftLabel} &mdash; nao salvo
+                </div>
+              )}
               <div ref={editorRef} contentEditable={!applying} suppressContentEditableWarning onInput={handleEditorInput} data-placeholder="O rascunho gerado pelo pipeline aparece aqui. Use a area abaixo para pedir modificacoes com IA." style={{ width: '100%', height: '100%', padding: '18px 22px', outline: 'none', overflow: 'auto', fontFamily: 'var(--font-mono)', fontSize: '0.82rem', lineHeight: 1.8, color: 'var(--text-secondary)', caretColor: '#ff0033', boxSizing: 'border-box', opacity: applying ? 0.15 : 1, transition: 'opacity 0.3s' }} />
 
               {compareVersion && (
@@ -491,6 +480,31 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
             </div>
           </div>
         </div>
+
+        {/* POPUP DO HISTORICO */}
+        {viewingHistoryItem && (
+          <div onClick={() => setViewingHistoryItem(null)} style={{ position: 'absolute', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 30 }}>
+            <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 700, maxHeight: '80vh', background: 'linear-gradient(145deg, rgba(14,14,14,0.99), rgba(8,8,8,0.99))', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', borderBottom: '1px solid rgba(255,255,255,0.05)', flexShrink: 0 }}>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-primary)' }}>{viewingHistoryItem.agent_name}</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', color: 'var(--text-muted)', marginTop: 2 }}>{new Date(viewingHistoryItem.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+                <button onClick={() => setViewingHistoryItem(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 4 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', lineHeight: 1.8, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>{viewingHistoryItem.response_text || ''}</div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '10px 18px', borderTop: '1px solid rgba(255,255,255,0.05)', flexShrink: 0 }}>
+                <button onClick={() => applyHistoryAsDraft(viewingHistoryItem)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg, var(--action-primary), var(--brand-600))', color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 700, boxShadow: '0 0 12px rgba(255,0,51,0.2)' }}>
+                  &larr; Aplicar como Rascunho
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <style>{`
           [contenteditable][data-placeholder]:empty:before { content: attr(data-placeholder); color: #2a2a2a; pointer-events: none; }

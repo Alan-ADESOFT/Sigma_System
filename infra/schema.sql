@@ -539,22 +539,8 @@ CREATE TABLE IF NOT EXISTS pipeline_jobs (
 CREATE INDEX IF NOT EXISTS idx_pipeline_jobs_client ON pipeline_jobs(client_id);
 CREATE INDEX IF NOT EXISTS idx_pipeline_jobs_status ON pipeline_jobs(status);
 
--- ============================================================
--- STAGE_QUALITY_SCORES (score de qualidade por etapa)
--- ============================================================
-CREATE TABLE IF NOT EXISTS stage_quality_scores (
-    id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    client_id    TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
-    tenant_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    stage_key    TEXT NOT NULL,
-    score        INTEGER NOT NULL CHECK (score >= 0 AND score <= 100),
-    details      JSONB NOT NULL DEFAULT '{}',
-    -- { completeness, specificity, actionability, missing_fields, weak_points }
-    suggestions  TEXT,
-    analyzed_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    version      INTEGER NOT NULL DEFAULT 1
-);
-CREATE INDEX IF NOT EXISTS idx_scores_client ON stage_quality_scores(client_id, stage_key);
+-- stage_quality_scores removido (sistema de score descontinuado)
+DROP TABLE IF EXISTS stage_quality_scores;
 
 -- ============================================================
 -- STAGE_VERSIONS (snapshots manuais — criados ao "Marcar Concluído")

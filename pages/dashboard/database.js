@@ -7,7 +7,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '../../components/DashboardLayout';
 import StageModal from '../../components/StageModal';
@@ -207,9 +207,9 @@ function ClientStagesPopup({ client, onClose, onStageUpdated, onReloadClient }) 
         setPipelinePolling(false);
         clearInterval(interval);
         if (data.status === 'completed') {
-          notify('Pipeline concluído com sucesso!', 'success');
+          notify('Pipeline de ' + (client?.company_name || 'cliente') + ' concluido! 8 rascunhos gerados.', 'success', 8000);
         } else if (data.status === 'failed') {
-          notify('Pipeline falhou: ' + (data.error || 'erro desconhecido'), 'error');
+          notify('Pipeline falhou. Verifique o log e tente novamente.', 'error');
         }
         onReloadClient?.(client.id);
       }
@@ -244,7 +244,7 @@ function ClientStagesPopup({ client, onClose, onStageUpdated, onReloadClient }) 
         notify(d.error || 'Erro ao iniciar pipeline', 'error');
         return;
       }
-      notify('Pipeline iniciado! Acompanhe o progresso nos cards abaixo.', 'info');
+      notify('Pipeline iniciado para ' + (client?.company_name || 'cliente') + ' — acompanhe o progresso', 'info', 8000);
       setPipelineStatus({ status: 'running', completedAgents: 0, totalAgents: 8, currentAgent: 'agente1' });
       setPipelinePolling(true);
     } catch (err) {
@@ -424,8 +424,14 @@ export default function DatabasePage() {
   const [search,         setSearch        ] = useState('');
   const [selectedClient, setSelectedClient] = useState(null);
   const [pipelineClient, setPipelineClient] = useState(null);
+  const [bgPipelineJobs, setBgPipelineJobs] = useState({}); // { [clientId]: { polling: true } }
+  const bgPollingRefs = useRef({});
   const [resetClient, setResetClient]       = useState(null);
   const [resetConfirmText, setResetConfirmText] = useState('');
+  const [exportClient, setExportClient]   = useState(null);
+  const [exportFormat, setExportFormat]   = useState('docx');
+  const [exportScope, setExportScope]     = useState('all');
+  const [exporting, setExporting]         = useState(false);
 
   async function load() {
     setLoading(true); setError(null);
@@ -455,6 +461,56 @@ export default function DatabasePage() {
   }
 
   useEffect(() => { load(); }, []);
+
+  // Cleanup background polling on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(bgPollingRefs.current).forEach(id => clearInterval(id));
+    };
+  }, []);
+
+  // Start background polling for a client pipeline
+  const startBgPolling = useCallback((clientId, clientName) => {
+    // Don't duplicate
+    if (bgPollingRefs.current[clientId]) return;
+    console.log('[INFO][Frontend:Database] Iniciando polling em segundo plano', { clientId });
+    setBgPipelineJobs(prev => ({ ...prev, [clientId]: { polling: true } }));
+
+    const intervalId = setInterval(async () => {
+      try {
+        const r = await fetch('/api/agentes/pipeline/status?clientId=' + clientId);
+        const d = await r.json();
+        if (!d.success || !d.data) return;
+
+        if (d.data.status === 'completed') {
+          clearInterval(intervalId);
+          delete bgPollingRefs.current[clientId];
+          setBgPipelineJobs(prev => { const next = { ...prev }; delete next[clientId]; return next; });
+          notify(
+            'Pipeline de ' + (clientName || 'cliente') + ' finalizado! Clique para ver os rascunhos.',
+            'success',
+            { duration: 8000, onClick: () => {
+              const c = clients.find(x => x.id === clientId) || { id: clientId, company_name: clientName };
+              setPipelineClient(c);
+            }}
+          );
+          load(); // Reload clients to update stages
+        } else if (d.data.status === 'failed') {
+          clearInterval(intervalId);
+          delete bgPollingRefs.current[clientId];
+          setBgPipelineJobs(prev => { const next = { ...prev }; delete next[clientId]; return next; });
+          notify('Pipeline de ' + (clientName || 'cliente') + ' falhou. Verifique o log.', 'error');
+        }
+      } catch {}
+    }, 5000);
+
+    bgPollingRefs.current[clientId] = intervalId;
+  }, [clients, notify]);
+
+  function handlePipelineBackgroundClose(clientId) {
+    const client = clients.find(c => c.id === clientId);
+    startBgPolling(clientId, client?.company_name || 'cliente');
+  }
 
   async function handleDelete(id) {
     if (!confirm('Remover cliente e etapas?')) return;
@@ -561,7 +617,7 @@ export default function DatabasePage() {
       )}
 
       {!loading && !error && filtered.map(c => (
-        <ClientCard key={c.id} client={c} onOpenStages={setSelectedClient} onDelete={handleDelete} onRunPipeline={c => setPipelineClient(c)} onExport={c => window.open('/api/clients/' + c.id + '/export?format=pdf', '_blank')} onReset={c => { setResetClient(c); setResetConfirmText(''); }} />
+        <ClientCard key={c.id} client={c} onOpenStages={setSelectedClient} onDelete={handleDelete} onRunPipeline={c => setPipelineClient(c)} onExport={c => { setExportClient(c); setExportFormat('docx'); setExportScope('all'); }} onReset={c => { setResetClient(c); setResetConfirmText(''); }} />
       ))}
 
       {!loading && !error && clients.length > 0 && filtered.length === 0 && (
@@ -596,6 +652,7 @@ export default function DatabasePage() {
           client={pipelineClient}
           onClose={() => setPipelineClient(null)}
           onComplete={() => { setPipelineClient(null); load(); }}
+          onBackgroundClose={handlePipelineBackgroundClose}
         />
       )}
 
@@ -679,6 +736,104 @@ export default function DatabasePage() {
                   opacity: resetConfirmText !== 'APAGAR BASE' ? 0.4 : 1,
                 }}>APAGAR TUDO</button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de export */}
+      {exportClient && (
+        <div onClick={() => setExportClient(null)} style={{
+          position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            width: 420, padding: '28px 32px', borderRadius: 12,
+            background: 'linear-gradient(145deg, rgba(14,14,14,0.99), rgba(8,8,8,0.99))',
+            border: '1px solid rgba(255,255,255,0.06)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+                background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a855f7" strokeWidth="1.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              </div>
+              <div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>Exportar Base</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)' }}>{exportClient.company_name}</div>
+              </div>
+            </div>
+
+            {/* Escopo */}
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>ETAPAS</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              {[{ key: 'all', label: 'Todas as etapas' }, { key: 'done', label: 'So etapas concluidas' }].map(opt => (
+                <button key={opt.key} onClick={() => setExportScope(opt.key)} style={{
+                  flex: 1, padding: '8px 12px', borderRadius: 6, cursor: 'pointer',
+                  background: exportScope === opt.key ? 'rgba(168,85,247,0.08)' : 'rgba(255,255,255,0.02)',
+                  border: '1px solid ' + (exportScope === opt.key ? 'rgba(168,85,247,0.3)' : 'rgba(255,255,255,0.06)'),
+                  color: exportScope === opt.key ? '#a855f7' : 'var(--text-muted)',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
+                }}>{opt.label}</button>
+              ))}
+            </div>
+
+            {/* Formato */}
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>FORMATO</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+              {[{ key: 'docx', label: 'DOCX' }, { key: 'pdf', label: 'PDF (HTML)' }].map(opt => (
+                <button key={opt.key} onClick={() => setExportFormat(opt.key)} style={{
+                  flex: 1, padding: '8px 12px', borderRadius: 6, cursor: 'pointer',
+                  background: exportFormat === opt.key ? 'rgba(168,85,247,0.08)' : 'rgba(255,255,255,0.02)',
+                  border: '1px solid ' + (exportFormat === opt.key ? 'rgba(168,85,247,0.3)' : 'rgba(255,255,255,0.06)'),
+                  color: exportFormat === opt.key ? '#a855f7' : 'var(--text-muted)',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
+                }}>{opt.label}</button>
+              ))}
+            </div>
+
+            {/* Botao export */}
+            <button
+              disabled={exporting}
+              onClick={async () => {
+                setExporting(true);
+                const url = '/api/clients/' + exportClient.id + '/export?format=' + exportFormat + (exportScope === 'done' ? '&onlyDone=true' : '');
+                try {
+                  const r = await fetch(url);
+                  if (!r.ok) throw new Error('Falha ao gerar');
+                  const blob = await r.blob();
+                  const a = document.createElement('a');
+                  a.href = URL.createObjectURL(blob);
+                  const ext = exportFormat === 'docx' ? '.docx' : '.html';
+                  a.download = 'SIGMA-Base-Estrategica-' + (exportClient.company_name || 'export').replace(/\s+/g, '-') + ext;
+                  a.click();
+                  URL.revokeObjectURL(a.href);
+                  notify('Documento gerado', 'success');
+                  setExportClient(null);
+                } catch (err) {
+                  notify('Erro ao exportar: ' + err.message, 'error');
+                } finally {
+                  setExporting(false);
+                }
+              }}
+              style={{
+                width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', cursor: exporting ? 'not-allowed' : 'pointer',
+                background: exporting ? 'rgba(168,85,247,0.1)' : 'linear-gradient(135deg, #a855f7, #7c3aed)',
+                color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 700,
+                letterSpacing: '0.04em', opacity: exporting ? 0.6 : 1,
+                boxShadow: exporting ? 'none' : '0 0 16px rgba(168,85,247,0.2)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}
+            >
+              {exporting ? (
+                <>
+                  <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                  Gerando...
+                </>
+              ) : (
+                'Exportar \u2192'
+              )}
+            </button>
           </div>
         </div>
       )}

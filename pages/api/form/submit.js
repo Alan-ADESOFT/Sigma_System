@@ -139,8 +139,8 @@ export default async function handler(req, res) {
       await createNotification(
         tenantId,
         'form_submitted',
-        'Formulário preenchido — Pipeline iniciado',
-        `${company_name || 'Cliente'} enviou o formulário de briefing. Pipeline de agentes iniciado automaticamente.`,
+        'Briefing recebido',
+        `${company_name || 'Cliente'} enviou o formulario completo. Pipeline disponivel.`,
         clientId,
         { submittedAt: new Date().toISOString(), pipelineTriggered: true }
       );
@@ -172,8 +172,8 @@ export default async function handler(req, res) {
       await createNotification(
         tenantId,
         'form_submitted',
-        'Formulário preenchido',
-        `${company_name || 'Cliente'} acabou de enviar o formulário de briefing.`,
+        'Briefing recebido',
+        `${company_name || 'Cliente'} enviou o formulario completo. Pipeline disponivel.`,
         clientId,
         { submittedAt: new Date().toISOString() }
       );

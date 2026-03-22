@@ -6,6 +6,9 @@
  * Uso:
  *   const { notify } = useNotification();
  *   notify('Mensagem', 'success' | 'error' | 'warning' | 'info', duração_ms?)
+ *   notify('Mensagem', 'success', { onClick: fn })           // toast clicável
+ *   notify('Mensagem', 'info', { action: { label: 'Ver', onClick: fn } }) // com botão
+ *   notify('Mensagem', 'success', { duration: 8000 })        // duração custom
  */
 
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
@@ -80,9 +83,20 @@ function NotificationItem({ notification, onClose }) {
     bar.style.width = '0%';
   }, [notification.duration]);
 
+  const isClickable = !!notification.onClick;
+  const action = notification.action; // { label, onClick }
+
+  function handleToastClick() {
+    if (notification.onClick) {
+      notification.onClick();
+      onClose();
+    }
+  }
+
   return (
     <div
       className="animate-scale-in"
+      onClick={isClickable ? handleToastClick : undefined}
       style={{
         position: 'relative',
         display: 'flex',
@@ -97,6 +111,7 @@ function NotificationItem({ notification, onClose }) {
         width: 320,
         maxWidth: 'calc(100vw - 40px)',
         overflow: 'hidden',
+        cursor: isClickable ? 'pointer' : 'default',
       }}
     >
       {/* Glow de fundo */}
@@ -136,20 +151,48 @@ function NotificationItem({ notification, onClose }) {
           {cfg.label}
         </div>
 
-        {/* Mensagem */}
+        {/* Mensagem + ação inline */}
         <div style={{
-          fontFamily: 'Inter, sans-serif',
-          fontSize: '0.8rem',
-          color: '#d4d4d4',
-          lineHeight: 1.45,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
         }}>
-          {notification.message}
+          <div style={{
+            flex: 1,
+            fontFamily: 'Inter, sans-serif',
+            fontSize: '0.8rem',
+            color: '#d4d4d4',
+            lineHeight: 1.45,
+          }}>
+            {notification.message}
+          </div>
+          {action && (
+            <button
+              onClick={(e) => { e.stopPropagation(); action.onClick(); onClose(); }}
+              style={{
+                flexShrink: 0,
+                padding: '3px 8px',
+                borderRadius: 4,
+                border: `1px solid ${cfg.color}40`,
+                background: `${cfg.color}14`,
+                color: cfg.color,
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '0.56rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                position: 'relative',
+                zIndex: 2,
+              }}
+            >
+              {action.label}
+            </button>
+          )}
         </div>
       </div>
 
       {/* Botão fechar */}
       <button
-        onClick={onClose}
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
         style={{
           flexShrink: 0,
           background: 'none', border: 'none',
@@ -189,10 +232,26 @@ function NotificationItem({ notification, onClose }) {
 export function NotificationProvider({ children }) {
   const [notifications, setNotifications] = useState([]);
 
-  /* Adiciona notificação e agenda remoção */
-  const notify = useCallback((message, type = 'info', duration = 4500) => {
+  /* Durações default por tipo */
+  const DEFAULT_DURATIONS = { success: 4000, error: 6000, warning: 4500, info: 4500 };
+
+  /* Adiciona notificação e agenda remoção
+   * opts pode ser:
+   *   número → duração em ms
+   *   objeto → { duration?, onClick?, action?: { label, onClick } }
+   */
+  const notify = useCallback((message, type = 'info', opts) => {
+    let duration, onClick, action;
+    if (typeof opts === 'number') {
+      duration = opts;
+    } else if (opts && typeof opts === 'object') {
+      duration = opts.duration;
+      onClick = opts.onClick;
+      action = opts.action;
+    }
+    duration = duration || DEFAULT_DURATIONS[type] || 4500;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    setNotifications(prev => [...prev, { id, message, type, duration }]);
+    setNotifications(prev => [...prev, { id, message, type, duration, onClick, action }]);
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
     }, duration + 300); /* pequeno buffer para animação de saída */
