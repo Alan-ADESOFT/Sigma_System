@@ -13,6 +13,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import DashboardLayout from '../../components/DashboardLayout';
+import CopyWorkspace from '../../components/CopyWorkspace';
 import { useNotification } from '../../context/NotificationContext';
 import styles from '../../assets/style/social.module.css';
 
@@ -923,9 +924,9 @@ export default function SocialPage() {
         />
       )}
 
-      {/* ── Modal: editor de conteúdo ── */}
+      {/* ── Modal: CopyCreator Workspace ── */}
       {openFolder && (
-        <ContentEditorModal
+        <CopyWorkspace
           folder={openFolder}
           account={selectedAccount}
           onClose={() => setOpenFolder(null)}
