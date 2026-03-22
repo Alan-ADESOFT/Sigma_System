@@ -780,56 +780,45 @@ function SubmittedResponses({ clientId, status, onDeleted, notify }) {
         Respostas do formulario de briefing preenchido pelo cliente. Use o resumo IA para uma visao rapida
         ou expanda cada secao para ver as respostas detalhadas.
       </HowItWorks>
-      {/* ── Card Resumo IA ── */}
-      <div className="glass-card" style={{ padding: '20px', marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 10, flexShrink: 0,
-            background: 'linear-gradient(135deg, rgba(255,0,51,0.1), rgba(255,0,51,0.1))',
-            border: '1px solid rgba(255,0,51,0.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2a4 4 0 0 0-4 4v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4z" />
-              <circle cx="9" cy="15" r="1" /><circle cx="15" cy="15" r="1" />
-            </svg>
+      {/* ── Card Resumo IA (estilo pipeline card) ── */}
+      <div className="glass-card" style={{ padding: '16px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+          background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.15)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff6680" strokeWidth="2" strokeLinecap="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+            Resumo Estrategico IA
           </div>
-          <div style={{ flex: 1 }}>
-            <h3 style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' }}>
-              Resumo Estratégico IA
-            </h3>
-            <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.72rem', color: 'var(--text-secondary)', margin: '0 0 14px', lineHeight: 1.5 }}>
-              Análise completa das respostas: dores, desejos, diferenciais, oportunidades e recomendações estratégicas.
-            </p>
-            {summaryChecked && (
-              summary ? (
-                <button
-                  onClick={() => setShowSummaryModal(true)}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 16px',
-                    borderRadius: 6, cursor: 'pointer',
-                    fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600,
-                    letterSpacing: '0.04em', textTransform: 'uppercase',
-                    background: 'rgba(255,0,51,0.1)', border: '1px solid rgba(255,0,51,0.3)',
-                    color: 'var(--brand-500)', transition: 'all 0.2s',
-                  }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-                  </svg>
-                  Visualizar resumo
-                </button>
-              ) : (
-                <button onClick={handleGenerateSummary} disabled={summaryLoading} className="sigma-btn-primary" style={{ fontSize: '0.65rem', padding: '7px 16px', gap: 6 }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                  </svg>
-                  Gerar agora
-                </button>
-              )
-            )}
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 2 }}>
+            Analise completa das respostas do formulario com insights, dores e recomendacoes.
           </div>
         </div>
+        {summaryChecked && (
+          summary ? (
+            <button onClick={() => setShowSummaryModal(true)} style={{
+              padding: '8px 18px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, border: 'none',
+              background: 'rgba(255,0,51,0.1)', color: '#ff6680',
+              fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 700,
+            }}>
+              Ver Resumo
+            </button>
+          ) : (
+            <button onClick={handleGenerateSummary} disabled={summaryLoading} style={{
+              padding: '8px 18px', borderRadius: 8, cursor: summaryLoading ? 'not-allowed' : 'pointer', flexShrink: 0, border: 'none',
+              background: 'linear-gradient(135deg, #ff0033, #cc0029)', color: '#fff',
+              fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 700,
+              boxShadow: '0 0 12px rgba(255,0,51,0.2)',
+            }}>
+              {summaryLoading ? 'Gerando...' : 'Gerar Resumo'}
+            </button>
+          )
+        )}
       </div>
 
       {/* ── Modal do resumo IA ── */}
@@ -2688,7 +2677,6 @@ export default function ClientInfoPage() {
               pipeline
             </div>
           </div>
-          <SendFormButton client={client} onSent={() => load()} size="sm" />
         </div>
       </div>
 

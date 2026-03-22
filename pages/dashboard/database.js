@@ -551,24 +551,8 @@ export default function DatabasePage() {
   return (
     <DashboardLayout activeTab="database">
       <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <h1 className="page-title">Base de Dados</h1>
-            <p className="page-subtitle">Pipeline de marketing — clique em um cliente para ver as etapas</p>
-          </div>
-          <Link href="/dashboard/form" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            padding: '9px 18px', borderRadius: 8,
-            background: 'rgba(255,0,51,0.1)', border: '1px solid rgba(255,0,51,0.3)',
-            color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
-            fontWeight: 600, letterSpacing: '0.04em', textDecoration: 'none',
-          }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Novo Cliente
-          </Link>
-        </div>
+        <h1 className="page-title">Base de Dados</h1>
+        <p className="page-subtitle">Pipeline de marketing — clique em um cliente para ver as etapas</p>
       </div>
 
       {/* KPIs */}
@@ -673,43 +657,60 @@ export default function DatabasePage() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <div onClick={e => e.stopPropagation()} style={{
-            width: 360, padding: '24px 28px', borderRadius: 12,
+            width: 480, padding: '32px 36px', borderRadius: 16,
             background: 'linear-gradient(145deg, rgba(14,14,14,0.99), rgba(8,8,8,0.99))',
-            border: '1px solid rgba(255,51,51,0.2)',
+            border: '1px solid rgba(255,255,255,0.06)',
           }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 700, color: '#ff3333', marginBottom: 8 }}>
-              Apagar base de dados
+            {/* Header com icone */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+                background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.2)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff3333" strokeWidth="1.5" strokeLinecap="round">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+              </div>
+              <div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Apagar base de dados
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)' }}>
+                  Esta acao nao pode ser desfeita.
+                </div>
+              </div>
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 14 }}>
-              Isso vai apagar permanentemente para <strong style={{ color: 'var(--text-primary)' }}>{resetClient.company_name}</strong>:
-            </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', lineHeight: 1.8, marginBottom: 14, paddingLeft: 8 }}>
-              - Todo o historico de execucoes dos agentes<br/>
-              - Todas as versoes salvas<br/>
-              - Os textos de cada bloco/etapa<br/>
-              - Status de todas as etapas volta para Pendente
-            </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginBottom: 8 }}>
-              Digite <strong style={{ color: '#ff3333' }}>APAGAR</strong> para confirmar:
+
+            {/* Texto de confirmacao */}
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600,
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+              color: 'var(--text-muted)', marginBottom: 10,
+            }}>
+              DIGITE <span style={{ color: '#ff3333' }}>APAGAR BASE</span> PARA CONFIRMAR
             </div>
             <input
               type="text" value={resetConfirmText} onChange={e => setResetConfirmText(e.target.value)}
-              placeholder="APAGAR"
+              placeholder="APAGAR BASE"
               style={{
-                width: '100%', boxSizing: 'border-box', padding: '8px 12px', marginBottom: 14,
-                background: 'rgba(10,10,10,0.8)', border: '1px solid rgba(255,51,51,0.15)',
-                borderRadius: 6, color: 'var(--text-primary)', fontSize: '0.72rem',
-                fontFamily: 'var(--font-mono)', outline: 'none',
+                width: '100%', boxSizing: 'border-box', padding: '12px 16px', marginBottom: 20,
+                background: 'rgba(10,10,10,0.6)', border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.78rem',
+                fontFamily: 'var(--font-mono)', outline: 'none', letterSpacing: '0.04em',
               }}
             />
-            <div style={{ display: 'flex', gap: 8 }}>
+
+            {/* Botoes */}
+            <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setResetClient(null)} style={{
-                flex: 1, padding: '8px 0', borderRadius: 6, cursor: 'pointer',
-                background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)',
-                color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600,
-              }}>Cancelar</button>
+                flex: 1, padding: '12px 0', borderRadius: 8, cursor: 'pointer',
+                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)',
+                color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 600,
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+              }}>CANCELAR</button>
               <button
-                disabled={resetConfirmText !== 'APAGAR'}
+                disabled={resetConfirmText !== 'APAGAR BASE'}
                 onClick={async () => {
                   try {
                     await fetch('/api/clients/' + resetClient.id + '/reset-database', { method: 'POST' });
@@ -719,14 +720,15 @@ export default function DatabasePage() {
                   } catch { notify('Erro ao apagar', 'error'); }
                 }}
                 style={{
-                  flex: 1, padding: '8px 0', borderRadius: 6,
-                  cursor: resetConfirmText !== 'APAGAR' ? 'not-allowed' : 'pointer',
-                  background: resetConfirmText === 'APAGAR' ? 'rgba(255,51,51,0.12)' : 'rgba(255,51,51,0.04)',
+                  flex: 1, padding: '12px 0', borderRadius: 8,
+                  cursor: resetConfirmText !== 'APAGAR BASE' ? 'not-allowed' : 'pointer',
+                  background: resetConfirmText === 'APAGAR BASE' ? 'rgba(255,51,51,0.15)' : 'rgba(255,51,51,0.04)',
                   border: '1px solid rgba(255,51,51,0.25)',
-                  color: resetConfirmText === 'APAGAR' ? '#ff3333' : '#525252',
-                  fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600,
-                  opacity: resetConfirmText !== 'APAGAR' ? 0.4 : 1,
-                }}>Apagar Tudo</button>
+                  color: resetConfirmText === 'APAGAR BASE' ? '#ff3333' : '#525252',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 600,
+                  letterSpacing: '0.06em', textTransform: 'uppercase',
+                  opacity: resetConfirmText !== 'APAGAR BASE' ? 0.4 : 1,
+                }}>APAGAR TUDO</button>
             </div>
           </div>
         </div>
