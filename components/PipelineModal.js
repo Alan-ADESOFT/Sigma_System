@@ -160,6 +160,7 @@ export default function PipelineModal({ client, onClose, onComplete }) {
   }
 
   function connectSSE(jId) {
+    // Delay de 2s para o emitter ser criado no backend (setImmediate)
     setTimeout(() => {
       try {
         const evtSource = new EventSource('/api/agentes/stream-log?jobId=' + jId);
@@ -189,7 +190,7 @@ export default function PipelineModal({ client, onClose, onComplete }) {
         };
         evtSource.onerror = () => evtSource.close();
       } catch {}
-    }, 1000);
+    }, 2000);
   }
 
   async function fetchAndType(agentName, doneIdx) {
