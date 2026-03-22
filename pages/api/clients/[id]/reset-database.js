@@ -23,11 +23,12 @@ export default async function handler(req, res) {
   try {
     console.log('[INFO][ResetDatabase] Resetando base do cliente', { clientId });
 
-    // Apaga historico de agentes
-    await query('DELETE FROM ai_agent_history WHERE client_id = $1 AND tenant_id = $2', [clientId, tenantId]);
+    // Apaga historico de agentes (por client_id direto + por metadata)
+    await query('DELETE FROM ai_agent_history WHERE client_id = $1', [clientId]);
+    await query(`DELETE FROM ai_agent_history WHERE tenant_id = $1 AND metadata->>'stageKey' IS NOT NULL AND client_id IS NULL`, [tenantId]);
 
     // Apaga historico de pesquisas
-    await query('DELETE FROM ai_search_history WHERE client_id = $1 AND tenant_id = $2', [clientId, tenantId]);
+    await query('DELETE FROM ai_search_history WHERE client_id = $1', [clientId]);
 
     // Apaga versoes
     await query('DELETE FROM stage_versions WHERE client_id = $1', [clientId]);
