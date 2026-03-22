@@ -34,7 +34,6 @@ const STAGES_META = [
   { key: 'audience',    index: 3, label: 'Público-Alvo',            desc: 'Define o perfil do público: demográfico, psicográfico, comportamental e nível de consciência.' },
   { key: 'avatar',      index: 4, label: 'Construção do Avatar',    desc: 'Constrói o cliente ideal com dores reais, desejos, objeções e linguagem que ele usa.' },
   { key: 'positioning', index: 5, label: 'Posicionamento da Marca', desc: 'Define como a marca se diferencia: proposta de valor, vantagem competitiva e promessa.' },
-  { key: 'offer',       index: 6, label: 'Definição da Oferta',     desc: 'Estrutura a oferta completa: headlines, copy de anúncios, argumentos de venda e landing page.' },
 ];
 
 const STATUS_CFG = {

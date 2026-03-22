@@ -10,7 +10,7 @@ import { resolveTenantId } from '../../../../infra/get-tenant-id';
 import { query, queryOne } from '../../../../infra/db';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle } from 'docx';
 
-const STAGE_ORDER = ['diagnosis', 'competitors', 'audience', 'avatar', 'positioning', 'offer'];
+const STAGE_ORDER = ['diagnosis', 'competitors', 'audience', 'avatar', 'positioning'];
 
 const STAGE_LABELS = {
   diagnosis:   'Diagnóstico do Negócio',
@@ -18,7 +18,6 @@ const STAGE_LABELS = {
   audience:    'Público-Alvo',
   avatar:      'Construção do Avatar',
   positioning: 'Posicionamento da Marca',
-  offer:       'Definição da Oferta',
 };
 
 const STAGE_KB_CATEGORIES = {
@@ -27,7 +26,6 @@ const STAGE_KB_CATEGORIES = {
   audience:    ['publico_alvo'],
   avatar:      ['avatar'],
   positioning: ['posicionamento'],
-  offer:       ['oferta'],
 };
 
 export default async function handler(req, res) {

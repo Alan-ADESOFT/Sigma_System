@@ -15,10 +15,9 @@ const STAGE_AGENT_MAP = {
   audience:    ['agente3'],
   avatar:      ['agente4a', 'agente4b'],
   positioning: ['agente5'],
-  offer:       ['agente6'],
 };
 
-const STAGE_ORDER = ['diagnosis', 'competitors', 'audience', 'avatar', 'positioning', 'offer'];
+const STAGE_ORDER = ['diagnosis', 'competitors', 'audience', 'avatar', 'positioning'];
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {

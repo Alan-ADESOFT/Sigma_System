@@ -526,7 +526,7 @@ CREATE TABLE IF NOT EXISTS pipeline_jobs (
     client_id        TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
     status           TEXT NOT NULL DEFAULT 'running',
     -- 'running' | 'completed' | 'failed' | 'awaiting_review' | 'approved'
-    total_agents     INTEGER NOT NULL DEFAULT 8,
+    total_agents     INTEGER NOT NULL DEFAULT 7,
     completed_agents INTEGER NOT NULL DEFAULT 0,
     current_agent    TEXT,
     logs             JSONB NOT NULL DEFAULT '[]',

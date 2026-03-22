@@ -75,7 +75,7 @@ export default async function handler(req, res) {
     const job = await queryOne(
       `INSERT INTO pipeline_jobs (tenant_id, client_id, total_agents, status)
        VALUES ($1, $2, $3, 'running') RETURNING id`,
-      [tenantId, clientId, 8]
+      [tenantId, clientId, 7]
     );
     const jobId = job.id;
 

@@ -80,17 +80,6 @@ const PIPELINE_CONFIG = {
     ],
     outputPlaceholder: '{OUTPUT_POSICIONAMENTO}',
   },
-  agente6: {
-    order: 8,
-    stageKey: 'offer',
-    savesToKB: { category: 'oferta', key: 'output_completo' },
-    dependsOn: [
-      { agentName: 'agente1', placeholder: '{OUTPUT_DIAGNOSTICO}', kb: { category: 'diagnostico', key: 'output_completo' } },
-      { agentName: 'agente4b', placeholder: '{OUTPUT_AVATAR}', kb: { category: 'avatar', key: 'output_completo' } },
-      { agentName: 'agente5', placeholder: '{OUTPUT_POSICIONAMENTO}', kb: { category: 'posicionamento', key: 'output_completo' } },
-    ],
-    outputPlaceholder: '{OUTPUT_OFERTA}',
-  },
 };
 
 /**

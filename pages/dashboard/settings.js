@@ -10,7 +10,6 @@ const AGENT_LIST = [
   { name: 'agente4a', label: 'Agente 4A - Pesquisador Avatar',  desc: 'Pesquisa dores e linguagem do publico' },
   { name: 'agente4b', label: 'Agente 4B - Construtor Avatar',   desc: 'Constroi avatar completo' },
   { name: 'agente5',  label: 'Agente 05 - Posicionamento',      desc: 'Define posicionamento da marca' },
-  { name: 'agente6',  label: 'Agente 06 - Oferta',              desc: 'Estrutura oferta completa' },
 ];
 
 function PromptsSection() {

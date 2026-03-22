@@ -1,6 +1,6 @@
 const { query, queryOne } = require('../infra/db');
 
-const STAGE_KEYS = ['diagnosis', 'competitors', 'audience', 'avatar', 'positioning', 'offer'];
+const STAGE_KEYS = ['diagnosis', 'competitors', 'audience', 'avatar', 'positioning'];
 
 // ─── Clients ────────────────────────────────────────────────────────────────
 

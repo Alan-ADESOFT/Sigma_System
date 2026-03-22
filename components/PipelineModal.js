@@ -19,7 +19,6 @@ const AGENTS = [
   { name: 'agente4a', num: '04A', label: 'Pesquisa de Avatar' },
   { name: 'agente4b', num: '04B', label: 'Construção do Avatar' },
   { name: 'agente5',  num: '05', label: 'Posicionamento da Marca' },
-  { name: 'agente6',  num: '06', label: 'Definição da Oferta' },
 ];
 
 export default function PipelineModal({ client, onClose, onComplete }) {
@@ -214,7 +213,7 @@ export default function PipelineModal({ client, onClose, onComplete }) {
           <div className={styles.headerLeft}>
             <span className={styles.badge}>PIPELINE</span>
             <span className={styles.clientName}>{client.company_name}</span>
-            <span className={styles.subtitle}>Pipeline de 8 agentes \u00B7 Gera\u00E7\u00E3o \u00FAnica de rascunhos</span>
+            <span className={styles.subtitle}>Pipeline de 7 agentes \u00B7 Gera\u00E7\u00E3o \u00FAnica de rascunhos</span>
           </div>
           <div className={styles.headerRight}>
             {phase === 'ready' && (
@@ -306,7 +305,7 @@ export default function PipelineModal({ client, onClose, onComplete }) {
                 </div>
                 <div className={styles.preRunList}>
                   \u2022 Diagn\u00F3stico \u2022 Concorrentes \u2022 P\u00FAblico-Alvo \u2022 Avatar<br/>
-                  \u2022 Posicionamento \u2022 Oferta + 2 etapas de pesquisa
+                  \u2022 Posicionamento + 2 etapas de pesquisa
                 </div>
                 <div className={styles.preRunDesc}>
                   Os rascunhos ficar\u00E3o dispon\u00EDveis para edi\u00E7\u00E3o na Base de Dados.
@@ -366,7 +365,7 @@ export default function PipelineModal({ client, onClose, onComplete }) {
                 </svg>
                 <div className={styles.successTitle}>Pipeline conclu\u00EDdo com sucesso!</div>
                 <div className={styles.successDesc}>
-                  8 rascunhos gerados e salvos na Base de Dados.<br/>
+                  Rascunhos gerados e salvos na Base de Dados.<br/>
                   Agora voc\u00EA pode editar cada etapa manualmente.
                 </div>
                 <button className={styles.btnGo} onClick={() => { onComplete?.(); onClose(); }}>

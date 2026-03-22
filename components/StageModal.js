@@ -75,6 +75,7 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
 
   const [promptInput, setPromptInput]      = useState('');
   const [applying, setApplying]            = useState(false);
+  const [chatHistory, setChatHistory]      = useState([]); // { role, content }[]
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const [phVisible, setPhVisible]          = useState(true);
 
@@ -233,10 +234,13 @@ export default function StageModal({ meta, stage, clientId, clientData, onClose,
       const filesB64 = [];
       for (const doc of uploadedDocs) { const b64 = await new Promise((res, rej) => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.onerror = rej; rd.readAsDataURL(doc.file); }); filesB64.push({ base64: b64, mimeType: doc.file.type, fileName: doc.name }); }
 
-      const r = await fetch('/api/agentes/apply-modification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, stageKey: meta.key, operatorPrompt: promptInput.trim(), currentOutput, ...(imagesB64.length ? { images: imagesB64 } : {}), ...(filesB64.length ? { files: filesB64 } : {}) }) });
+      const userPrompt = promptInput.trim();
+      const r = await fetch('/api/agentes/apply-modification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, stageKey: meta.key, operatorPrompt: userPrompt, currentOutput, chatHistory, ...(imagesB64.length ? { images: imagesB64 } : {}), ...(filesB64.length ? { files: filesB64 } : {}) }) });
       const d = await r.json();
       if (!d.success) throw new Error(d.error);
       if (editorRef.current) { editorRef.current.innerHTML = mdToHtml(d.data.text); editorRef.current.scrollTop = 0; setSavedN(false); }
+      // Acumula no histórico de conversa (últimas 6 trocas)
+      setChatHistory(prev => [...prev, { role: 'user', content: userPrompt }, { role: 'assistant', content: d.data.text }].slice(-12));
       setPromptInput('');
       notify('Modificacao aplicada!', 'success');
     } catch (err) { notify('Erro: ' + err.message, 'error'); }

@@ -10,14 +10,15 @@
  *   stageKey: string,
  *   operatorPrompt: string,
  *   currentOutput: string,
+ *   chatHistory?: Array<{ role: 'user'|'assistant', content: string }>,
  *   images?: Array<{ base64, mimeType }>,
  *   files?: Array<{ base64, mimeType, fileName }>
  * }
  */
 
-import { resolveTenantId } from '../../../infra/get-tenant-id';
-import { queryOne }        from '../../../infra/db';
-import { runCompletion }   from '../../../models/ia/completion';
+import { resolveTenantId }  from '../../../infra/get-tenant-id';
+import { queryOne }         from '../../../infra/db';
+import { resolveModel }    from '../../../models/ia/completion';
 import { extractFromFile } from '../../../infra/api/fileReader';
 
 const STAGE_LABELS = {
@@ -39,7 +40,7 @@ export default async function handler(req, res) {
   }
 
   const tenantId = await resolveTenantId(req);
-  const { clientId, stageKey, operatorPrompt, currentOutput, images, files } = req.body;
+  const { clientId, stageKey, operatorPrompt, currentOutput, chatHistory, images, files } = req.body;
 
   if (!clientId || !stageKey || !operatorPrompt) {
     return res.status(400).json({ success: false, error: 'clientId, stageKey e operatorPrompt são obrigatórios' });
@@ -83,6 +84,14 @@ export default async function handler(req, res) {
     let systemPrompt = `Você é um assistente de marketing estratégico da agência Sigma.
 Você está trabalhando na etapa "${stageLabel}" do cliente "${client.company_name}".
 
+REGRA CRÍTICA — COMO RESPONDER:
+- Você SEMPRE deve retornar o TEXTO COMPLETO da etapa, não apenas o trecho modificado.
+- Se o operador pedir para adicionar algo: retorne TODO o texto original + o trecho novo no local pedido.
+- Se o operador pedir para trocar algo: retorne TODO o texto com a parte trocada.
+- Se o operador pedir para remover algo: retorne TODO o texto sem a parte removida.
+- NUNCA retorne apenas a modificação isolada. SEMPRE retorne o documento inteiro atualizado.
+- Mantenha toda a formatação, estrutura, títulos e seções do texto original.
+
 RESUMO DO CLIENTE:
 Empresa: ${client.company_name || 'N/A'}
 Nicho: ${client.niche || 'N/A'}
@@ -91,7 +100,7 @@ Ticket médio: ${client.avg_ticket || 'N/A'}
 Principal problema: ${client.main_problem || 'N/A'}
 Região: ${client.region || 'N/A'}${formSummary}
 
-OUTPUT ATUAL DA ETAPA (o operador vai pedir modificações neste texto):
+TEXTO ATUAL DA ETAPA (aplique as modificações pedidas SOBRE este texto e retorne ele completo):
 ${currentOutput || '(vazio)'}`;
 
     // Se tem arquivos, extrai texto e injeta no contexto
@@ -126,20 +135,50 @@ ${currentOutput || '(vazio)'}`;
       }
     }
 
-    console.log('[INFO][ApplyModification] Executando modificação', { clientId, stageKey, promptLength: operatorPrompt.length });
+    console.log('[INFO][ApplyModification] Executando modificação', { clientId, stageKey, promptLength: operatorPrompt.length, historyLength: chatHistory?.length || 0 });
 
-    const result = await runCompletion('medium', systemPrompt, operatorPrompt, 4000);
+    // Monta mensagens multi-turn (chat com histórico)
+    const model = resolveModel('medium');
+    const messages = [{ role: 'system', content: systemPrompt }];
+
+    // Injeta histórico de conversa (últimas modificações)
+    if (chatHistory?.length) {
+      for (const msg of chatHistory.slice(-6)) {
+        messages.push({ role: msg.role, content: msg.content });
+      }
+    }
+
+    // Mensagem atual do operador
+    messages.push({ role: 'user', content: operatorPrompt });
+
+    // Chama OpenAI diretamente com mensagens multi-turn
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) throw new Error('OPENAI_API_KEY não configurada');
+
+    const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, messages, max_tokens: 4000 }),
+    });
+
+    if (!aiResponse.ok) {
+      const err = await aiResponse.json().catch(() => ({}));
+      throw new Error(`OpenAI Error ${aiResponse.status}: ${err?.error?.message || aiResponse.statusText}`);
+    }
+
+    const aiData = await aiResponse.json();
+    const resultText = aiData.choices?.[0]?.message?.content || '';
 
     // Salva no histórico
     await queryOne(
       `INSERT INTO ai_agent_history (tenant_id, agent_name, model_used, prompt_sent, response_text, metadata, client_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [tenantId, `modification_${stageKey}`, result.modelUsed, systemPrompt.substring(0, 2000), result.text,
+      [tenantId, `modification_${stageKey}`, model, systemPrompt.substring(0, 2000), resultText,
        JSON.stringify({ stageKey, operatorPrompt, type: 'modification' }), clientId]
     );
 
-    console.log('[SUCESSO][ApplyModification] Modificação aplicada', { stageKey, responseLength: result.text.length });
-    return res.json({ success: true, data: { text: result.text } });
+    console.log('[SUCESSO][ApplyModification] Modificação aplicada', { stageKey, responseLength: resultText.length });
+    return res.json({ success: true, data: { text: resultText } });
 
   } catch (err) {
     console.error('[ERRO][ApplyModification]', { error: err.message });

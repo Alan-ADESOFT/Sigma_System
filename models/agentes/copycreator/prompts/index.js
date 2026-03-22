@@ -11,10 +11,9 @@ const agente3  = require('./agente3');
 const agente4a = require('./agente4a');
 const agente4b = require('./agente4b');
 const agente5  = require('./agente5');
-const agente6  = require('./agente6');
 
 /** Lista ordenada de todos os agentes */
-const ALL_AGENTS = [agente1, agente2a, agente2b, agente3, agente4a, agente4b, agente5, agente6];
+const ALL_AGENTS = [agente1, agente2a, agente2b, agente3, agente4a, agente4b, agente5];
 
 /**
  * Mapa nome → módulo do agente (para lookup rápido)
