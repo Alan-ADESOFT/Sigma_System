@@ -88,14 +88,6 @@ function ClientCard({ client, onOpenStages, onDelete, onRunPipeline, onExport })
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1rem', fontWeight: 700, color: progress === 100 ? '#22c55e' : 'var(--text-primary)' }}>
-              {progress}%
-            </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)' }}>
-              {doneCount}/{STAGES_META.length}
-            </div>
-          </div>
           <button
             onClick={e => { e.stopPropagation(); onRunPipeline?.(client); }}
             title={!client.form_done ? 'Aguardando formulario' : 'Rodar pipeline'}
@@ -127,12 +119,17 @@ function ClientCard({ client, onOpenStages, onDelete, onRunPipeline, onExport })
         </div>
       </div>
 
-      {/* Barra de progresso */}
-      <div style={{ height: 2, background: 'rgba(255,255,255,0.04)', borderRadius: 2, marginBottom: 10, overflow: 'hidden' }}>
-        <div style={{
-          height: '100%', borderRadius: 2, transition: 'width 0.4s ease', width: `${progress}%`,
-          background: progress === 100 ? 'linear-gradient(90deg,#22c55e,#16a34a)' : 'linear-gradient(90deg,#ff0033,#ff6680)',
-        }} />
+      {/* Barra de progresso + porcentagem */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={{ flex: 1, height: 2, background: 'rgba(255,255,255,0.04)', borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{
+            height: '100%', borderRadius: 2, transition: 'width 0.4s ease', width: `${progress}%`,
+            background: progress === 100 ? 'linear-gradient(90deg,#22c55e,#16a34a)' : 'linear-gradient(90deg,#ff0033,#ff6680)',
+          }} />
+        </div>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 700, color: progress === 100 ? '#22c55e' : 'var(--text-muted)', flexShrink: 0 }}>
+          {progress}%
+        </span>
       </div>
 
       {/* Chips de etapas */}
@@ -182,9 +179,6 @@ function ClientStagesPopup({ client, onClose, onStageUpdated, onReloadClient }) 
   const [openMeta, setOpenMeta] = useState(null);
   const [pipelineStatus, setPipelineStatus] = useState(null);
   const [pipelinePolling, setPipelinePolling] = useState(false);
-  const [timeline, setTimeline]     = useState([]);
-  const [showTimeline, setShowTimeline] = useState(false);
-  const [loadingTimeline, setLoadingTimeline] = useState(false);
   const validKeys = new Set(STAGES_META.map(s => s.key));
   const stages    = (client.stages || []).filter(s => validKeys.has(s.stage_key));
   const doneCount = stages.filter(s => s.status === 'done').length;
@@ -450,119 +444,6 @@ function ClientStagesPopup({ client, onClose, onStageUpdated, onReloadClient }) 
             })}
           </div>
 
-          {/* Timeline toggle */}
-          <div style={{ padding: '0 22px 16px', display: 'flex', justifyContent: 'center' }}>
-            <button
-              onClick={async () => {
-                if (!showTimeline) {
-                  setLoadingTimeline(true);
-                  try {
-                    const r = await fetch(`/api/clients/${client.id}/pipeline-timeline`);
-                    const d = await r.json();
-                    if (d.success) setTimeline(d.data);
-                  } catch {}
-                  setLoadingTimeline(false);
-                }
-                setShowTimeline(prev => !prev);
-              }}
-              style={{
-                padding: '4px 14px', borderRadius: 6, cursor: 'pointer',
-                background: showTimeline ? 'rgba(255,0,51,0.06)' : 'rgba(255,255,255,0.02)',
-                border: `1px solid ${showTimeline ? 'rgba(255,0,51,0.2)' : 'rgba(255,255,255,0.06)'}`,
-                color: showTimeline ? '#ff6680' : 'var(--text-muted)',
-                fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
-              }}
-            >
-              {loadingTimeline ? '...' : showTimeline ? 'Ocultar Timeline' : 'Ver Timeline'}
-            </button>
-          </div>
-
-          {/* Timeline visual */}
-          {showTimeline && timeline.length > 0 && (
-            <div style={{ padding: '0 22px 22px' }}>
-              <div style={{ position: 'relative', paddingLeft: 24 }}>
-                {/* Linha vertical */}
-                <div style={{
-                  position: 'absolute', left: 7, top: 4, bottom: 4, width: 2,
-                  background: 'linear-gradient(180deg, rgba(255,0,51,0.4), rgba(255,0,51,0.08))',
-                  borderRadius: 1,
-                }} />
-
-                {timeline.map((item, i) => {
-                  const isDone    = item.status === 'done';
-                  const isActive  = item.status === 'in_progress';
-                  const dotColor  = isDone ? '#22c55e' : isActive ? '#f97316' : '#525252';
-                  const dotShadow = isDone ? '0 0 6px rgba(34,197,94,0.4)' : 'none';
-
-                  return (
-                    <div
-                      key={`${item.stageKey}-${item.agentName}`}
-                      style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 12,
-                        marginBottom: i < timeline.length - 1 ? 10 : 0,
-                        opacity: 0, animation: `fadeInUp 0.35s ease-out ${i * 0.05}s both`,
-                      }}
-                    >
-                      {/* Ponto na linha */}
-                      <div style={{
-                        position: 'absolute', left: 4,
-                        width: 8, height: 8, borderRadius: '50%',
-                        background: dotColor, boxShadow: dotShadow,
-                        marginTop: 5, flexShrink: 0,
-                      }} />
-
-                      {/* Card */}
-                      <div style={{
-                        flex: 1, padding: '6px 10px', borderRadius: 6,
-                        background: 'rgba(255,255,255,0.02)',
-                        border: `1px solid rgba(255,255,255,${isDone ? '0.06' : '0.03'})`,
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{
-                            fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600,
-                            color: isDone ? 'var(--text-primary)' : 'var(--text-muted)',
-                          }}>
-                            {AGENT_DISPLAY_NAME[item.agentName] || item.agentName}
-                          </span>
-                          {item.version && (
-                            <span style={{
-                              fontFamily: 'var(--font-mono)', fontSize: '0.48rem', fontWeight: 600,
-                              padding: '1px 5px', borderRadius: 3,
-                              background: 'rgba(255,0,51,0.06)', color: '#ff6680',
-                            }}>
-                              v{item.version}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 3 }}>
-                          {item.executedAt && (
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', color: 'var(--text-muted)' }}>
-                              {new Date(item.executedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          )}
-                          {item.modelUsed && (
-                            <span style={{
-                              fontFamily: 'var(--font-mono)', fontSize: '0.48rem',
-                              padding: '1px 5px', borderRadius: 3,
-                              background: item.modelUsed.includes('claude') ? 'rgba(168,85,247,0.08)' : 'rgba(59,130,246,0.08)',
-                              color: item.modelUsed.includes('claude') ? '#a855f7' : '#3b82f6',
-                            }}>
-                              {item.modelUsed.includes('claude') ? 'Claude' : item.modelUsed.includes('mini') ? 'GPT-4o Mini' : 'GPT-4o'}
-                            </span>
-                          )}
-                          {!item.executedAt && (
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', color: '#525252' }}>
-                              Pendente
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

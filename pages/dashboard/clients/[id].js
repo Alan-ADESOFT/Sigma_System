@@ -502,24 +502,10 @@ function TabRespostas({ clientId, client }) {
     );
   }
 
-  const respostasExplainer = (
-    <div className="glass-card" style={{ padding: '14px 18px', marginBottom: 16 }}>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
-        Formulario de Briefing
-      </div>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-        O formulario coleta informacoes detalhadas do cliente em 11 etapas: empresa, produtos, publico, concorrentes,
-        marketing digital, objetivos e mais. As respostas alimentam os agentes de IA que geram a base estrategica.
-        Apos o envio, o pipeline pode ser executado automaticamente.
-      </div>
-    </div>
-  );
-
   // ── Estado: nunca enviou ──
   if (!status || status.formStatus === 'not_sent') {
     return (
       <div>
-      {respostasExplainer}
       <HowItWorks>
         Envie o formulário de briefing para o cliente responder. As respostas serão usadas para construir a estratégia de marketing.
         O link é válido por 7 dias e pode ser enviado via WhatsApp diretamente pelo sistema.
@@ -786,6 +772,10 @@ function SubmittedResponses({ clientId, status, onDeleted, notify }) {
 
   return (
     <div style={{ maxWidth: 700 }}>
+      <HowItWorks>
+        Respostas do formulario de briefing preenchido pelo cliente. Use o resumo IA para uma visao rapida
+        ou expanda cada secao para ver as respostas detalhadas.
+      </HowItWorks>
       {/* ── Card Resumo IA ── */}
       <div className="glass-card" style={{ padding: '20px', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
@@ -1526,7 +1516,7 @@ function TabInfo({ client, onSave }) {
 /* ═══════════════════════════════════════════════════════════
    TAB: BASE DE DADOS — grade com as 6 etapas
 ═══════════════════════════════════════════════════════════ */
-function TabDatabase({ client, stages, onStageUpdated }) {
+function TabDatabase({ client, stages, onStageUpdated, onOpenPipeline }) {
   const [openMeta, setOpenMeta] = useState(null);
 
   function getStage(key) { return stages.find(s => s.stage_key === key) || null; }
@@ -1538,10 +1528,38 @@ function TabDatabase({ client, stages, onStageUpdated }) {
   return (
     <div>
       <HowItWorks>
-        Aqui você acompanha as 6 etapas de inteligência estratégica do seu negócio.
-        Cada etapa é processada pela nossa IA com base nas informações coletadas.
-        Clique em uma etapa para visualizar ou iniciar a análise.
+        Aqui ficam os rascunhos gerados pelo pipeline. Clique em uma etapa para editar o output com ajuda da IA.
+        Use o botao abaixo para rodar o pipeline completo (requer formulario preenchido).
       </HowItWorks>
+
+      {/* Card Pipeline */}
+      <div className="glass-card" style={{ padding: '16px 20px', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.15)',
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff6680" strokeWidth="2" strokeLinecap="round">
+            <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/>
+            <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>
+          </svg>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>Pipeline de Agentes</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 2 }}>
+            Executa 7 agentes de IA em sequencia para gerar rascunhos de todas as etapas. Disponivel apos o formulario.
+          </div>
+        </div>
+        <button onClick={() => onOpenPipeline?.()} style={{
+          padding: '8px 18px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, border: 'none',
+          background: client.form_done ? 'linear-gradient(135deg, #ff0033, #cc0029)' : 'rgba(82,82,82,0.15)',
+          color: client.form_done ? '#fff' : '#525252',
+          fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 700,
+          boxShadow: client.form_done ? '0 0 12px rgba(255,0,51,0.2)' : 'none',
+        }}>
+          {client.form_done ? '\u25B6 Rodar Pipeline' : 'Aguardando formulario'}
+        </button>
+      </div>
 
       {/* Barra de progresso */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 22 }}>
@@ -2657,66 +2675,16 @@ export default function ClientInfoPage() {
               {client.phone  && <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>{maskPhone(client.phone)}</span>}
             </div>
           </div>
-          {/* Pipeline progress + botão */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.2rem', fontWeight: 700, color: progress === 100 ? '#22c55e' : 'var(--text-primary)' }}>
-                {progress}%
-              </div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                pipeline
-              </div>
+          {/* Pipeline progress */}
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.2rem', fontWeight: 700, color: progress === 100 ? '#22c55e' : 'var(--text-primary)' }}>
+              {progress}%
             </div>
-            <button
-              onClick={() => setShowPipelineModal(true)}
-              style={{
-                padding: '6px 14px', borderRadius: 6, cursor: 'pointer',
-                border: client.form_done ? '1px solid rgba(255,0,51,0.3)' : '1px solid rgba(82,82,82,0.3)',
-                background: client.form_done ? 'rgba(255,0,51,0.08)' : 'rgba(82,82,82,0.08)',
-                color: client.form_done ? '#ff6680' : '#525252',
-                fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600,
-              }}
-              title={!client.form_done ? 'Aguardando formulário do cliente' : ''}
-            >
-              {'\u25B6'} Pipeline
-            </button>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              pipeline
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* Seção Pipeline */}
-      <div className="glass-card" style={{ padding: '16px 20px', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{
-          width: 40, height: 40, borderRadius: 10, flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.15)',
-        }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff6680" strokeWidth="2" strokeLinecap="round">
-            <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/>
-            <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>
-          </svg>
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-            Pipeline de Agentes
-          </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 2 }}>
-            Executa 7 agentes de IA em sequencia para gerar os rascunhos de todas as etapas estrategicas.
-            Disponivel apos o cliente preencher o formulario de briefing.
-          </div>
-        </div>
-        <button
-          onClick={() => setShowPipelineModal(true)}
-          style={{
-            padding: '8px 18px', borderRadius: 8, cursor: 'pointer', flexShrink: 0,
-            border: client.form_done ? '1px solid rgba(255,0,51,0.3)' : '1px solid rgba(82,82,82,0.3)',
-            background: client.form_done ? 'rgba(255,0,51,0.1)' : 'rgba(82,82,82,0.08)',
-            color: client.form_done ? '#ff6680' : '#525252',
-            fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 700,
-          }}
-        >
-          {client.form_done ? '\u25B6 Rodar Pipeline' : 'Aguardando formulario'}
-        </button>
       </div>
 
       {/* Tab bar */}
@@ -2751,7 +2719,7 @@ export default function ClientInfoPage() {
       <div>
         {activeTab === 'info'       && <TabInfo client={client} onSave={setClient} />}
         {activeTab === 'database'   && (
-          <TabDatabase client={client} stages={stages} onStageUpdated={handleStageUpdated} />
+          <TabDatabase client={client} stages={stages} onStageUpdated={handleStageUpdated} onOpenPipeline={() => setShowPipelineModal(true)} />
         )}
         {activeTab === 'afazeres'   && <PlaceholderTab label="Afazeres" />}
         {activeTab === 'anexos'     && <TabAnexos clientId={client.id} />}
