@@ -51,7 +51,7 @@ function Avatar({ src, name, size = 32 }) {
 }
 
 /* ── Card de cliente — abre popup ao clicar ── */
-function ClientCard({ client, onOpenStages, onDelete, onRunPipeline, onExport }) {
+function ClientCard({ client, onOpenStages, onDelete, onRunPipeline, onExport, onReset }) {
   const validKeys = new Set(STAGES_META.map(s => s.key));
   const stages    = (client.stages || []).filter(s => validKeys.has(s.stage_key));
   const doneCount = stages.filter(s => s.status === 'done').length;
@@ -116,6 +116,19 @@ function ClientCard({ client, onOpenStages, onDelete, onRunPipeline, onExport })
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Exportar
           </button>
+          <button
+            onClick={e => { e.stopPropagation(); onReset?.(client); }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '5px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+              background: 'rgba(255,51,51,0.06)', color: '#ff3333',
+              fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
+              transition: 'all 0.15s',
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Apagar
+          </button>
         </div>
       </div>
 
@@ -149,19 +162,9 @@ function ClientCard({ client, onOpenStages, onDelete, onRunPipeline, onExport })
             </div>
           );
         })}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)' }}>
-            {new Date(client.created_at).toLocaleDateString('pt-BR')}
-          </span>
-          <button
-            onClick={e => { e.stopPropagation(); onDelete(client.id); }}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px 3px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.58rem' }}
-            onMouseEnter={e => e.currentTarget.style.color = '#ff1a4d'}
-            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
-          >
-            remover
-          </button>
-        </div>
+        <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)' }}>
+          {new Date(client.created_at).toLocaleDateString('pt-BR')}
+        </span>
       </div>
     </div>
   );
@@ -472,8 +475,8 @@ export default function DatabasePage() {
   const [search,         setSearch        ] = useState('');
   const [selectedClient, setSelectedClient] = useState(null);
   const [pipelineClient, setPipelineClient] = useState(null);
-  const [exportClient, setExportClient]     = useState(null);
-  const [exportOnlyDonePage, setExportOnlyDonePage] = useState(false);
+  const [resetClient, setResetClient]       = useState(null);
+  const [resetConfirmText, setResetConfirmText] = useState('');
 
   async function load() {
     setLoading(true); setError(null);
@@ -625,7 +628,7 @@ export default function DatabasePage() {
       )}
 
       {!loading && !error && filtered.map(c => (
-        <ClientCard key={c.id} client={c} onOpenStages={setSelectedClient} onDelete={handleDelete} onRunPipeline={c => setPipelineClient(c)} onExport={c => setExportClient(c)} />
+        <ClientCard key={c.id} client={c} onOpenStages={setSelectedClient} onDelete={handleDelete} onRunPipeline={c => setPipelineClient(c)} onExport={c => window.open('/api/clients/' + c.id + '/export?format=pdf', '_blank')} onReset={c => { setResetClient(c); setResetConfirmText(''); }} />
       ))}
 
       {!loading && !error && clients.length > 0 && filtered.length === 0 && (
@@ -663,36 +666,67 @@ export default function DatabasePage() {
         />
       )}
 
-      {/* Export dropdown (disparado do botão no card) */}
-      {exportClient && (
-        <div onClick={() => setExportClient(null)} style={{
-          position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.6)',
+      {/* Modal de reset/apagar */}
+      {resetClient && (
+        <div onClick={() => setResetClient(null)} style={{
+          position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.7)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <div onClick={e => e.stopPropagation()} style={{
-            width: 280, padding: '20px 24px', borderRadius: 12,
+            width: 360, padding: '24px 28px', borderRadius: 12,
             background: 'linear-gradient(145deg, rgba(14,14,14,0.99), rgba(8,8,8,0.99))',
-            border: '1px solid rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,51,51,0.2)',
           }}>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
-              Exportar Base
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', fontWeight: 700, color: '#ff3333', marginBottom: 8 }}>
+              Apagar base de dados
             </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginBottom: 12 }}>
-              {exportClient.company_name}
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 14 }}>
+              Isso vai apagar permanentemente para <strong style={{ color: 'var(--text-primary)' }}>{resetClient.company_name}</strong>:
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, cursor: 'pointer' }}>
-              <input type="checkbox" checked={exportOnlyDonePage} onChange={e => setExportOnlyDonePage(e.target.checked)} style={{ accentColor: '#ff0033' }} />
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-secondary)' }}>Somente concluidas</span>
-            </label>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', lineHeight: 1.8, marginBottom: 14, paddingLeft: 8 }}>
+              - Todo o historico de execucoes dos agentes<br/>
+              - Todas as versoes salvas<br/>
+              - Os textos de cada bloco/etapa<br/>
+              - Status de todas as etapas volta para Pendente
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginBottom: 8 }}>
+              Digite <strong style={{ color: '#ff3333' }}>APAGAR</strong> para confirmar:
+            </div>
+            <input
+              type="text" value={resetConfirmText} onChange={e => setResetConfirmText(e.target.value)}
+              placeholder="APAGAR"
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '8px 12px', marginBottom: 14,
+                background: 'rgba(10,10,10,0.8)', border: '1px solid rgba(255,51,51,0.15)',
+                borderRadius: 6, color: 'var(--text-primary)', fontSize: '0.72rem',
+                fontFamily: 'var(--font-mono)', outline: 'none',
+              }}
+            />
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => { window.open(`/api/clients/${exportClient.id}/export?format=docx${exportOnlyDonePage ? '&onlyDone=true' : ''}`, '_blank'); setExportClient(null); }}
-                style={{ flex: 1, padding: '8px 0', borderRadius: 6, cursor: 'pointer', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', color: '#3b82f6', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600 }}>
-                DOCX
-              </button>
-              <button onClick={() => { window.open(`/api/clients/${exportClient.id}/export?format=pdf${exportOnlyDonePage ? '&onlyDone=true' : ''}`, '_blank'); setExportClient(null); }}
-                style={{ flex: 1, padding: '8px 0', borderRadius: 6, cursor: 'pointer', background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.25)', color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600 }}>
-                PDF
-              </button>
+              <button onClick={() => setResetClient(null)} style={{
+                flex: 1, padding: '8px 0', borderRadius: 6, cursor: 'pointer',
+                background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)',
+                color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600,
+              }}>Cancelar</button>
+              <button
+                disabled={resetConfirmText !== 'APAGAR'}
+                onClick={async () => {
+                  try {
+                    await fetch('/api/clients/' + resetClient.id + '/reset-database', { method: 'POST' });
+                    notify('Base de dados apagada', 'success');
+                    setResetClient(null);
+                    load();
+                  } catch { notify('Erro ao apagar', 'error'); }
+                }}
+                style={{
+                  flex: 1, padding: '8px 0', borderRadius: 6,
+                  cursor: resetConfirmText !== 'APAGAR' ? 'not-allowed' : 'pointer',
+                  background: resetConfirmText === 'APAGAR' ? 'rgba(255,51,51,0.12)' : 'rgba(255,51,51,0.04)',
+                  border: '1px solid rgba(255,51,51,0.25)',
+                  color: resetConfirmText === 'APAGAR' ? '#ff3333' : '#525252',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600,
+                  opacity: resetConfirmText !== 'APAGAR' ? 0.4 : 1,
+                }}>Apagar Tudo</button>
             </div>
           </div>
         </div>

@@ -414,8 +414,12 @@ function SendFormButton({ client, onSent, size = 'md' }) {
   const [showModal, setShowModal] = useState(false);
 
   function handleClick() {
+    if (client.form_done) {
+      notify('O formulario deste cliente ja foi preenchido.', 'error');
+      return;
+    }
     if (!client.phone) {
-      notify('! Cadastre o telefone do cliente antes de enviar.', 'error');
+      notify('Cadastre o telefone do cliente antes de enviar.', 'error');
       return;
     }
     setShowModal(true);
@@ -771,7 +775,7 @@ function SubmittedResponses({ clientId, status, onDeleted, notify }) {
   }
 
   return (
-    <div style={{ maxWidth: 700 }}>
+    <div>
       <HowItWorks>
         Respostas do formulario de briefing preenchido pelo cliente. Use o resumo IA para uma visao rapida
         ou expanda cada secao para ver as respostas detalhadas.
@@ -1733,7 +1737,7 @@ function TabAnexos({ clientId }) {
   }
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div>
       <HowItWorks>
         Envie arquivos importantes do cliente: contratos, briefings, logos, materiais de referência.
         Tamanho máximo de 10 MB por arquivo. Todos os anexos ficam organizados por data de envio.
@@ -1937,7 +1941,7 @@ function TabObservacoes({ clientId }) {
   }
 
   return (
-    <div style={{ maxWidth: 680 }}>
+    <div>
       <HowItWorks>
         Registre anotações, insights e pontos importantes sobre o cliente.
         Use para guardar informações de reuniões, decisões e lembretes. Pressione ⌘Enter para salvar rapidamente.
@@ -2251,7 +2255,7 @@ function TabFinanceiro({ clientId, clientServices }) {
   };
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <HowItWorks>
         Cada contrato é vinculado a serviços específicos. As parcelas são geradas automaticamente (valor mensal x quantidade).
         Você pode ter múltiplos contratos por cliente. Parcelas vencidas são marcadas como <strong style={{ color: '#f97316' }}>Atrasadas</strong> automaticamente.
@@ -2684,6 +2688,7 @@ export default function ClientInfoPage() {
               pipeline
             </div>
           </div>
+          <SendFormButton client={client} onSent={() => load()} size="sm" />
         </div>
       </div>
 
