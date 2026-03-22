@@ -1056,15 +1056,6 @@ function ClientRow({ client, onEdit, onDelete, isOdd, notify }) {
       {/* Ações */}
       <td style={{ padding: '10px 14px', verticalAlign: 'middle' }}>
         <div style={{ display: 'flex', gap: 2 }}>
-          <ActionBtn title="Enviar Formulário via WhatsApp" color="#25D366" onClick={() => {
-            if (!client.phone) { notify('! Cadastre o telefone do cliente antes de enviar.', 'error'); return; }
-            setShowWaModal(true);
-          }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'inherit' }}>
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
-              <path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 0 0 .612.616l4.573-1.453A11.949 11.949 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.336 0-4.512-.752-6.278-2.03l-.346-.27-3.277 1.042 1.076-3.2-.293-.372A9.953 9.953 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
-            </svg>
-          </ActionBtn>
           <ActionBtn title="Ver cliente" color="#3b82f6" onClick={() => router.push(`/dashboard/clients/${client.id}`)}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
@@ -1080,6 +1071,16 @@ function ClientRow({ client, onEdit, onDelete, isOdd, notify }) {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="3,6 5,6 21,6" /><path d="M19 6l-1 14H6L5 6" />
               <path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" />
+            </svg>
+          </ActionBtn>
+          <ActionBtn title="Enviar Formulario via WhatsApp" color="#25D366" onClick={() => {
+            if (client.form_done) { notify('O formulario deste cliente ja foi preenchido.', 'error'); return; }
+            if (!client.phone) { notify('Cadastre o telefone do cliente antes de enviar.', 'error'); return; }
+            setShowWaModal(true);
+          }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'inherit' }}>
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+              <path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 0 0 .612.616l4.573-1.453A11.949 11.949 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.336 0-4.512-.752-6.278-2.03l-.346-.27-3.277 1.042 1.076-3.2-.293-.372A9.953 9.953 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
             </svg>
           </ActionBtn>
         </div>

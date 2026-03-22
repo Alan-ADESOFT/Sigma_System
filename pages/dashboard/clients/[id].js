@@ -2677,6 +2677,7 @@ export default function ClientInfoPage() {
               pipeline
             </div>
           </div>
+          <SendFormButton client={client} onSent={() => load()} size="sm" />
         </div>
       </div>
 
