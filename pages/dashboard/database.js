@@ -51,10 +51,11 @@ function Avatar({ src, name, size = 32 }) {
 }
 
 /* ── Card de cliente — abre popup ao clicar ── */
-function ClientCard({ client, onOpenStages, onDelete }) {
-  const stages    = client.stages || [];
+function ClientCard({ client, onOpenStages, onDelete, onRunPipeline, onExport }) {
+  const validKeys = new Set(STAGES_META.map(s => s.key));
+  const stages    = (client.stages || []).filter(s => validKeys.has(s.stage_key));
   const doneCount = stages.filter(s => s.status === 'done').length;
-  const progress  = Math.round((doneCount / STAGES_META.length) * 100);
+  const progress  = Math.min(100, Math.round((doneCount / STAGES_META.length) * 100));
 
   function getStageStatus(key) {
     const s = stages.find(s => s.stage_key === key);
@@ -95,25 +96,34 @@ function ClientCard({ client, onOpenStages, onDelete }) {
               {doneCount}/{STAGES_META.length}
             </div>
           </div>
-          {/* Botão Info — navega para página do cliente (não propaga click do card) */}
-          <Link
-            href={`/dashboard/clients/${client.id}`}
-            onClick={e => e.stopPropagation()}
+          <button
+            onClick={e => { e.stopPropagation(); onRunPipeline?.(client); }}
+            title={!client.form_done ? 'Aguardando formulario' : 'Rodar pipeline'}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
-              padding: '5px 10px', borderRadius: 6, textDecoration: 'none',
-              border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)',
-              fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)',
-              transition: 'all 0.2s',
+              padding: '5px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+              background: client.form_done ? 'rgba(255,0,51,0.08)' : 'rgba(82,82,82,0.08)',
+              color: client.form_done ? '#ff6680' : '#525252',
+              fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
+              transition: 'all 0.15s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,0,51,0.25)'; e.currentTarget.style.color = '#ff6680'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
           >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            Info
-          </Link>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Pipeline
+          </button>
+          <button
+            onClick={e => { e.stopPropagation(); onExport?.(client); }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '5px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+              background: 'rgba(168,85,247,0.08)', color: '#a855f7',
+              fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
+              transition: 'all 0.15s',
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Exportar
+          </button>
         </div>
       </div>
 
@@ -175,12 +185,10 @@ function ClientStagesPopup({ client, onClose, onStageUpdated, onReloadClient }) 
   const [timeline, setTimeline]     = useState([]);
   const [showTimeline, setShowTimeline] = useState(false);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
-  const [showExport, setShowExport]   = useState(false);
-  const [exportOnlyDone, setExportOnlyDone] = useState(false);
-  const [showPipeline, setShowPipeline] = useState(false);
-  const stages    = client.stages || [];
+  const validKeys = new Set(STAGES_META.map(s => s.key));
+  const stages    = (client.stages || []).filter(s => validKeys.has(s.stage_key));
   const doneCount = stages.filter(s => s.status === 'done').length;
-  const progress  = Math.round((doneCount / STAGES_META.length) * 100);
+  const progress  = Math.min(100, Math.round((doneCount / STAGES_META.length) * 100));
 
   useEffect(() => {
     const h = e => { if (e.key === 'Escape' && !openMeta) onClose(); };
@@ -292,101 +300,11 @@ function ClientStagesPopup({ client, onClose, onStageUpdated, onReloadClient }) 
                 </div>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button
-                onClick={() => setShowPipeline(true)}
-                style={{
-                  padding: '5px 12px', borderRadius: 6, cursor: 'pointer',
-                  border: client.form_done
-                    ? '1px solid rgba(255,0,51,0.3)'
-                    : '1px solid rgba(82,82,82,0.3)',
-                  background: client.form_done
-                    ? 'rgba(255,0,51,0.08)'
-                    : 'rgba(82,82,82,0.08)',
-                  color: client.form_done ? '#ff6680' : '#525252',
-                  fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600,
-                }}
-                title={!client.form_done ? 'Aguardando formulário do cliente' : ''}
-              >
-                {'\u25B6'} Pipeline
-              </button>
-              <div style={{ position: 'relative' }}>
-                <button
-                  onClick={() => setShowExport(v => !v)}
-                  style={{
-                    padding: '5px 12px', borderRadius: 6, cursor: 'pointer',
-                    border: `1px solid ${showExport ? 'rgba(168,85,247,0.3)' : 'rgba(255,255,255,0.1)'}`,
-                    background: showExport ? 'rgba(168,85,247,0.08)' : 'rgba(255,255,255,0.02)',
-                    color: showExport ? '#a855f7' : 'var(--text-muted)',
-                    fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600,
-                  }}
-                >
-                  Exportar
-                </button>
-                {showExport && (
-                  <div style={{
-                    position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 50,
-                    width: 220, padding: '12px 14px', borderRadius: 10,
-                    background: 'rgba(12,12,12,0.98)', border: '1px solid rgba(255,255,255,0.08)',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                  }}>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                      Exportar Base
-                    </div>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, cursor: 'pointer' }}>
-                      <input
-                        type="checkbox" checked={exportOnlyDone}
-                        onChange={e => setExportOnlyDone(e.target.checked)}
-                        style={{ accentColor: '#ff0033' }}
-                      />
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-secondary)' }}>
-                        Somente concluídas
-                      </span>
-                    </label>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button
-                        onClick={() => {
-                          window.open(`/api/clients/${client.id}/export?format=docx${exportOnlyDone ? '&onlyDone=true' : ''}`, '_blank');
-                          setShowExport(false);
-                        }}
-                        style={{
-                          flex: 1, padding: '6px 0', borderRadius: 6, cursor: 'pointer',
-                          background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)',
-                          color: '#3b82f6', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
-                        }}
-                      >
-                        DOCX
-                      </button>
-                      <button
-                        onClick={() => {
-                          window.open(`/api/clients/${client.id}/export?format=pdf${exportOnlyDone ? '&onlyDone=true' : ''}`, '_blank');
-                          setShowExport(false);
-                        }}
-                        style={{
-                          flex: 1, padding: '6px 0', borderRadius: 6, cursor: 'pointer',
-                          background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.25)',
-                          color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
-                        }}
-                      >
-                        PDF
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <Link href={`/dashboard/clients/${client.id}?tab=database`} style={{
-                padding: '5px 12px', borderRadius: 6, textDecoration: 'none',
-                border: '1px solid rgba(255,0,51,0.25)', background: 'rgba(255,0,51,0.06)',
-                color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
-              }}>
-                Ver info completa
-              </Link>
-              <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex' }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex' }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
           </div>
 
           {/* Status do pipeline (se ativo) */}
@@ -660,17 +578,6 @@ function ClientStagesPopup({ client, onClose, onStageUpdated, onReloadClient }) 
         />
       )}
 
-      {/* Pipeline modal */}
-      {showPipeline && (
-        <PipelineModal
-          client={client}
-          onClose={() => setShowPipeline(false)}
-          onComplete={() => {
-            setShowPipeline(false);
-            onReloadClient?.(client.id);
-          }}
-        />
-      )}
     </>
   );
 }
@@ -683,6 +590,9 @@ export default function DatabasePage() {
   const [error,          setError         ] = useState(null);
   const [search,         setSearch        ] = useState('');
   const [selectedClient, setSelectedClient] = useState(null);
+  const [pipelineClient, setPipelineClient] = useState(null);
+  const [exportClient, setExportClient]     = useState(null);
+  const [exportOnlyDonePage, setExportOnlyDonePage] = useState(false);
 
   async function load() {
     setLoading(true); setError(null);
@@ -750,7 +660,8 @@ export default function DatabasePage() {
     c.niche?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalDone   = clients.reduce((acc, c) => acc + (c.stages || []).filter(s => s.status === 'done').length, 0);
+  const validKeysSet = new Set(STAGES_META.map(s => s.key));
+  const totalDone   = clients.reduce((acc, c) => acc + (c.stages || []).filter(s => validKeysSet.has(s.stage_key) && s.status === 'done').length, 0);
   const totalStages = clients.length * STAGES_META.length;
 
   return (
@@ -833,7 +744,7 @@ export default function DatabasePage() {
       )}
 
       {!loading && !error && filtered.map(c => (
-        <ClientCard key={c.id} client={c} onOpenStages={setSelectedClient} onDelete={handleDelete} />
+        <ClientCard key={c.id} client={c} onOpenStages={setSelectedClient} onDelete={handleDelete} onRunPipeline={c => setPipelineClient(c)} onExport={c => setExportClient(c)} />
       ))}
 
       {!loading && !error && clients.length > 0 && filtered.length === 0 && (
@@ -860,6 +771,50 @@ export default function DatabasePage() {
             } catch {}
           }}
         />
+      )}
+
+      {/* Pipeline modal (disparado do botão no card) */}
+      {pipelineClient && (
+        <PipelineModal
+          client={pipelineClient}
+          onClose={() => setPipelineClient(null)}
+          onComplete={() => { setPipelineClient(null); load(); }}
+        />
+      )}
+
+      {/* Export dropdown (disparado do botão no card) */}
+      {exportClient && (
+        <div onClick={() => setExportClient(null)} style={{
+          position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            width: 280, padding: '20px 24px', borderRadius: 12,
+            background: 'linear-gradient(145deg, rgba(14,14,14,0.99), rgba(8,8,8,0.99))',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+              Exportar Base
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginBottom: 12 }}>
+              {exportClient.company_name}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14, cursor: 'pointer' }}>
+              <input type="checkbox" checked={exportOnlyDonePage} onChange={e => setExportOnlyDonePage(e.target.checked)} style={{ accentColor: '#ff0033' }} />
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-secondary)' }}>Somente concluidas</span>
+            </label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => { window.open(`/api/clients/${exportClient.id}/export?format=docx${exportOnlyDonePage ? '&onlyDone=true' : ''}`, '_blank'); setExportClient(null); }}
+                style={{ flex: 1, padding: '8px 0', borderRadius: 6, cursor: 'pointer', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', color: '#3b82f6', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600 }}>
+                DOCX
+              </button>
+              <button onClick={() => { window.open(`/api/clients/${exportClient.id}/export?format=pdf${exportOnlyDonePage ? '&onlyDone=true' : ''}`, '_blank'); setExportClient(null); }}
+                style={{ flex: 1, padding: '8px 0', borderRadius: 6, cursor: 'pointer', background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.25)', color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600 }}>
+                PDF
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </DashboardLayout>
   );
