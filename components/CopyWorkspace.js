@@ -714,24 +714,26 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
                   <button
                     onClick={recording ? stopRecording : startRecording}
                     disabled={transcribing || generating}
-                    title={recording ? 'Parar gravacao' : 'Gravar audio (Whisper)'}
+                    title={recording ? 'Parar gravacao' : 'Gravar audio e transcrever via Whisper'}
                     style={{
-                      width: 32, height: 32, borderRadius: '50%', border: 'none', cursor: transcribing ? 'not-allowed' : 'pointer',
-                      background: recording ? 'rgba(255,51,51,0.2)' : 'rgba(255,255,255,0.04)',
+                      height: 32, borderRadius: 6, cursor: transcribing ? 'not-allowed' : 'pointer',
+                      background: recording ? 'rgba(255,51,51,0.15)' : 'rgba(255,255,255,0.03)',
+                      border: recording ? '1px solid rgba(255,51,51,0.3)' : '1px solid rgba(255,255,255,0.1)',
                       color: recording ? '#ff3333' : 'var(--text-muted)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                      padding: '0 12px', fontFamily: 'var(--font-mono)', fontSize: '0.56rem', fontWeight: 600,
                       animation: recording ? 'pulse 1.2s ease-in-out infinite' : 'none',
                       transition: 'all 0.15s',
                     }}
                   >
                     {transcribing ? (
-                      <div style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--brand-300)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                      <><div style={{ width: 10, height: 10, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--brand-300)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Transcrevendo...</>
                     ) : (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill={recording ? '#ff3333' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <><svg width="13" height="13" viewBox="0 0 24 24" fill={recording ? '#ff3333' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
                         <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
                         <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
-                      </svg>
+                      </svg>{recording ? 'Parar' : 'Audio'}</>
                     )}
                   </button>
                   <button className={styles.btnGenerate} onClick={handleGenerate} disabled={!promptInput.trim() || generating}>
