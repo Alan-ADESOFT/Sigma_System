@@ -159,22 +159,24 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
   }
 
   function restoreSession(s) {
+    // Limpa editor imediatamente para evitar flash de conteudo antigo
+    // Nota: mdToHtml escapa HTML antes de formatar — seguro contra XSS
+    if (editorRef.current) editorRef.current.textContent = '';
+    setOutputText(s.output_text || '');
     setSelectedStructureId(s.structure_id || '');
     setQuestionAnswers(s.metadata?.questionAnswers || {});
     setToneInput(s.tone || '');
     setSelectedModel(s.model_used || 'gpt-4o');
-    if (s.output_text) {
-      setOutputText(s.output_text);
-      setTimeout(() => { if (editorRef.current) editorRef.current.innerHTML = mdToHtml(s.output_text); }, 0);
-    } else {
-      setOutputText('');
-      setTimeout(() => { if (editorRef.current) editorRef.current.innerHTML = ''; }, 0);
-    }
     setSaved(s.status === 'saved');
     setHistoryDraftLabel(null);
     setPromptInput('');
     setUploadedImages([]);
     setUploadedDocs([]);
+    setManualContext('');
+    // Renderiza conteudo formatado se existir (apos React re-render)
+    if (s.output_text) {
+      setTimeout(() => { if (editorRef.current) editorRef.current.innerHTML = mdToHtml(s.output_text); }, 10);
+    }
   }
 
   function handleSelectStructure(structId) {
@@ -390,6 +392,8 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
       if (editorRef.current) { editorRef.current.innerHTML = mdToHtml(d.data.text); editorRef.current.scrollTop = 0; }
       setPromptInput('');
       setSaved(false);
+      setUploadedImages([]);
+      setUploadedDocs([]);
       notify('Copy gerada — revise e salve quando estiver pronto', 'success');
     } catch (err) {
       notify(err.message?.includes('Limite') ? err.message : 'Falha ao gerar copy. Verifique o prompt e tente novamente.', 'error');

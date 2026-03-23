@@ -294,34 +294,98 @@ function CopyStructuresSection() {
 
       {structures.map(s => (
         <div key={s.id} style={cardStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: editing === s.id ? 14 : 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-primary)' }}>{s.name}</span>
               <span style={badgeStyle(s.is_default ? 'rgba(59,130,246,0.08)' : 'rgba(34,197,94,0.08)', s.is_default ? '#3b82f6' : '#22c55e')}>{s.is_default ? 'PADRAO' : 'CUSTOM'}</span>
               {(s.questions || []).length > 0 && <span style={badgeStyle('rgba(249,115,22,0.08)', '#f97316')}>{s.questions.length} pergunta(s)</span>}
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={() => editing === s.id ? setEditing(null) : startEdit(s)} style={{ ...btnSecondary, fontSize: '0.5rem', padding: '3px 10px' }}>{editing === s.id ? 'Cancelar' : 'Editar'}</button>
+              <button onClick={() => startEdit(s)} style={{ ...btnSecondary, fontSize: '0.5rem', padding: '3px 10px' }}>Editar</button>
               {!s.is_default && <button onClick={() => handleDeactivate(s.id)} style={{ ...btnSecondary, fontSize: '0.5rem', padding: '3px 10px', borderColor: 'rgba(255,51,51,0.2)', color: 'var(--error)' }}>Desativar</button>}
             </div>
           </div>
-
-          {editing === s.id && <StructureForm form={form} setForm={setForm} saving={saving} onSave={handleSave} onAddQuestion={addQuestion} onUpdateQuestion={updateQuestion} onRemoveQuestion={removeQuestion} inputStyle={inputStyle} textareaStyle={textareaStyle} labelStyle={labelStyle} btnPrimary={btnPrimary} btnSecondary={btnSecondary} />}
+          {s.description && <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', color: 'var(--text-muted)', marginTop: 4 }}>{s.description}</div>}
         </div>
       ))}
 
-      {editing === 'new' ? (
-        <div style={{ ...cardStyle, borderColor: 'rgba(255,0,51,0.12)', background: 'rgba(255,0,51,0.02)' }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 14 }}>Nova Estrutura</div>
-          <StructureForm form={form} setForm={setForm} saving={saving} onSave={handleSave} onCancel={() => setEditing(null)} onAddQuestion={addQuestion} onUpdateQuestion={updateQuestion} onRemoveQuestion={removeQuestion} inputStyle={inputStyle} textareaStyle={textareaStyle} labelStyle={labelStyle} btnPrimary={btnPrimary} btnSecondary={btnSecondary} />
-        </div>
-      ) : (
-        <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-          <button onClick={() => setShowAIModal(true)} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px dashed rgba(255,0,51,0.2)', background: 'rgba(255,0,51,0.03)', color: 'var(--brand-300)', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-            Criar com IA
-          </button>
-          <button onClick={startNew} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', cursor: 'pointer' }}>Manual</button>
+      <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+        <button onClick={() => setShowAIModal(true)} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px dashed rgba(255,0,51,0.2)', background: 'rgba(255,0,51,0.03)', color: 'var(--brand-300)', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          Criar com IA
+        </button>
+        <button onClick={startNew} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', cursor: 'pointer' }}>Manual</button>
+      </div>
+
+      {/* Modal de edicao/criacao split-pane */}
+      {editing && (
+        <div onClick={() => setEditing(null)} style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 1000, maxHeight: '88vh', borderRadius: 16, background: 'linear-gradient(145deg, rgba(14,14,14,0.99), rgba(8,8,8,0.99))', border: '1px solid rgba(255,255,255,0.06)', borderTop: '2px solid var(--action-primary)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)' }}>{editing === 'new' ? 'Nova Estrutura' : form.name || 'Editar'}</span>
+                {editing !== 'new' && (() => { const s = structures.find(x => x.id === editing); return s ? <span style={badgeStyle(s.is_default ? 'rgba(59,130,246,0.08)' : 'rgba(34,197,94,0.08)', s.is_default ? '#3b82f6' : '#22c55e')}>{s.is_default ? 'PADRAO' : 'CUSTOM'}</span> : null; })()}
+                {form.questions?.length > 0 && <span style={badgeStyle('rgba(249,115,22,0.08)', '#f97316')}>{form.questions.length} pergunta(s)</span>}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setEditing(null)} style={btnSecondary}>Cancelar</button>
+                <button onClick={handleSave} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.5 : 1 }}>{saving ? 'Salvando...' : 'Salvar'}</button>
+              </div>
+            </div>
+
+            {/* Body split */}
+            <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+              {/* Esquerda: campos */}
+              <div style={{ flex: '0 0 55%', padding: '20px 24px', overflowY: 'auto', borderRight: '1px solid rgba(255,255,255,0.04)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={labelStyle}>Nome</label>
+                  <input style={inputStyle} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ex: Landing Page, Roteiro de Reels..." />
+                </div>
+                <div>
+                  <label style={labelStyle}>Descricao</label>
+                  <input style={inputStyle} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Descricao curta do que a estrutura gera" />
+                </div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <label style={labelStyle}>Prompt Base</label>
+                  <textarea style={{ ...textareaStyle, flex: 1, minHeight: 200 }} value={form.prompt_base} onChange={e => setForm(f => ({ ...f, prompt_base: e.target.value }))} placeholder="Instrucoes de como a IA deve gerar a copy nesta estrutura..." />
+                </div>
+              </div>
+
+              {/* Direita: perguntas */}
+              <div style={{ flex: 1, padding: '20px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                <label style={{ ...labelStyle, marginBottom: 10 }}>Perguntas-Chave</label>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.46rem', color: 'var(--text-muted)', marginBottom: 12, marginTop: -8 }}>Preenchidas pelo operador ao gerar copy</div>
+
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(form.questions || []).map((q, i) => (
+                    <div key={q.id || i} style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1 }}>
+                          <input style={{ ...inputStyle, marginBottom: 6, fontSize: '0.65rem' }} value={q.label} onChange={e => updateQuestion(i, 'label', e.target.value)} placeholder="Pergunta (ex: Qual o objetivo?)" />
+                          <input style={{ ...inputStyle, fontSize: '0.58rem', color: 'var(--text-muted)' }} value={q.placeholder} onChange={e => updateQuestion(i, 'placeholder', e.target.value)} placeholder="Placeholder de ajuda" />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 4, flexShrink: 0 }}>
+                          <label style={{ fontFamily: 'var(--font-mono)', fontSize: '0.46rem', color: q.required ? '#22c55e' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={q.required} onChange={e => updateQuestion(i, 'required', e.target.checked)} style={{ width: 13, height: 13, accentColor: '#22c55e' }} />
+                            Obrig.
+                          </label>
+                          <button onClick={() => removeQuestion(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)', fontSize: '0.5rem', fontFamily: 'var(--font-mono)', fontWeight: 600, padding: 0, textAlign: 'left' }}>Remover</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button onClick={addQuestion} style={{ marginTop: 10, padding: '8px 14px', borderRadius: 6, border: '1px dashed rgba(255,255,255,0.12)', background: 'transparent', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.56rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'center' }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Adicionar pergunta
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -515,51 +579,7 @@ function AIStructureModal({ onClose, onGenerated }) {
   );
 }
 
-/* Formulario de estrutura (usado em editar e criar) */
-function StructureForm({ form, setForm, saving, onSave, onCancel, onAddQuestion, onUpdateQuestion, onRemoveQuestion, inputStyle, textareaStyle, labelStyle, btnPrimary, btnSecondary }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div>
-        <label style={labelStyle}>Nome</label>
-        <input style={inputStyle} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ex: Landing Page, Roteiro de Reels..." />
-      </div>
-      <div>
-        <label style={labelStyle}>Descricao</label>
-        <input style={inputStyle} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Descricao curta do que a estrutura gera" />
-      </div>
-      <div>
-        <label style={labelStyle}>Prompt Base</label>
-        <textarea style={textareaStyle} value={form.prompt_base} onChange={e => setForm(f => ({ ...f, prompt_base: e.target.value }))} placeholder="Instrucoes de como a IA deve gerar a copy nesta estrutura..." />
-      </div>
-
-      {/* Perguntas-chave */}
-      <div>
-        <label style={labelStyle}>Perguntas-Chave (preenchidas pelo operador ao gerar)</label>
-        {(form.questions || []).map((q, i) => (
-          <div key={q.id || i} style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'flex-start' }}>
-            <div style={{ flex: 1 }}>
-              <input style={{ ...inputStyle, marginBottom: 4, fontSize: '0.62rem' }} value={q.label} onChange={e => onUpdateQuestion(i, 'label', e.target.value)} placeholder="Pergunta (ex: Qual o objetivo?)" />
-              <input style={{ ...inputStyle, fontSize: '0.58rem' }} value={q.placeholder} onChange={e => onUpdateQuestion(i, 'placeholder', e.target.value)} placeholder="Placeholder de ajuda" />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 4 }}>
-              <label style={{ fontFamily: 'var(--font-mono)', fontSize: '0.42rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
-                <input type="checkbox" checked={q.required} onChange={e => onUpdateQuestion(i, 'required', e.target.checked)} style={{ width: 12, height: 12 }} />
-                Obrig.
-              </label>
-              <button onClick={() => onRemoveQuestion(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)', fontSize: '0.52rem', fontFamily: 'var(--font-mono)', padding: 0 }}>Remover</button>
-            </div>
-          </div>
-        ))}
-        <button onClick={onAddQuestion} style={{ padding: '4px 10px', borderRadius: 4, border: '1px dashed rgba(255,255,255,0.1)', background: 'transparent', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.52rem', cursor: 'pointer', marginTop: 2 }}>+ Adicionar pergunta</button>
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6 }}>
-        {onCancel && <button onClick={onCancel} style={btnSecondary}>Cancelar</button>}
-        <button onClick={onSave} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.5 : 1 }}>{saving ? 'Salvando...' : 'Salvar'}</button>
-      </div>
-    </div>
-  );
-}
+/* StructureForm removido — substituido pelo modal split-pane inline na CopyStructuresSection */
 
 export default function SettingsPage() {
   const { notify } = useNotification();
