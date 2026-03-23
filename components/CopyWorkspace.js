@@ -93,6 +93,12 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
   const [renameValue, setRenameValue] = useState('');
   const [manualContext, setManualContext] = useState('');
 
+  // ── Transcricao ──
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+
   const activeSession = sessions.find(s => s.id === activeSessionId);
   const clientId = clientProp?.id || null;
   const hasOutput = !!(outputText?.trim());
@@ -153,9 +159,10 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
   }
 
   function restoreSession(s) {
-    if (s.structure_id) setSelectedStructureId(s.structure_id);
-    if (s.tone) setToneInput(s.tone);
-    if (s.model_used) setSelectedModel(s.model_used);
+    setSelectedStructureId(s.structure_id || '');
+    setQuestionAnswers(s.metadata?.questionAnswers || {});
+    setToneInput(s.tone || '');
+    setSelectedModel(s.model_used || 'gpt-4o');
     if (s.output_text) {
       setOutputText(s.output_text);
       setTimeout(() => { if (editorRef.current) editorRef.current.innerHTML = mdToHtml(s.output_text); }, 0);
@@ -166,8 +173,8 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
     setSaved(s.status === 'saved');
     setHistoryDraftLabel(null);
     setPromptInput('');
-    // Restaura respostas de perguntas se existirem na metadata
-    setQuestionAnswers(s.metadata?.questionAnswers || {});
+    setUploadedImages([]);
+    setUploadedDocs([]);
   }
 
   function handleSelectStructure(structId) {
@@ -269,7 +276,7 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
     try {
       await fetch('/api/copy/session?sessionId=' + activeSessionId, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ output_text: editorRef.current?.innerText || '', status: 'saved', tone: toneInput, structure_id: selectedStructureId || null, model_used: selectedModel, metadata: { questionAnswers } }),
+        body: JSON.stringify({ output_text: outputText || editorRef.current?.innerText || '', status: 'saved', tone: toneInput, structure_id: selectedStructureId || null, model_used: selectedModel, metadata: { questionAnswers } }),
       });
       setSaved(true);
       setHistoryDraftLabel(null);
@@ -294,6 +301,48 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
       notify('Texto refinado pelo assistente', 'success');
     } catch { notify('Falha ao melhorar texto', 'error'); }
     finally { setImproving(false); }
+  }
+
+  // ── Transcricao de audio ──
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+      const recorder = new MediaRecorder(stream, { mimeType });
+      audioChunksRef.current = [];
+      recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        setRecording(false);
+        setTranscribing(true);
+        try {
+          const b64 = await new Promise((res, rej) => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.onerror = rej; rd.readAsDataURL(blob); });
+          const r = await fetch('/api/copy/transcribe', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audio: b64, mimeType }),
+          });
+          const d = await r.json();
+          if (d.success && d.text) {
+            setPromptInput(prev => prev ? prev + ' ' + d.text : d.text);
+            notify('Audio transcrito', 'success');
+          } else { notify(d.error || 'Falha na transcricao', 'error'); }
+        } catch { notify('Erro ao transcrever audio', 'error'); }
+        finally { setTranscribing(false); }
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch (err) {
+      console.error('[ERRO][CopyWorkspace] Microfone', err);
+      notify('Erro ao acessar microfone. Verifique as permissoes.', 'error');
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
   }
 
   // ── Gerar / Modificar ──
@@ -330,7 +379,7 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
 
       const endpoint = hasOutput ? '/api/copy/improve' : '/api/copy/generate';
       const body = hasOutput
-        ? { sessionId: activeSessionId, currentOutput: editorRef.current.innerText, instruction: finalPrompt, clientId, modelOverride: selectedModel, ...(imagesB64.length ? { images: imagesB64 } : {}), ...(filesB64.length ? { files: filesB64 } : {}) }
+        ? { sessionId: activeSessionId, currentOutput: editorRef.current.innerText, instruction: finalPrompt, clientId, modelOverride: selectedModel, tone: toneInput || undefined, ...(imagesB64.length ? { images: imagesB64 } : {}), ...(filesB64.length ? { files: filesB64 } : {}) }
         : { sessionId: activeSessionId, contentId: folder.id, clientId, structureId: selectedStructureId || undefined, modelOverride: selectedModel, promptRaiz: finalPrompt, tone: toneInput || undefined, ...(imagesB64.length ? { images: imagesB64 } : {}), ...(filesB64.length ? { files: filesB64 } : {}) };
 
       const r = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -616,7 +665,7 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
                 <button className={styles.toolBtn} title="Negrito" onClick={() => execCmd('bold')}><strong style={{ fontSize: '0.75rem' }}>B</strong></button>
                 <button className={styles.toolBtn} title="Italico" onClick={() => execCmd('italic')}><em style={{ fontSize: '0.75rem' }}>I</em></button>
                 <div className={styles.toolDivider} />
-                <button className={styles.toolBtnWide} onClick={handleImproveText} disabled={improving || generating} style={{ color: improving ? '#a855f7' : undefined, background: improving ? 'rgba(168,85,247,0.12)' : undefined }}>
+                <button className={styles.toolBtnWide} onClick={handleImproveText} disabled={improving || generating} title="Corrige acentos, semantica e conjugacoes sem alterar o conteudo" style={{ color: improving ? '#a855f7' : undefined, background: improving ? 'rgba(168,85,247,0.12)' : undefined }}>
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
                   {improving ? 'Melhorando...' : 'Melhorar'}
                 </button>
@@ -661,11 +710,36 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGenerate(); } }} />
               <div className={styles.promptFooter}>
                 <span className={styles.charCount}>{promptInput.length > 0 ? promptInput.length.toLocaleString() + ' chars' : ''}</span>
-                <button className={styles.btnGenerate} onClick={handleGenerate} disabled={!promptInput.trim() || generating}>
-                  {generating ? (
-                    <><div style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Gerando...</>
-                  ) : hasOutput ? '\u2192 Aplicar' : '\u203A Gerar'}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button
+                    onClick={recording ? stopRecording : startRecording}
+                    disabled={transcribing || generating}
+                    title={recording ? 'Parar gravacao' : 'Gravar audio (Whisper)'}
+                    style={{
+                      width: 32, height: 32, borderRadius: '50%', border: 'none', cursor: transcribing ? 'not-allowed' : 'pointer',
+                      background: recording ? 'rgba(255,51,51,0.2)' : 'rgba(255,255,255,0.04)',
+                      color: recording ? '#ff3333' : 'var(--text-muted)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      animation: recording ? 'pulse 1.2s ease-in-out infinite' : 'none',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {transcribing ? (
+                      <div style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--brand-300)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                    ) : (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill={recording ? '#ff3333' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                        <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+                      </svg>
+                    )}
+                  </button>
+                  <button className={styles.btnGenerate} onClick={handleGenerate} disabled={!promptInput.trim() || generating}>
+                    {generating ? (
+                      <><div style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Gerando...</>
+                    ) : hasOutput ? '\u2192 Aplicar' : '\u203A Gerar'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
