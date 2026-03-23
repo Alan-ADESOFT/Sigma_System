@@ -91,6 +91,7 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [renamingChatId, setRenamingChatId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
+  const [manualContext, setManualContext] = useState('');
 
   const activeSession = sessions.find(s => s.id === activeSessionId);
   const clientId = clientProp?.id || null;
@@ -311,8 +312,11 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
         filesB64.push({ base64: b64, mimeType: doc.file.type, fileName: doc.name });
       }
 
-      // Monta prompt final com respostas das perguntas-chave
+      // Monta prompt final com contexto manual + respostas das perguntas-chave
       let finalPrompt = promptInput.trim();
+      if (manualContext.trim() && !clientProp?.form_done) {
+        finalPrompt = `${finalPrompt}\n\nCONTEXTO MANUAL DO CLIENTE (formulario nao preenchido):\n${manualContext.trim()}`;
+      }
       const selectedStruct = structures.find(s => s.id === selectedStructureId);
       if (selectedStruct?.questions?.length && Object.keys(questionAnswers).length > 0) {
         const answersBlock = selectedStruct.questions
@@ -405,6 +409,29 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
                         {KB_LABELS[cat]}
                       </span>
                     ))}
+                  </div>
+                )}
+                {!clientProp.form_done && (
+                  <div style={{ marginTop: 6, padding: '8px 10px', borderRadius: 6, background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.48rem', fontWeight: 600, color: '#f97316', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Formulario nao preenchido</span>
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.46rem', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 6 }}>
+                      A base de dados esta incompleta. Insira informacoes sobre o cliente abaixo para a IA usar como contexto.
+                    </div>
+                    <textarea
+                      value={manualContext}
+                      onChange={e => setManualContext(e.target.value)}
+                      placeholder="Ex: empresa de tecnologia, vende SaaS para PMEs, ticket R$200/mes, publico 25-45 anos, tom descontraido..."
+                      style={{
+                        width: '100%', boxSizing: 'border-box', padding: '6px 8px',
+                        background: 'rgba(10,10,10,0.4)', border: '1px solid rgba(255,255,255,0.06)',
+                        borderRadius: 5, color: 'var(--text-primary)', fontSize: '0.52rem',
+                        fontFamily: 'var(--font-mono)', lineHeight: 1.5, outline: 'none',
+                        resize: 'none', height: 60,
+                      }}
+                    />
                   </div>
                 )}
               </div>

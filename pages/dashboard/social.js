@@ -177,7 +177,7 @@ function ClientSelect({ clients, value, onChange, loading }) {
 /* ════════════════════════════════════════════════════════════════════════════
    FolderCard — card clicável de pasta/semana
 ═══════════════════════════════════════════════════════════════════════════ */
-function FolderCard({ folder, onClick }) {
+function FolderCard({ folder, onClick, onDelete }) {
   const color = folder.color || '#ff0033';
 
   return (
@@ -216,9 +216,19 @@ function FolderCard({ folder, onClick }) {
           </svg>
           {formatDate(folder.created_at)}
         </div>
-        <svg className={styles.folderArrow} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-        </svg>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {onDelete && (
+            <button onClick={e => { e.stopPropagation(); onDelete(folder); }} style={{
+              background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
+              padding: 2, display: 'flex', opacity: 0.4, transition: 'opacity 0.15s',
+            }} onMouseEnter={e => e.currentTarget.style.opacity = 1} onMouseLeave={e => e.currentTarget.style.opacity = 0.4} title="Apagar pasta">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          )}
+          <svg className={styles.folderArrow} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+          </svg>
+        </div>
       </div>
     </div>
   );
@@ -744,6 +754,8 @@ export default function SocialPage() {
   const [loadingFolders,   setLoadingFolders]   = useState(false);
   const [showNewFolder,    setShowNewFolder]    = useState(false);
   const [openFolder,       setOpenFolder]       = useState(null);
+  const [deleteFolder,     setDeleteFolder]     = useState(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   const selectedClient = clients.find(c => c.id === selectedClientId);
 
@@ -795,6 +807,27 @@ export default function SocialPage() {
 
   function handleFolderCreated(folder) {
     setFolders(prev => [folder, ...prev]);
+  }
+
+  function reloadFolders() {
+    if (!selectedClientId) return;
+    fetch('/api/social/folders?accountId=' + selectedClientId)
+      .then(r => r.json())
+      .then(data => { if (data.success) setFolders(data.folders || []); })
+      .catch(() => {});
+  }
+
+  async function handleDeleteFolder() {
+    if (!deleteFolder) return;
+    try {
+      const r = await fetch('/api/social/folders?folderId=' + deleteFolder.id, { method: 'DELETE' });
+      const d = await r.json();
+      if (d.success) {
+        setFolders(prev => prev.filter(f => f.id !== deleteFolder.id));
+        notify('Pasta apagada com sucesso', 'success');
+      } else { notify(d.error || 'Erro ao apagar', 'error'); }
+    } catch { notify('Erro ao apagar pasta', 'error'); }
+    finally { setDeleteFolder(null); setDeleteConfirmText(''); }
   }
 
   return (
@@ -888,6 +921,7 @@ export default function SocialPage() {
                   key={folder.id}
                   folder={folder}
                   onClick={() => setOpenFolder(folder)}
+                  onDelete={f => setDeleteFolder(f)}
                 />
               ))
             )}
@@ -904,12 +938,78 @@ export default function SocialPage() {
         />
       )}
 
+      {/* ── Modal: confirmar exclusao de pasta ── */}
+      {deleteFolder && (
+        <div onClick={() => { setDeleteFolder(null); setDeleteConfirmText(''); }} style={{
+          position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.7)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            width: 480, padding: '32px 36px', borderRadius: 16,
+            background: 'linear-gradient(145deg, rgba(14,14,14,0.99), rgba(8,8,8,0.99))',
+            border: '1px solid rgba(255,255,255,0.06)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+                background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.2)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff3333" strokeWidth="1.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              </div>
+              <div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)' }}>Apagar pasta</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)' }}>Esta acao nao pode ser desfeita.</div>
+              </div>
+            </div>
+
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 16, padding: '10px 12px', borderRadius: 8, background: 'rgba(255,51,51,0.04)', border: '1px solid rgba(255,51,51,0.1)' }}>
+              Ao apagar <strong style={{ color: '#ff6680' }}>{deleteFolder.name}</strong>, os seguintes dados serao removidos permanentemente:
+              <div style={{ marginTop: 6 }}>
+                - Todos os <strong>conteudos</strong> da pasta{'\n'}
+                - Todos os <strong>chats de copy</strong> e seus historicos{'\n'}
+                - A <strong>pasta</strong> em si
+              </div>
+            </div>
+
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>
+              DIGITE <span style={{ color: '#ff3333' }}>APAGAR PASTA</span> PARA CONFIRMAR
+            </div>
+            <input type="text" value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} placeholder="APAGAR PASTA" style={{
+              width: '100%', boxSizing: 'border-box', padding: '12px 16px', marginBottom: 20,
+              background: 'rgba(10,10,10,0.6)', border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.78rem',
+              fontFamily: 'var(--font-mono)', outline: 'none', letterSpacing: '0.04em',
+            }} />
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={() => { setDeleteFolder(null); setDeleteConfirmText(''); }} style={{
+                flex: 1, padding: '12px 0', borderRadius: 8, cursor: 'pointer',
+                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)',
+                color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 600,
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+              }}>CANCELAR</button>
+              <button disabled={deleteConfirmText !== 'APAGAR PASTA'} onClick={handleDeleteFolder} style={{
+                flex: 1, padding: '12px 0', borderRadius: 8,
+                cursor: deleteConfirmText !== 'APAGAR PASTA' ? 'not-allowed' : 'pointer',
+                background: deleteConfirmText === 'APAGAR PASTA' ? 'rgba(255,51,51,0.15)' : 'rgba(255,51,51,0.04)',
+                border: '1px solid rgba(255,51,51,0.25)',
+                color: deleteConfirmText === 'APAGAR PASTA' ? '#ff3333' : '#525252',
+                fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 600,
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+                opacity: deleteConfirmText !== 'APAGAR PASTA' ? 0.4 : 1,
+              }}>APAGAR TUDO</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal: CopyCreator Workspace ── */}
       {openFolder && (
         <CopyWorkspace
           folder={openFolder}
           client={selectedClient}
-          onClose={() => setOpenFolder(null)}
+          onClose={() => { setOpenFolder(null); reloadFolders(); }}
         />
       )}
     </DashboardLayout>

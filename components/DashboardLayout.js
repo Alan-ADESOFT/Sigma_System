@@ -56,8 +56,8 @@ const NAV_SECTIONS = [
   {
     category: 'AGENTES DE IA',
     items: [
-      { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '05', icon: 'edit'      },
-      { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '06', icon: 'zap'       },
+      { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '05', icon: 'zap'       },
+      { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '06', icon: 'edit'      },
     ],
   },
   {

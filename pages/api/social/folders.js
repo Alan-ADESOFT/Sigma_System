@@ -25,9 +25,9 @@ export default async function handler(req, res) {
       const rows = await query(
         `SELECT
            f.*,
-           COUNT(c.id)::int AS content_count
+           COUNT(DISTINCT cs.id)::int AS content_count
          FROM content_folders f
-         LEFT JOIN contents c ON c.folder_id = f.id
+         LEFT JOIN copy_sessions cs ON cs.folder_id = f.id
          WHERE f.tenant_id = $1 AND (f.client_id = $2 OR f.account_id = $2)
          GROUP BY f.id
          ORDER BY f.created_at DESC`,
@@ -72,6 +72,34 @@ export default async function handler(req, res) {
 
       console.log('[SUCESSO][API:/api/social/folders] Pasta criada', { folderId: folder.id, name: name.trim(), isClient: !!isClient });
       return res.status(201).json({ success: true, folder });
+    }
+
+    /* ── DELETE: apagar pasta + conteudos + sessoes de copy ── */
+    if (req.method === 'DELETE') {
+      const { folderId } = req.query;
+      if (!folderId) return res.status(400).json({ success: false, error: 'folderId obrigatorio' });
+
+      console.log('[INFO][API:/api/social/folders] DELETE pasta', { folderId });
+
+      // Verifica se a pasta existe e pertence ao tenant
+      const folder = await queryOne(
+        'SELECT id, name FROM content_folders WHERE id = $1 AND tenant_id = $2',
+        [folderId, tenantId]
+      );
+      if (!folder) return res.status(404).json({ success: false, error: 'Pasta nao encontrada' });
+
+      // 1. Apaga conteudos da pasta (contents.folder_id = ON DELETE SET NULL, entao apaga manualmente)
+      const deletedContents = await query('DELETE FROM contents WHERE folder_id = $1 RETURNING id', [folderId]);
+
+      // 2. Apaga a pasta (copy_sessions cascade automaticamente via FK, e copy_history cascade da session)
+      await queryOne('DELETE FROM content_folders WHERE id = $1 RETURNING id', [folderId]);
+
+      console.log('[SUCESSO][API:/api/social/folders] Pasta apagada', {
+        folderId, folderName: folder.name,
+        contentsDeleted: deletedContents.length,
+      });
+
+      return res.json({ success: true, data: { folderId, contentsDeleted: deletedContents.length } });
     }
 
     return res.status(405).json({ error: 'Metodo nao permitido' });
