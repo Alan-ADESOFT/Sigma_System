@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useNotification } from '../../context/NotificationContext';
 
@@ -206,6 +206,7 @@ function CopyStructuresSection() {
   const [editing, setEditing] = useState(null); // structure.id or 'new'
   const [form, setForm] = useState({ name: '', description: '', prompt_base: '', icon: 'file', questions: [] });
   const [saving, setSaving] = useState(false);
+  const [showAIModal, setShowAIModal] = useState(false);
 
   useEffect(() => { loadStructures(); }, []);
 
@@ -315,8 +316,201 @@ function CopyStructuresSection() {
           <StructureForm form={form} setForm={setForm} saving={saving} onSave={handleSave} onCancel={() => setEditing(null)} onAddQuestion={addQuestion} onUpdateQuestion={updateQuestion} onRemoveQuestion={removeQuestion} inputStyle={inputStyle} textareaStyle={textareaStyle} labelStyle={labelStyle} btnPrimary={btnPrimary} btnSecondary={btnSecondary} />
         </div>
       ) : (
-        <button onClick={startNew} style={{ width: '100%', padding: '10px 0', borderRadius: 8, border: '1px dashed rgba(255,0,51,0.2)', background: 'rgba(255,0,51,0.03)', color: 'var(--brand-300)', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', marginTop: 6 }}>+ Nova Estrutura</button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+          <button onClick={() => setShowAIModal(true)} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px dashed rgba(255,0,51,0.2)', background: 'rgba(255,0,51,0.03)', color: 'var(--brand-300)', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            Criar com IA
+          </button>
+          <button onClick={startNew} style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', cursor: 'pointer' }}>Manual</button>
+        </div>
       )}
+
+      {showAIModal && (
+        <AIStructureModal
+          onClose={() => setShowAIModal(false)}
+          onGenerated={(data) => {
+            setEditing('new');
+            setForm({
+              name: data.name || '',
+              description: data.description || '',
+              prompt_base: data.prompt_base || '',
+              icon: 'file',
+              questions: data.questions || [],
+            });
+            setShowAIModal(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   AIStructureModal — popup assistido por IA para criar estruturas
+═══════════════════════════════════════════════════════════════════════════ */
+function AIStructureModal({ onClose, onGenerated }) {
+  const { notify } = useNotification();
+  const [description, setDescription] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [uploadedImages, setUploadedImages] = useState([]);
+  const [uploadedDocs, setUploadedDocs] = useState([]);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const imageInputRef = useRef(null);
+  const docInputRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+      const recorder = new MediaRecorder(stream, { mimeType });
+      audioChunksRef.current = [];
+      recorder.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        setRecording(false);
+        setTranscribing(true);
+        try {
+          const b64 = await new Promise((res, rej) => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.onerror = rej; rd.readAsDataURL(blob); });
+          const r = await fetch('/api/copy/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audio: b64, mimeType }) });
+          const d = await r.json();
+          if (d.success && d.text) { setDescription(prev => prev ? prev + ' ' + d.text : d.text); notify('Audio transcrito', 'success'); }
+          else { notify('Falha na transcricao', 'error'); }
+        } catch { notify('Erro ao transcrever', 'error'); }
+        finally { setTranscribing(false); }
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch { notify('Erro ao acessar microfone', 'error'); }
+  }
+
+  function stopRecording() {
+    if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+  }
+
+  async function handleGenerate() {
+    if (!description.trim()) { notify('Descreva o tipo de copy que precisa', 'warning'); return; }
+    setGenerating(true);
+    try {
+      const imagesB64 = [];
+      for (const img of uploadedImages) {
+        const b64 = await new Promise((res, rej) => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.onerror = rej; rd.readAsDataURL(img.file); });
+        imagesB64.push({ base64: b64, mimeType: img.file.type });
+      }
+      const filesB64 = [];
+      for (const doc of uploadedDocs) {
+        const b64 = await new Promise((res, rej) => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.onerror = rej; rd.readAsDataURL(doc.file); });
+        filesB64.push({ base64: b64, mimeType: doc.file.type, fileName: doc.name });
+      }
+
+      const r = await fetch('/api/copy/generate-structure', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: description.trim(),
+          ...(imagesB64.length ? { images: imagesB64 } : {}),
+          ...(filesB64.length ? { files: filesB64 } : {}),
+        }),
+      });
+      const d = await r.json();
+      if (!d.success) throw new Error(d.error);
+
+      onGenerated(d.data);
+      notify('Estrutura gerada pela IA — revise e salve', 'success');
+      onClose();
+    } catch (err) {
+      notify(err.message || 'Falha ao gerar estrutura', 'error');
+    } finally { setGenerating(false); }
+  }
+
+  const inputS = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'rgba(10,10,10,0.6)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, color: 'var(--text-primary)', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', outline: 'none' };
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 560, padding: '28px 32px', borderRadius: 16, background: 'linear-gradient(145deg, rgba(14,14,14,0.99), rgba(8,8,8,0.99))', border: '1px solid rgba(255,255,255,0.06)', borderTop: '2px solid var(--action-primary)' }}>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff6680" strokeWidth="1.5" strokeLinecap="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          </div>
+          <div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>Criar Estrutura com IA</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', color: 'var(--text-muted)' }}>Descreva o tipo de copy e a IA gera o prompt + perguntas-chave</div>
+          </div>
+        </div>
+
+        {/* Descricao */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, display: 'block' }}>O que voce precisa gerar?</label>
+          <textarea
+            value={description} onChange={e => setDescription(e.target.value)}
+            placeholder="Ex: Preciso de uma estrutura para criar paginas de captura de leads para cursos online. Deve ter headline, sub-headline, beneficios, depoimentos, FAQ e CTA forte..."
+            style={{ ...inputS, resize: 'vertical', minHeight: 100, fontSize: '0.68rem', lineHeight: 1.6 }}
+            onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleGenerate(); }}
+          />
+        </div>
+
+        {/* Complementos: imagens + docs + audio */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          {/* Imagens */}
+          <input ref={imageInputRef} type="file" multiple accept=".png,.jpg,.jpeg,.webp" style={{ display: 'none' }} onChange={e => { const f = Array.from(e.target.files || []); setUploadedImages(p => [...p, ...f.slice(0, 5 - p.length).map(x => ({ name: x.name, file: x }))]); e.target.value = ''; }} />
+          <button onClick={() => imageInputRef.current?.click()} style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: '1px dashed rgba(255,255,255,0.1)', background: 'transparent', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            {uploadedImages.length > 0 ? uploadedImages.length + ' img' : 'Imagens'}
+          </button>
+
+          {/* Docs */}
+          <input ref={docInputRef} type="file" multiple accept=".pdf,.doc,.docx,.txt" style={{ display: 'none' }} onChange={e => { const f = Array.from(e.target.files || []); setUploadedDocs(p => [...p, ...f.slice(0, 3 - p.length).map(x => ({ name: x.name, file: x }))]); e.target.value = ''; }} />
+          <button onClick={() => docInputRef.current?.click()} style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: '1px dashed rgba(255,255,255,0.1)', background: 'transparent', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            {uploadedDocs.length > 0 ? uploadedDocs.length + ' doc' : 'Docs'}
+          </button>
+
+          {/* Audio */}
+          <button onClick={recording ? stopRecording : startRecording} disabled={transcribing} style={{ flex: 1, padding: '6px 0', borderRadius: 6, border: '1px dashed ' + (recording ? 'rgba(255,51,51,0.3)' : 'rgba(255,255,255,0.1)'), background: recording ? 'rgba(255,51,51,0.06)' : 'transparent', color: recording ? '#ff3333' : 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.5rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, animation: recording ? 'pulse 1.2s ease-in-out infinite' : 'none' }}>
+            {transcribing ? (
+              <><div style={{ width: 8, height: 8, border: '1.5px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--brand-300)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Transcrevendo</>
+            ) : (
+              <><svg width="10" height="10" viewBox="0 0 24 24" fill={recording ? '#ff3333' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>{recording ? 'Parar' : 'Audio'}</>
+            )}
+          </button>
+        </div>
+
+        {/* Arquivos listados */}
+        {(uploadedImages.length > 0 || uploadedDocs.length > 0) && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 12 }}>
+            {uploadedImages.map((f, i) => (
+              <span key={'img' + i} style={{ fontFamily: 'var(--font-mono)', fontSize: '0.42rem', padding: '1px 6px', borderRadius: 3, background: 'rgba(59,130,246,0.08)', color: '#3b82f6', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                {f.name.substring(0, 20)}
+                <button onClick={() => setUploadedImages(p => p.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', padding: 0, fontSize: '0.5rem' }}>&times;</button>
+              </span>
+            ))}
+            {uploadedDocs.map((f, i) => (
+              <span key={'doc' + i} style={{ fontFamily: 'var(--font-mono)', fontSize: '0.42rem', padding: '1px 6px', borderRadius: 3, background: 'rgba(34,197,94,0.08)', color: '#22c55e', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                {f.name.substring(0, 20)}
+                <button onClick={() => setUploadedDocs(p => p.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#22c55e', padding: 0, fontSize: '0.5rem' }}>&times;</button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Botoes */}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '10px 0', borderRadius: 8, cursor: 'pointer', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 600 }}>Cancelar</button>
+          <button onClick={handleGenerate} disabled={generating || !description.trim()} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: 'none', cursor: generating || !description.trim() ? 'not-allowed' : 'pointer', background: generating || !description.trim() ? 'rgba(255,0,51,0.15)' : 'linear-gradient(135deg, var(--action-primary), var(--brand-600))', color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 700, opacity: generating || !description.trim() ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            {generating ? (
+              <><div style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Gerando...</>
+            ) : (
+              <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Gerar com IA</>
+            )}
+          </button>
+        </div>
+
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
+      </div>
     </div>
   );
 }
