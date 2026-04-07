@@ -1,0 +1,204 @@
+/* ============================================================
+   settingsCopy.module.css
+   Estilos para a página Config. Copy
+   ============================================================ */
+
+.pageContainer {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.sectionCard {
+  padding: 24px 28px;
+  margin-bottom: 24px;
+}
+
+.sectionHeader {
+  margin-bottom: 20px;
+}
+
+.sectionTitle {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.sectionSubtitle {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.modelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.modelLabel {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modelSelect {
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  outline: none;
+  cursor: pointer;
+  min-width: 200px;
+  transition: border-color 0.15s;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23525252' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+
+.modelSelect:focus {
+  border-color: rgba(255, 0, 51, 0.25);
+}
+
+.modelSelect option {
+  background: #0a0a0a;
+  color: var(--text-secondary);
+}
+
+/* ── Structure list ── */
+
+.structureList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.structureCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: all 0.15s;
+}
+
+.structureCard:hover {
+  border-color: rgba(255, 0, 51, 0.1);
+}
+
+.structureName {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.structureDesc {
+  font-family: var(--font-mono);
+  font-size: 0.54rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.structureBadge {
+  font-family: var(--font-mono);
+  font-size: 0.44rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(249, 115, 22, 0.08);
+  color: #f97316;
+  margin-left: 8px;
+}
+
+.structureIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 0, 51, 0.06);
+  border: 1px solid rgba(255, 0, 51, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--brand-300);
+}
+
+.btnManage {
+  padding: 5px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: rgba(255, 0, 51, 0.08);
+  border: 1px solid rgba(255, 0, 51, 0.25);
+  color: var(--brand-300);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  transition: all 0.15s;
+  text-decoration: none;
+}
+
+.btnManage:hover {
+  background: rgba(255, 0, 51, 0.15);
+}
+
+.emptyState {
+  padding: 32px;
+  text-align: center;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.emptyText {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.btnCreate {
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--action-primary), var(--brand-600));
+  border: none;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.loadingText {
+  padding: 20px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

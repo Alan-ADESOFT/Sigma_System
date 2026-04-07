@@ -86,8 +86,8 @@ export default async function handler(req, res) {
     });
     systemPrompt = withMarkdown(systemPrompt);
 
-    // Chama IA
-    const result = await runCompletion('medium', systemPrompt, instruction, 4000, {
+    // Chama IA — usa 'weak' porque é apenas reescrita/melhoria, não geração criativa
+    const result = await runCompletion('weak', systemPrompt, instruction, 4000, {
       tenantId, clientId, sessionId, operationType: 'copy_modify',
     });
 

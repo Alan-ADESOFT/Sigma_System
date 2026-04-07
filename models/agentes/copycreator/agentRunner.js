@@ -9,7 +9,7 @@
  *   6. Retorna resultado formatado
  */
 
-const { runCompletion }        = require('../../ia/completion');
+const { runCompletion, runCompletionWithFallback } = require('../../ia/completion');
 const { deepSearch }          = require('../../ia/deepSearch');
 const { withMarkdown }        = require('../../ia/markdownHelper');
 const { getAgent }            = require('./prompts/index');
@@ -382,8 +382,7 @@ async function runAgent({
   // ── Agente de TEXTO ───────────────────────────────────────────────────────
   } else {
     console.log('[INFO][AgentRunner] Executando completion', { agentName, level, promptLength: systemPrompt.length });
-    const result = await runCompletion(level, systemPrompt, userInput, 4000, {
-      tenantId,
+    const result = await runCompletionWithFallback(tenantId, level, systemPrompt, userInput, 4000, {
       clientId,
       operationType: 'pipeline',
     });

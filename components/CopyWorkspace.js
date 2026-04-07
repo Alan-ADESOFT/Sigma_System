@@ -19,10 +19,10 @@ import { useNotification } from '../context/NotificationContext';
 import styles from '../assets/style/copyWorkspace.module.css';
 
 const MODELS = [
-  { value: 'gpt-4o', label: 'GPT-4o (Recomendado)' },
-  { value: 'gpt-4o-mini', label: 'GPT-4o mini (Rapido)' },
-  { value: 'claude-opus-4-20250514', label: 'Claude Opus 4 (Maximo)' },
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet (Equilibrado)' },
+  { value: 'claude-opus-4-5',   label: 'Claude Opus 4.5' },
+  { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+  { value: 'gpt-4o',            label: 'GPT-4o' },
+  { value: 'gpt-4o-mini',       label: 'GPT-4o Mini' },
 ];
 
 const PROMPT_PLACEHOLDERS = [
@@ -68,7 +68,7 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
   const [selectedStructureId, setSelectedStructureId] = useState('');
   const [questionAnswers, setQuestionAnswers] = useState({}); // { questionId: answer }
   const [toneInput, setToneInput] = useState('');
-  const [selectedModel, setSelectedModel] = useState('gpt-4o');
+  const [selectedModel, setSelectedModel] = useState('gpt-4o-mini');
   const [kbCategories, setKbCategories] = useState([]);
 
   // ── Editor ──
@@ -102,6 +102,14 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
   const activeSession = sessions.find(s => s.id === activeSessionId);
   const clientId = clientProp?.id || null;
   const hasOutput = !!(outputText?.trim());
+
+  // ── Carregar modelo padrão do copy-config ──
+  useEffect(() => {
+    fetch('/api/settings/copy-config')
+      .then(r => r.json())
+      .then(d => { if (d.success && d.data.copy_model) setSelectedModel(d.data.copy_model); })
+      .catch(() => {});
+  }, []);
 
   // ── Lifecycle ──
   useEffect(() => { loadSession(); }, [folder.id]);

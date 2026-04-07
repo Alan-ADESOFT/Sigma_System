@@ -52,7 +52,8 @@ function resolveModel(level) {
 async function runCompletion(modelLevel, systemPrompt, userMessage, maxTokens = 2000, opts = {}) {
   const model = resolveModel(modelLevel);
   const provider = model.toLowerCase().includes('claude') ? 'Anthropic' : 'OpenAI';
-  console.log('[INFO][Completion] Roteando para provider', { modelLevel, model, provider });
+  const providerTag = provider === 'Anthropic' ? '🟣 ANTHROPIC' : '🟢 OPENAI';
+  console.log(`[INFO][Completion] ──── ${providerTag} ────`, { modelLevel, model });
 
   let text, usage;
   if (provider === 'Anthropic') {
@@ -65,7 +66,7 @@ async function runCompletion(modelLevel, systemPrompt, userMessage, maxTokens = 
     usage = result.usage;
   }
 
-  console.log('[SUCESSO][Completion] Texto gerado', { model, provider, responseLength: text.length, usage });
+  console.log(`[SUCESSO][Completion] ──── ${providerTag} ──── Texto gerado`, { model, tokens: usage.total, responseLength: text.length });
 
   // Registra uso de tokens (silencioso — nunca bloqueia)
   if (opts.tenantId) {
@@ -97,7 +98,8 @@ async function runCompletion(modelLevel, systemPrompt, userMessage, maxTokens = 
 async function* runCompletionStream(modelLevel, systemPrompt, userMessage, maxTokens = 4000) {
   const model = resolveModel(modelLevel);
   const provider = model.toLowerCase().includes('claude') ? 'Anthropic' : 'OpenAI';
-  console.log('[INFO][Completion:Stream] Iniciando streaming', { modelLevel, model, provider });
+  const providerTag = provider === 'Anthropic' ? '🟣 ANTHROPIC' : '🟢 OPENAI';
+  console.log(`[INFO][Completion:Stream] ──── ${providerTag} ──── Iniciando streaming`, { modelLevel, model });
 
   let fullText = '';
 
@@ -211,8 +213,109 @@ async function* runCompletionStream(modelLevel, systemPrompt, userMessage, maxTo
     }
   }
 
-  console.log('[SUCESSO][Completion:Stream] Streaming concluído', { model, provider, totalLength: fullText.length });
+  console.log(`[SUCESSO][Completion:Stream] ──── ${providerTag} ──── Streaming concluido`, { model, totalLength: fullText.length });
   yield { delta: '', fullText, done: true, modelUsed: model };
 }
 
-module.exports = { runCompletion, resolveModel, runCompletionStream };
+/**
+ * Roda completion com model ID explícito (sem resolver por nível).
+ * Reutiliza a mesma lógica de roteamento OpenAI/Anthropic.
+ *
+ * @param {string} modelId - Model ID direto (ex: 'gpt-4o-mini', 'claude-opus-4-5')
+ * @param {string} systemPrompt
+ * @param {string} userMessage
+ * @param {number} [maxTokens=2000]
+ * @param {object} [opts]
+ * @returns {Promise<{text: string, modelUsed: string, usage: {input: number, output: number, total: number}}>}
+ */
+async function runCompletionWithModel(modelId, systemPrompt, userMessage, maxTokens = 2000, opts = {}) {
+  const provider = modelId.toLowerCase().includes('claude') ? 'Anthropic' : 'OpenAI';
+  const providerTag = provider === 'Anthropic' ? '🟣 ANTHROPIC' : '🟢 OPENAI';
+  console.log(`[INFO][Completion] ──── ${providerTag} ──── Model direto`, { modelId });
+
+  let text, usage;
+  if (provider === 'Anthropic') {
+    const result = await anthropic.generateCompletion(modelId, systemPrompt, userMessage, maxTokens);
+    text = result.text;
+    usage = result.usage;
+  } else {
+    const result = await openai.generateCompletion(modelId, systemPrompt, userMessage, maxTokens);
+    text = result.text;
+    usage = result.usage;
+  }
+
+  console.log(`[SUCESSO][Completion] ──── ${providerTag} ──── Texto gerado (model direto)`, { modelId, tokens: usage.total, responseLength: text.length });
+
+  if (opts.tenantId) {
+    logUsage({
+      tenantId: opts.tenantId,
+      modelUsed: modelId,
+      provider: provider.toLowerCase(),
+      operationType: opts.operationType || 'general',
+      clientId: opts.clientId || null,
+      sessionId: opts.sessionId || null,
+      tokensInput: usage.input,
+      tokensOutput: usage.output,
+    });
+  }
+
+  return { text, modelUsed: modelId, usage };
+}
+
+/**
+ * Detecta se o erro é de quota insuficiente ou limite de tokens
+ * @param {Error} err
+ * @returns {boolean}
+ */
+function isTokenOrQuotaError(err) {
+  const msg = (err?.message || '').toLowerCase();
+  return msg.includes('quota') || msg.includes('rate_limit') || msg.includes('insufficient') ||
+         msg.includes('context_length') || msg.includes('max_tokens') || msg.includes('overloaded');
+}
+
+/**
+ * Roda completion com fallback automático se o modelo principal falhar.
+ * Consulta as configurações do tenant para saber se fallback está ativo e qual modelo usar.
+ * Loga [FALLBACK] no console quando acionado.
+ *
+ * @param {string} tenantId
+ * @param {string} modelLevel - 'weak' | 'medium' | 'strong'
+ * @param {string} systemPrompt
+ * @param {string} userMessage
+ * @param {number} [maxTokens=2000]
+ * @param {object} [opts]
+ * @returns {Promise<{text: string, modelUsed: string, usage: object, usedFallback: boolean, fallbackModel?: string}>}
+ */
+async function runCompletionWithFallback(tenantId, modelLevel, systemPrompt, userMessage, maxTokens = 2000, opts = {}) {
+  // 1. Tenta modelo principal normalmente
+  try {
+    const result = await runCompletion(modelLevel, systemPrompt, userMessage, maxTokens, { ...opts, tenantId });
+    return { ...result, usedFallback: false };
+  } catch (primaryErr) {
+    // 2. Só tenta fallback em erros de quota/token
+    if (!isTokenOrQuotaError(primaryErr)) throw primaryErr;
+
+    // 3. Verifica se fallback está habilitado para este tenant
+    const { getSetting } = require('../settings.model');
+    const fallbackEnabled = await getSetting(tenantId, 'pipeline_fallback_enabled');
+    if (fallbackEnabled !== 'true') throw primaryErr;
+
+    const fallbackModel = await getSetting(tenantId, 'pipeline_fallback_model') || 'gpt-4o-mini';
+    console.warn(`[FALLBACK][Completion] Modelo principal falhou — usando fallback`, {
+      tenantId,
+      modelLevel,
+      primaryError: primaryErr.message,
+      fallbackModel,
+    });
+
+    // 4. Roda com fallback (passa model ID diretamente, não por nível)
+    const result = await runCompletionWithModel(fallbackModel, systemPrompt, userMessage, maxTokens, {
+      ...opts,
+      tenantId,
+      operationType: opts.operationType ? `${opts.operationType}_fallback` : 'fallback',
+    });
+    return { ...result, usedFallback: true, fallbackModel };
+  }
+}
+
+module.exports = { runCompletion, resolveModel, runCompletionStream, runCompletionWithFallback, runCompletionWithModel };

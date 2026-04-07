@@ -77,8 +77,10 @@ const NAV_SECTIONS = [
   {
     category: 'SISTEMA',
     items: [
-      { href: '/dashboard/onboarding-config', label: 'Onboarding (15 dias)',  tag: '11', icon: 'calendar'  },
-      { href: '/dashboard/settings',          label: 'Configurações',          tag: '12', icon: 'settings'  },
+      { href: '/dashboard/onboarding-config',    label: 'Config. Onboarding',    tag: '11', icon: 'calendar'  },
+      { href: '/dashboard/settings/pipeline',     label: 'Config. Pipeline',      tag: '12', icon: 'cpu'       },
+      { href: '/dashboard/settings/copy',         label: 'Config. Copy',          tag: '13', icon: 'edit2'     },
+      { href: '/dashboard/settings/prompt-library',  label: 'Biblioteca de Prompts', tag: '14', icon: 'book'      },
     ],
   },
 ];
@@ -180,6 +182,33 @@ const ICONS = {
   zap: (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </svg>
+  ),
+  cpu: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <rect x="9" y="9" width="6" height="6" />
+      <line x1="9" y1="1" x2="9" y2="4" /><line x1="15" y1="1" x2="15" y2="4" />
+      <line x1="9" y1="20" x2="9" y2="23" /><line x1="15" y1="20" x2="15" y2="23" />
+      <line x1="20" y1="9" x2="23" y2="9" /><line x1="20" y1="14" x2="23" y2="14" />
+      <line x1="1" y1="9" x2="4" y2="9" /><line x1="1" y1="14" x2="4" y2="14" />
+    </svg>
+  ),
+  edit2: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+    </svg>
+  ),
+  terminal: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="4 17 10 11 4 5" />
+      <line x1="12" y1="19" x2="20" y2="19" />
+    </svg>
+  ),
+  book: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
     </svg>
   ),
   /* Ícone do botão de colapso — chevron esquerdo */
@@ -381,8 +410,8 @@ function ThreeDotMenu({ user, logout }) {
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
             }
-            label="Configurações"
-            onClick={() => { setOpen(false); router.push('/dashboard/settings'); }}
+            label="Configuracoes"
+            onClick={() => { setOpen(false); router.push('/dashboard/settings/pipeline'); }}
           />
 
           <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '4px 0' }} />

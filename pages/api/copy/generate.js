@@ -143,8 +143,13 @@ export default async function handler(req, res) {
     // Se nao tem → texto do usuario = instrucao principal
     const userMessage = buildGenerateUserMessage(promptRaiz, !!structurePromptBase);
 
-    // 7. Chama IA
-    const model = modelOverride || resolveModel('medium');
+    // 7. Chama IA — prioridade: modelOverride > copy_model (settings) > resolveModel('medium')
+    let model = modelOverride;
+    if (!model) {
+      const { getSetting } = require('../../../models/settings.model');
+      const savedModel = await getSetting(tenantId, 'copy_model');
+      model = savedModel || resolveModel('medium');
+    }
     const provider = model.toLowerCase().includes('claude') ? 'Anthropic' : 'OpenAI';
 
     let text, usage;
