@@ -35,12 +35,6 @@ const SIDEBAR_COLLAPSED = 56;  // px — sidebar recolhida (somente ícones)
 ───────────────────────────────────────────────────────────────────────────── */
 const NAV_SECTIONS = [
   {
-    category: 'PAINEL',
-    items: [
-      { href: '/dashboard',                  label: 'Dashboard',              tag: '01', icon: 'home'      },
-    ],
-  },
-  {
     category: 'FINANÇAS',
     items: [
       { href: '/dashboard/financeiro',       label: 'Financeiro',             tag: '02', icon: 'chart'     },
@@ -58,20 +52,6 @@ const NAV_SECTIONS = [
     items: [
       { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '05', icon: 'zap'       },
       { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '06', icon: 'edit'      },
-    ],
-  },
-  {
-    category: 'SOCIAL MEDIA',
-    items: [
-      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '07', icon: 'barChart'  },
-      { href: '/dashboard/content-plan',     label: 'Planejamento',           tag: '08', icon: 'list'      },
-      { href: '/dashboard/publish',          label: 'Publicação',             tag: '09', icon: 'send'      },
-    ],
-  },
-  {
-    category: 'TRÁFEGO',
-    items: [
-      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '10', icon: 'megaphone' },
     ],
   },
   {
