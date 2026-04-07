@@ -1,0 +1,424 @@
+/* ============================================================
+   clientRespostas.module.css
+   Estilos da aba Respostas (sub-tabs) na página do cliente.
+   ============================================================ */
+
+/* ── Sub-tab pills ── */
+.subTabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: rgba(10, 10, 10, 0.6);
+  border: 1px solid var(--border-default);
+  margin-bottom: 24px;
+  width: fit-content;
+}
+
+.subTab {
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.subTab:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.subTabActive {
+  color: var(--text-primary);
+  background: rgba(255, 0, 51, 0.08);
+  border-color: rgba(255, 0, 51, 0.2);
+}
+
+/* ── Resumo IA ── */
+.summaryEmpty {
+  text-align: center;
+  padding: 48px 32px;
+}
+
+.summaryIcon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  background: rgba(255, 0, 51, 0.06);
+  border: 1px solid rgba(255, 0, 51, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.summaryTitle {
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.summaryDesc {
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 440px;
+  margin: 0 auto 24px;
+}
+
+.btnPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--brand-600), var(--brand-500));
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  box-shadow: 0 0 16px rgba(255, 0, 51, 0.2);
+  transition: all 0.2s;
+}
+
+.btnPrimary:hover {
+  box-shadow: 0 0 24px rgba(255, 0, 51, 0.3);
+  transform: translateY(-1px);
+}
+
+.btnPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btnOutline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: rgba(17, 17, 17, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: all 0.2s;
+}
+
+.btnOutline:hover {
+  border-color: rgba(255, 0, 51, 0.25);
+  color: var(--text-primary);
+}
+
+.btnDangerOutline {
+  composes: btnOutline;
+  border-color: rgba(255, 0, 51, 0.2);
+  color: var(--brand-400);
+}
+
+.btnDangerOutline:hover {
+  border-color: rgba(255, 0, 51, 0.4);
+  background: rgba(255, 0, 51, 0.06);
+}
+
+/* ── Summary header ── */
+.summaryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.summaryDate {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+}
+
+/* ── Markdown render inside summary ── */
+.markdownBody {
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.markdownBody h3 {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--brand-300);
+  margin: 24px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 0, 51, 0.15);
+}
+
+.markdownBody h3:first-child {
+  margin-top: 0;
+}
+
+.markdownBody p {
+  margin-bottom: 6px;
+}
+
+.markdownBody strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* ── Accordion ── */
+.accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.accordionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.accordionLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.accordionNum {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--brand-500);
+  width: 20px;
+  text-align: center;
+}
+
+.accordionTitle {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badgeSubmitted {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  color: var(--status-success);
+}
+
+.badgePending {
+  composes: badgeSubmitted;
+  background: rgba(82, 82, 82, 0.08);
+  border-color: rgba(82, 82, 82, 0.2);
+  color: var(--text-muted);
+}
+
+.accordionChevron {
+  transition: transform 0.2s;
+}
+
+.accordionChevronOpen {
+  transform: rotate(180deg);
+}
+
+.accordionBody {
+  padding: 0 16px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* ── Field row (pergunta + resposta) ── */
+.fieldRow {
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+}
+
+.fieldLabel {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.fieldId {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: var(--brand-500);
+  margin-right: 6px;
+}
+
+.fieldValue {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  padding-left: 2px;
+}
+
+.fieldEmpty {
+  composes: fieldValue;
+  color: var(--text-muted);
+}
+
+/* ── Edit mode ── */
+.editActions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 0 0;
+}
+
+/* ── Ações tab ── */
+.actionCard {
+  padding: 24px;
+  margin-bottom: 16px;
+}
+
+.actionTitle {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.actionDesc {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.linkField {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.linkInput {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  word-break: break-all;
+}
+
+.dangerZone {
+  border-color: rgba(255, 0, 51, 0.15);
+}
+
+/* ── Confirm inline ── */
+.confirmInline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(255, 0, 51, 0.04);
+  border: 1px solid rgba(255, 0, 51, 0.12);
+  margin-top: 12px;
+}
+
+.confirmText {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+/* ── Delete modal ── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modalContent {
+  max-width: 460px;
+  width: 100%;
+  padding: 28px 24px;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.modalIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: rgba(255, 0, 51, 0.08);
+  border: 1px solid rgba(255, 0, 51, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modalButtons {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+/* ── Animation ── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fadeIn {
+  animation: fadeInUp 0.4s ease-out;
+}

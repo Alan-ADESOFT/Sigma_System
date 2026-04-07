@@ -29,7 +29,7 @@ export default async function handler(req, res) {
 
     console.log('[INFO][API:delete-responses] Deletando respostas', { clientId, sections });
 
-    // Busca a response mais recente do cliente
+    // Busca a response legada mais recente (pode não existir se for onboarding)
     const response = await queryOne(
       `SELECT r.* FROM client_form_responses r
        JOIN client_form_tokens t ON t.id = r.token_id
@@ -38,22 +38,26 @@ export default async function handler(req, res) {
       [clientId]
     );
 
-    if (!response) {
-      return res.status(404).json({ success: false, error: 'Nenhuma resposta encontrada' });
-    }
-
     if (!sections || sections.length === 0) {
-      // Apaga TUDO — respostas, resumo IA, tokens e reseta form_done
+      // Apaga TUDO — respostas legadas + onboarding + resumo IA + tokens
       await query(`DELETE FROM client_form_responses WHERE token_id IN (SELECT id FROM client_form_tokens WHERE client_id = $1)`, [clientId]);
       await query(`DELETE FROM client_form_summaries WHERE client_id = $1`, [clientId]);
       await query(`DELETE FROM client_form_tokens WHERE client_id = $1`, [clientId]);
-      await query(`UPDATE marketing_clients SET form_done = false, updated_at = now() WHERE id = $1`, [clientId]);
+      // Apaga respostas do onboarding (novo sistema)
+      await query(`DELETE FROM onboarding_stage_responses WHERE client_id = $1`, [clientId]);
+      await query(`DELETE FROM onboarding_audio_usage WHERE client_id = $1`, [clientId]);
+      await query(`DELETE FROM onboarding_notifications_log WHERE client_id = $1`, [clientId]);
+      await query(`DELETE FROM onboarding_progress WHERE client_id = $1`, [clientId]);
+      await query(`UPDATE marketing_clients SET form_done = false, onboarding_status = 'not_started', onboarding_started_at = NULL, updated_at = now() WHERE id = $1`, [clientId]);
 
-      console.log('[SUCESSO][API:delete-responses] Tudo limpo — respostas, resumo, tokens, form_done', { clientId });
+      console.log('[SUCESSO][API:delete-responses] Tudo limpo — respostas, onboarding, resumo, tokens', { clientId });
       return res.json({ success: true, message: 'Todas as respostas foram apagadas.' });
     }
 
-    // Apaga seções específicas
+    // Apaga seções específicas (legado)
+    if (!response) {
+      return res.status(404).json({ success: false, error: 'Nenhuma resposta do formulário legado encontrada para apagar parcialmente.' });
+    }
     const data = response.data || {};
     const keysToRemove = Object.keys(data).filter(key => {
       const stepNum = parseInt(key.split('.')[0], 10);

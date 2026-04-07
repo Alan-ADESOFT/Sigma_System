@@ -736,6 +736,26 @@ ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS onboarding_started_at TIM
 ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS onboarding_status     TEXT DEFAULT 'not_started';
 
 -- ============================================================
+-- RESUMO IA DO FORMULÁRIO
+-- ============================================================
+CREATE TABLE IF NOT EXISTS client_form_summaries (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    client_id       TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    summary         TEXT NOT NULL,
+    model_used      TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(client_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cfs_client_id ON client_form_summaries(client_id);
+
+-- Índice para upsert eficiente em onboarding_stage_responses (client_id + stage_number)
+-- Já existe como UNIQUE constraint, mas garantimos o índice explícito
+CREATE UNIQUE INDEX IF NOT EXISTS idx_osr_client_stage
+  ON onboarding_stage_responses (client_id, stage_number);
+
+-- ============================================================
 -- CLEANUP (tabelas descontinuadas)
 -- ============================================================
 DROP TABLE IF EXISTS stage_quality_scores;
@@ -761,7 +781,8 @@ BEGIN
         'client_form_tokens','client_form_responses',
         'copy_structures','copy_sessions',
         'onboarding_stages_config','onboarding_rest_days_config',
-        'onboarding_progress','onboarding_stage_responses'
+        'onboarding_progress','onboarding_stage_responses',
+        'client_form_summaries'
     ])
     LOOP
         EXECUTE format('
@@ -772,3 +793,35 @@ BEGIN
         ', t, t, t, t);
     END LOOP;
 END $$;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- SPRINT 1 — Chaves de configuração adicionadas (tabela: settings)
+-- Não requerem migration estrutural — tabela settings é key-value por design.
+-- ─────────────────────────────────────────────────────────────────────────────
+-- pipeline_model_weak          → model ID para agentes nível weak
+-- pipeline_model_medium        → model ID para agentes nível medium
+-- pipeline_model_strong        → model ID para agentes nível strong
+-- pipeline_model_search        → model ID para agentes de pesquisa web
+-- pipeline_fallback_enabled    → 'true' | 'false' — ativa fallback automático
+-- pipeline_fallback_model      → model ID do fallback (ex: 'gpt-4o-mini')
+-- copy_model                   → model ID padrão do gerador de copy
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- SPRINT 1.5 — Biblioteca de Prompts
+-- Nenhuma migration estrutural necessária.
+-- Usa estruturas existentes:
+--   · ai_knowledge_base: overrides dos agentes do pipeline
+--     (category='prompt_override', key=agentName, client_id IS NULL)
+--   · settings: overrides dos prompts de copy, estruturas e utilitários
+--     (key='prompt_library_{id}', ex: 'prompt_library_copy_generate')
+--
+-- Para listar todos os prompts customizados de um tenant:
+-- SELECT 'pipeline' as source, key as id, LEFT(value,80) as preview
+--   FROM ai_knowledge_base
+--   WHERE tenant_id='<id>' AND category='prompt_override' AND client_id IS NULL
+-- UNION ALL
+-- SELECT 'settings' as source, key as id, LEFT(value,80) as preview
+--   FROM settings
+--   WHERE tenant_id='<id>' AND key LIKE 'prompt_library_%';
+-- ─────────────────────────────────────────────────────────────────────────────
