@@ -248,7 +248,16 @@ CREATE TABLE IF NOT EXISTS client_tasks (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_client_tasks_client ON client_tasks(client_id);
+-- Sprint Jarvis: campos multi-usuário (atribuição + autoria + descrição)
+ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS assigned_to  TEXT REFERENCES tenants(id) ON DELETE SET NULL;
+ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS created_by   TEXT REFERENCES tenants(id) ON DELETE SET NULL;
+ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS description  TEXT;
+ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS tenant_id    TEXT REFERENCES tenants(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_client_tasks_client   ON client_tasks(client_id);
+CREATE INDEX IF NOT EXISTS idx_client_tasks_assigned ON client_tasks(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_client_tasks_created  ON client_tasks(created_by);
+CREATE INDEX IF NOT EXISTS idx_client_tasks_tenant   ON client_tasks(tenant_id);
 
 -- ============================================================
 -- 12. CLIENT_ATTACHMENTS (anexos por cliente)
@@ -814,6 +823,26 @@ CREATE INDEX IF NOT EXISTS idx_ig_posts_client    ON instagram_scheduled_posts(c
 CREATE INDEX IF NOT EXISTS idx_ig_posts_scheduled ON instagram_scheduled_posts(scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_ig_posts_status    ON instagram_scheduled_posts(status);
 CREATE INDEX IF NOT EXISTS idx_ig_posts_due       ON instagram_scheduled_posts(status, scheduled_at);
+
+-- ============================================================
+-- 38. JARVIS_USAGE_LOG (histórico + base do rate limit do Jarvis)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS jarvis_usage_log (
+    id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id      TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    command      TEXT NOT NULL,
+    input_text   TEXT,
+    response     TEXT,
+    duration_ms  INTEGER,
+    success      BOOLEAN NOT NULL DEFAULT true,
+    error        TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_jarvis_log_user    ON jarvis_usage_log(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_jarvis_log_tenant  ON jarvis_usage_log(tenant_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_jarvis_log_command ON jarvis_usage_log(command, created_at);
 
 -- ============================================================
 -- CLEANUP (tabelas descontinuadas)

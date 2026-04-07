@@ -22,6 +22,7 @@ import { useRouter } from 'next/router';
 import { useState, useEffect, useRef } from 'react';
 import styles from '../assets/style/dashboard.module.css';
 import { useAuth } from '../hooks/useAuth';
+import JarvisOrb from './JarvisOrb';
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Constantes de layout
@@ -57,6 +58,7 @@ const NAV_SECTIONS = [
     category: 'AGENTES DE IA',
     items: [
       { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '05', icon: 'zap'       },
+      { href: '/dashboard/jarvis',           label: 'J.A.R.V.I.S',           tag: '05b', icon: 'bot'      },
       { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '06', icon: 'edit'      },
     ],
   },
@@ -81,6 +83,7 @@ const NAV_SECTIONS = [
       { href: '/dashboard/settings/pipeline',     label: 'Config. Pipeline',      tag: '12', icon: 'cpu'       },
       { href: '/dashboard/settings/copy',         label: 'Config. Copy',          tag: '13', icon: 'edit2'     },
       { href: '/dashboard/settings/prompt-library',  label: 'Biblioteca de Prompts', tag: '14', icon: 'book'      },
+      { href: '/dashboard/settings/jarvis',          label: 'Config. Jarvis',        tag: '16', icon: 'bot'       },
     ],
   },
 ];
@@ -209,6 +212,14 @@ const ICONS = {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    </svg>
+  ),
+  /* Ícone bot — Jarvis */
+  bot: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="10" rx="2" />
+      <circle cx="9" cy="16" r="1" /><circle cx="15" cy="16" r="1" />
+      <path d="M12 2v4" /><path d="M8 7h8" />
     </svg>
   ),
   /* Ícone do botão de colapso — chevron esquerdo */
@@ -1129,6 +1140,9 @@ export default function DashboardLayout({ children, activeTab }) {
         <Topbar activeTab={activeTab} user={user} logout={logout} />
         {children}
       </main>
+
+      {/* ── ORB flutuante do Jarvis — aparece em todas as páginas ── */}
+      <JarvisOrb />
     </div>
   );
 }
