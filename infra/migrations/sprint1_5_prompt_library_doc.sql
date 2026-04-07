@@ -1,2 +1,0 @@
--- Sprint 1.5 — Biblioteca de Prompts — Documentação
--- Sem alteração de schema. Ver comentário em schema.sql.

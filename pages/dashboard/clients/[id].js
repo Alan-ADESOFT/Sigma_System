@@ -26,6 +26,7 @@ const TABS = [
   { key: 'financeiro', label: 'Financeiro',    icon: 'M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' },
   { key: 'observacoes',label: 'Observações',   icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' },
   { key: 'respostas',  label: 'Respostas',     icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
+  { key: 'instagram',  label: 'Instagram',     icon: 'M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37zM7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm10 3.5a1 1 0 1 0 1 1 1 1 0 0 0-1-1z' },
 ];
 
 const STAGES_META = [
@@ -2675,6 +2676,439 @@ function TabFinanceiro({ clientId, clientServices }) {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   TAB INSTAGRAM — Conexão + mini dashboard
+═══════════════════════════════════════════════════════════ */
+function fmtNumber(n) {
+  if (n == null) return '0';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'k';
+  return String(n);
+}
+
+function IGMetricCard({ label, value, icon }) {
+  return (
+    <div className="glass-card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)' }}>
+        {icon}
+        <span style={{
+          fontFamily: 'var(--font-mono)', fontSize: '0.58rem', fontWeight: 600,
+          letterSpacing: '0.1em', textTransform: 'uppercase',
+        }}>
+          {label}
+        </span>
+      </div>
+      <div style={{
+        fontFamily: 'var(--font-mono)', fontSize: '1.6rem', fontWeight: 700,
+        color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums',
+      }}>
+        {fmtNumber(value)}
+      </div>
+    </div>
+  );
+}
+
+function MiniIcon({ d }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d={d} />
+    </svg>
+  );
+}
+
+function TabInstagram({ clientId }) {
+  const { notify } = useNotification();
+  const [account, setAccount]       = useState(null);
+  const [insights, setInsights]     = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [loadingInsights, setLoadingInsights] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+
+  const loadAccount = useCallback(async () => {
+    if (!clientId) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/instagram/account?clientId=${clientId}`);
+      const data = await res.json();
+      if (data.success) setAccount(data.account);
+      else notify('Erro ao carregar conta Instagram', 'error');
+    } catch (err) {
+      console.error('[ERRO][TabInstagram] loadAccount', err);
+      notify('Falha ao carregar conta', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [clientId]);
+
+  const loadInsights = useCallback(async () => {
+    if (!clientId) return;
+    setLoadingInsights(true);
+    try {
+      const res = await fetch(`/api/instagram/insights?clientId=${clientId}&period=month`);
+      const data = await res.json();
+      if (data.success) setInsights(data);
+      else if (res.status !== 404) notify(data.error || 'Erro ao carregar métricas', 'error');
+    } catch (err) {
+      console.error('[ERRO][TabInstagram] loadInsights', err);
+    } finally {
+      setLoadingInsights(false);
+    }
+  }, [clientId]);
+
+  useEffect(() => { loadAccount(); }, [loadAccount]);
+  useEffect(() => { if (account) loadInsights(); }, [account, loadInsights]);
+
+  // Detecta retorno do callback OAuth via query params (fallback caso o popup
+  // não consiga fechar e acabe redirecionando o usuário pra cá direto)
+  const router = useRouter();
+  useEffect(() => {
+    if (!router.isReady) return;
+    const { connected, error } = router.query;
+    if (connected === 'true') {
+      notify('Instagram conectado com sucesso', 'success');
+      loadAccount();
+      const { connected: _c, error: _e, ...rest } = router.query;
+      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+    } else if (connected === 'false' && error) {
+      notify(`Falha na conexão: ${error}`, 'error');
+      const { connected: _c, error: _e, ...rest } = router.query;
+      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+    }
+  }, [router.isReady, router.query.connected]);
+
+  // Listener de postMessage do popup OAuth
+  useEffect(() => {
+    function onMessage(ev) {
+      // Em dev local não dá pra validar origin estritamente (popup pode estar
+      // num host diferente do app — ngrok vs localhost), então conferimos só o type
+      const data = ev.data;
+      if (!data || data.type !== 'ig-oauth-result') return;
+      if (data.success) {
+        notify('Instagram conectado com sucesso', 'success');
+        loadAccount();
+      } else {
+        notify(`Falha na conexão: ${data.error || 'erro'}`, 'error');
+      }
+      setConnecting(false);
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [loadAccount]);
+
+  async function handleConnect() {
+    setConnecting(true);
+    try {
+      const res = await fetch(`/api/instagram/auth-url?clientId=${clientId}`);
+      const data = await res.json();
+      if (!data.success) {
+        notify(data.error || 'Falha ao iniciar OAuth', 'error');
+        setConnecting(false);
+        return;
+      }
+      // Abre numa popup centralizada — usuário não perde o contexto da página
+      const w = 600, h = 720;
+      const left = window.screenX + (window.outerWidth - w) / 2;
+      const top = window.screenY + (window.outerHeight - h) / 2;
+      const popup = window.open(
+        data.authUrl,
+        'ig_oauth',
+        `width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no,location=yes,status=no`
+      );
+      if (!popup) {
+        notify('Pop-up bloqueado. Permita pop-ups deste site e tente novamente.', 'error');
+        setConnecting(false);
+        return;
+      }
+      // Polling pra detectar fechamento manual da popup
+      const checkClosed = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(checkClosed);
+          // Se ainda está "connecting" depois do fechamento, libera o botão
+          // (a notificação de sucesso/erro vem via postMessage, então só
+          // chegamos aqui se o usuário fechou sem completar)
+          setConnecting((curr) => curr ? false : curr);
+        }
+      }, 600);
+    } catch (err) {
+      notify('Erro ao iniciar conexão', 'error');
+      setConnecting(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    try {
+      const res = await fetch(`/api/instagram/account?clientId=${clientId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        notify('Instagram desconectado', 'success');
+        setAccount(null);
+        setInsights(null);
+        setConfirmDisconnect(false);
+      } else {
+        notify(data.error || 'Falha ao desconectar', 'error');
+      }
+    } catch (err) {
+      notify('Erro ao desconectar', 'error');
+    }
+  }
+
+  if (loading) {
+    return (
+      <div style={{ padding: '40px 0', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+        // carregando conta...
+      </div>
+    );
+  }
+
+  /* ─── ESTADO: NÃO CONECTADO ─── */
+  if (!account) {
+    return (
+      <div className="animate-fade-in-up">
+        <HowItWorks>
+          Conecte o Instagram deste cliente para acessar métricas em tempo real, planejar
+          conteúdo e publicar diretamente. Suportado: contas Business e Creator vinculadas
+          a uma Facebook Page.
+        </HowItWorks>
+
+        <div className="glass-card" style={{ padding: 36 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18 }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: 12,
+              background: 'linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+              </svg>
+            </div>
+
+            <div style={{ flex: 1 }}>
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700,
+                color: 'var(--text-primary)', marginBottom: 4,
+              }}>
+                Instagram
+              </div>
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+                color: 'var(--text-muted)', letterSpacing: '0.04em', marginBottom: 18,
+              }}>
+                NENHUMA CONTA CONECTADA
+              </div>
+              <div style={{
+                fontSize: 13, color: 'var(--text-secondary)',
+                lineHeight: 1.6, maxWidth: 520, marginBottom: 22,
+              }}>
+                Conecte o Instagram deste cliente para acessar métricas, planejar e publicar conteúdo.
+              </div>
+
+              <button
+                onClick={handleConnect}
+                disabled={connecting}
+                className="sigma-btn-primary"
+              >
+                {connecting ? 'CONECTANDO...' : 'CONECTAR INSTAGRAM'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ─── ESTADO: CONECTADO ─── */
+  const ig = insights?.insights || {};
+  const profile = insights?.profile || {};
+  const recent = insights?.recentMedia || [];
+
+  // Para o gráfico de barras: usa likes + comments por post
+  const maxBarValue = recent.reduce((max, p) =>
+    Math.max(max, (p.like_count || 0) + (p.comments_count || 0)), 0) || 1;
+
+  return (
+    <div className="animate-fade-in-up">
+      {/* CARD DE CONEXÃO */}
+      <div className="glass-card" style={{ padding: 24, marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          {account.profilePictureUrl ? (
+            <img
+              src={account.profilePictureUrl}
+              alt={account.username}
+              style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', border: '1px solid rgba(255,0,51,0.25)' }}
+            />
+          ) : (
+            <div style={{
+              width: 56, height: 56, borderRadius: '50%',
+              background: 'rgba(255,0,51,0.1)', border: '1px solid rgba(255,0,51,0.25)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'var(--font-mono)', color: '#ff6680', fontSize: 18, fontWeight: 700,
+            }}>
+              {(account.username || '?').slice(0, 2).toUpperCase()}
+            </div>
+          )}
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <span style={{
+                fontFamily: 'var(--font-mono)', fontSize: '0.95rem', fontWeight: 700,
+                color: 'var(--text-primary)',
+              }}>
+                @{account.username || '—'}
+              </span>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '2px 8px', borderRadius: 4,
+                background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)',
+                fontFamily: 'var(--font-mono)', fontSize: '0.55rem', fontWeight: 600,
+                color: '#22c55e', letterSpacing: '0.08em',
+              }}>
+                <span style={{
+                  width: 5, height: 5, borderRadius: '50%', background: '#22c55e',
+                  boxShadow: '0 0 4px rgba(34,197,94,0.6)',
+                }} />
+                CONECTADO
+              </span>
+            </div>
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+              color: 'var(--text-muted)', letterSpacing: '0.04em',
+            }}>
+              {fmtNumber(account.followersCount)} seguidores · {fmtNumber(account.mediaCount)} posts
+              {account.connectedAt && (
+                <span> · conectado em {new Date(account.connectedAt).toLocaleDateString('pt-BR')}</span>
+              )}
+            </div>
+          </div>
+
+          {!confirmDisconnect ? (
+            <button
+              onClick={() => setConfirmDisconnect(true)}
+              className="btn btn-secondary"
+              style={{ flexShrink: 0 }}
+            >
+              Desconectar
+            </button>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', flexShrink: 0 }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-secondary)' }}>
+                Confirmar desconexão?
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => setConfirmDisconnect(false)} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: 11 }}>
+                  Cancelar
+                </button>
+                <button onClick={handleDisconnect} className="btn btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>
+                  Confirmar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* MINI DASHBOARD */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16,
+      }}>
+        <div className="label-sm">// VISÃO GERAL</div>
+        {loadingInsights && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+            atualizando...
+          </span>
+        )}
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+        gap: 12, marginBottom: 28,
+      }}>
+        <IGMetricCard label="Seguidores"      value={profile.followers_count ?? account.followersCount} icon={<MiniIcon d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />} />
+        <IGMetricCard label="Seguindo"        value={profile.follows_count ?? account.followsCount}     icon={<MiniIcon d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M8.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM20 8v6M23 11h-6" />} />
+        <IGMetricCard label="Posts"           value={profile.media_count ?? account.mediaCount}         icon={<MiniIcon d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 22V12h6v10" />} />
+        <IGMetricCard label="Alcance 28d"     value={ig.reach || 0}            icon={<MiniIcon d="M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4 12 14.01l-3-3" />} />
+        <IGMetricCard label="Views 28d"       value={ig.views || 0}            icon={<MiniIcon d="M5 3l14 9-14 9V3z" />} />
+        <IGMetricCard label="Interações 28d"  value={ig.total_interactions || 0} icon={<MiniIcon d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />} />
+        <IGMetricCard label="Contas Engajadas" value={ig.accounts_engaged || 0} icon={<MiniIcon d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />} />
+        <IGMetricCard label="Visitas Perfil"  value={ig.profile_views || 0}    icon={<MiniIcon d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />} />
+      </div>
+
+      {/* GRÁFICO DE POSTS RECENTES */}
+      {recent.length > 0 && (
+        <div className="glass-card" style={{ padding: 20, marginBottom: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <SectionTitle>// POSTS RECENTES (likes + comentários)</SectionTitle>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+              {recent.length} de {profile.media_count ?? account.mediaCount} posts
+            </span>
+          </div>
+
+          <div style={{
+            display: 'flex', alignItems: 'flex-end', gap: 8, height: 140,
+            paddingBottom: 4, marginTop: 12,
+          }}>
+            {recent.slice(0, Math.min(recent.length, 10)).reverse().map((post) => {
+              const total = (post.like_count || 0) + (post.comments_count || 0);
+              const heightPct = Math.max(8, (total / maxBarValue) * 100);
+              const date = post.timestamp ? new Date(post.timestamp) : null;
+              return (
+                <div key={post.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }} title={`${total} interações · ${date?.toLocaleDateString('pt-BR') || ''}`}>
+                  <div style={{
+                    width: '100%', maxWidth: 60, height: `${heightPct}%`,
+                    background: 'linear-gradient(180deg, rgba(255,0,51,0.55), rgba(255,0,51,0.18))',
+                    border: '1px solid rgba(255,0,51,0.3)',
+                    borderRadius: '4px 4px 0 0',
+                    minHeight: 8,
+                  }} />
+                  <div style={{
+                    fontFamily: 'var(--font-mono)', fontSize: '0.55rem',
+                    color: 'var(--text-muted)',
+                  }}>
+                    {date ? `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}` : '—'}
+                  </div>
+                  <div style={{
+                    fontFamily: 'var(--font-mono)', fontSize: '0.55rem',
+                    color: 'var(--text-secondary)', fontWeight: 700,
+                  }}>
+                    {total}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* RODAPÉ */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '12px 16px', borderRadius: 8,
+        background: 'rgba(10,10,10,0.5)', border: '1px solid rgba(255,255,255,0.04)',
+      }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+          color: 'var(--text-muted)', letterSpacing: '0.04em',
+        }}>
+          Dados em tempo real via API da Meta · cache de 1h
+        </div>
+        <Link href="/dashboard/social-dashboard" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+          color: '#ff6680', textDecoration: 'none', letterSpacing: '0.04em',
+        }}>
+          Ver dashboard completo
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+          </svg>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
    PÁGINA PRINCIPAL
 ═══════════════════════════════════════════════════════════ */
 export default function ClientInfoPage() {
@@ -2712,6 +3146,15 @@ export default function ClientInfoPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Sincroniza activeTab com ?tab=... da URL (usado pelo callback do OAuth)
+  useEffect(() => {
+    if (!router.isReady) return;
+    const t = router.query.tab;
+    if (typeof t === 'string' && TABS.some(x => x.key === t)) {
+      setActiveTab(t);
+    }
+  }, [router.isReady, router.query.tab]);
 
   function handleStageUpdated(key, updated) {
     setStages(p => p.map(s => s.stage_key === key ? { ...s, ...updated } : s));
@@ -2829,6 +3272,7 @@ export default function ClientInfoPage() {
         {activeTab === 'financeiro' && <TabFinanceiro clientId={client.id} clientServices={client.services || []} />}
         {activeTab === 'observacoes'&& <TabObservacoes clientId={client.id} />}
         {activeTab === 'respostas'  && <TabRespostas clientId={client.id} client={client} />}
+        {activeTab === 'instagram'  && <TabInstagram clientId={client.id} />}
       </div>
 
       {/* Pipeline Modal */}

@@ -35,6 +35,12 @@ const SIDEBAR_COLLAPSED = 56;  // px — sidebar recolhida (somente ícones)
 ───────────────────────────────────────────────────────────────────────────── */
 const NAV_SECTIONS = [
   {
+    category: 'PAINEL',
+    items: [
+      { href: '/dashboard',                  label: 'Dashboard',              tag: '01', icon: 'home'      },
+    ],
+  },
+  {
     category: 'FINANÇAS',
     items: [
       { href: '/dashboard/financeiro',       label: 'Financeiro',             tag: '02', icon: 'chart'     },
@@ -52,6 +58,20 @@ const NAV_SECTIONS = [
     items: [
       { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '05', icon: 'zap'       },
       { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '06', icon: 'edit'      },
+    ],
+  },
+  {
+    category: 'SOCIAL MEDIA',
+    items: [
+      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '07', icon: 'barChart'  },
+      { href: '/dashboard/content-plan',     label: 'Planejamento',           tag: '08', icon: 'list'      },
+      { href: '/dashboard/publish',          label: 'Publicar Agora',         tag: '09', icon: 'send'      },
+    ],
+  },
+  {
+    category: 'TRÁFEGO',
+    items: [
+      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '10', icon: 'megaphone' },
     ],
   },
   {
@@ -509,30 +529,44 @@ function NotificationBell() {
 
   // Ícone de tipo da notificação
   function typeIcon(type) {
-    if (type === 'form_submitted')  return '✓';
-    if (type === 'form_started')    return '✏';
-    if (type === 'form_sent')       return '📋';
-    if (type === 'token_expired')   return '⏱';
-    if (type === 'pipeline_done')   return '✓';
-    if (type === 'pipeline_failed') return '✕';
-    if (type === 'client_created')  return '+';
-    if (type === 'stage_done')      return '✓';
-    if (type === 'database_reset')  return '⟳';
-    if (type === 'export_generated')return '↓';
+    if (type === 'form_submitted')               return '✓';
+    if (type === 'form_started')                 return '✏';
+    if (type === 'form_sent')                    return '📋';
+    if (type === 'token_expired')                return '⏱';
+    if (type === 'pipeline_done')                return '✓';
+    if (type === 'pipeline_failed')              return '✕';
+    if (type === 'client_created')               return '+';
+    if (type === 'stage_done')                   return '✓';
+    if (type === 'database_reset')               return '⟳';
+    if (type === 'export_generated')             return '↓';
+    // Instagram
+    if (type === 'instagram_connected')          return '◉';
+    if (type === 'instagram_disconnected')       return '⊘';
+    if (type === 'instagram_post_published')     return '✓';
+    if (type === 'instagram_post_failed')        return '✕';
+    if (type === 'instagram_token_expiring')     return '⏱';
+    if (type === 'instagram_token_refresh_failed') return '⚠';
     return '●';
   }
 
   // Cor do tipo
   function typeColor(type) {
-    if (type === 'form_submitted')  return 'var(--success)';
-    if (type === 'form_started')    return 'var(--warning)';
-    if (type === 'token_expired')   return 'var(--error)';
-    if (type === 'pipeline_done')   return 'var(--success)';
-    if (type === 'pipeline_failed') return 'var(--error)';
-    if (type === 'client_created')  return 'var(--info)';
-    if (type === 'stage_done')      return 'var(--success)';
-    if (type === 'database_reset')  return 'var(--warning)';
-    if (type === 'export_generated')return 'var(--info)';
+    if (type === 'form_submitted')               return 'var(--success)';
+    if (type === 'form_started')                 return 'var(--warning)';
+    if (type === 'token_expired')                return 'var(--error)';
+    if (type === 'pipeline_done')                return 'var(--success)';
+    if (type === 'pipeline_failed')              return 'var(--error)';
+    if (type === 'client_created')               return 'var(--info)';
+    if (type === 'stage_done')                   return 'var(--success)';
+    if (type === 'database_reset')               return 'var(--warning)';
+    if (type === 'export_generated')             return 'var(--info)';
+    // Instagram
+    if (type === 'instagram_connected')          return 'var(--info)';
+    if (type === 'instagram_disconnected')       return 'var(--warning)';
+    if (type === 'instagram_post_published')     return 'var(--success)';
+    if (type === 'instagram_post_failed')        return 'var(--error)';
+    if (type === 'instagram_token_expiring')     return 'var(--warning)';
+    if (type === 'instagram_token_refresh_failed') return 'var(--error)';
     return 'var(--info)';
   }
 
@@ -991,9 +1025,11 @@ export default function DashboardLayout({ children, activeTab }) {
 
               {/* Links individuais da seção */}
               {section.items.map(item => {
+                // Match exato OU prefixo seguido de "/" — evita que /dashboard/social
+                // case com /dashboard/social-dashboard
                 const isActive = item.href === '/dashboard'
                   ? router.pathname === '/dashboard'
-                  : router.pathname.startsWith(item.href);
+                  : router.pathname === item.href || router.pathname.startsWith(item.href + '/');
 
                 return (
                   <Link

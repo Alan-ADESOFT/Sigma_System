@@ -1,710 +1,333 @@
-import { useState, useEffect } from 'react';
+/**
+ * pages/dashboard/publish.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Publicar Agora — publica imediatamente no Instagram do cliente selecionado.
+ *
+ * Layout: 2 colunas — formulário + preview de smartphone em tempo real.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import DashboardLayout from '../../components/DashboardLayout';
+import ClientSelect from '../../components/ClientSelect';
+import InstagramPreview from '../../components/InstagramPreview';
+import MediaUploader from '../../components/MediaUploader';
 import { useNotification } from '../../context/NotificationContext';
+import styles from '../../assets/style/publishNow.module.css';
 
-const CONTENT_TYPES = [
-  { value: 'post', label: 'Post (Imagem)' },
-  { value: 'carousel', label: 'Carrossel' },
-  { value: 'reel', label: 'Reel (Video)' },
-  { value: 'story', label: 'Story' },
+const MEDIA_TYPES = [
+  { value: 'IMAGE',    label: 'Foto' },
+  { value: 'REELS',    label: 'Reels' },
+  { value: 'CAROUSEL', label: 'Carrossel' },
+  { value: 'STORIES',  label: 'Stories' },
 ];
 
-const CONTENT_STATUSES = [
-  { value: 'idea', label: 'Ideia', color: '#9CA3AF' },
-  { value: 'draft', label: 'Rascunho', color: '#F59E0B' },
-  { value: 'approved', label: 'Aprovado', color: '#10B981' },
-  { value: 'scheduled', label: 'Agendado', color: '#6366F1' },
-  { value: 'published', label: 'Publicado', color: '#3B82F6' },
-  { value: 'failed', label: 'Falhou', color: '#EF4444' },
-];
-
-export default function PublishPage() {
+export default function PublishNowPage() {
   const { notify } = useNotification();
-  const [contents, setContents] = useState([]);
-  const [accounts, setAccounts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [publishing, setPublishing] = useState(false);
+  const [clients, setClients] = useState([]);
+  const [loadingClients, setLoadingClients] = useState(true);
+  const [selectedClientId, setSelectedClientId] = useState('');
 
-  // Modal salvar conteudo
-  const [showForm, setShowForm] = useState(false);
+  const [account, setAccount] = useState(null);
+  const [loadingAccount, setLoadingAccount] = useState(false);
 
-  // Painel publicar agora (direto, sem salvar no banco)
-  const [quickPublish, setQuickPublish] = useState({
-    accountId: '',
-    caption: '',
-    imageUrl: '',
-    localPath: '',
-    uploading: false,
-    status: null, // null | 'publishing' | 'success' | 'error'
-    message: '',
-  });
+  const [mediaType, setMediaType] = useState('IMAGE');
+  // Estado unificado: arrays de objetos { url, kind, mime, size }
+  const [imageMedia, setImageMedia] = useState([]);
+  const [videoMedia, setVideoMedia] = useState([]);
+  const [caption, setCaption] = useState('');
 
-  // Form salvar conteudo
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    type: 'post',
-    status: 'draft',
-    hashtags: '',
-    accountId: '',
-    scheduledAt: '',
-    mediaUrls: [],
-  });
+  const [stage, setStage] = useState('idle'); // idle | sending | processing | success | error
+  const [resultLink, setResultLink] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
+  /* Carrega clientes */
   useEffect(() => {
-    loadData();
+    fetch('/api/clients')
+      .then((r) => r.json())
+      .then((d) => { if (d.success) setClients(d.clients || []); })
+      .catch(() => notify('Erro ao carregar clientes', 'error'))
+      .finally(() => setLoadingClients(false));
   }, []);
 
-  async function loadData() {
-    console.log('[INFO][Frontend:Publish] Carregando dados (conteúdos + contas)');
-    try {
-      const [contentsRes, accountsRes] = await Promise.all([
-        fetch('/api/contents'),
-        fetch('/api/accounts'),
-      ]);
-      const contentsData = await contentsRes.json();
-      const accountsData = await accountsRes.json();
-
-      if (contentsData.success) setContents(contentsData.contents || []);
-      if (accountsData.success) {
-        const accs = accountsData.accounts || [];
-        setAccounts(accs);
-        if (accs.length > 0) {
-          const firstId = accs[0].id;
-          setFormData((prev) => ({ ...prev, accountId: firstId }));
-          setQuickPublish((prev) => ({ ...prev, accountId: firstId }));
-        }
-      }
-      console.log('[SUCESSO][Frontend:Publish] Dados carregados', { contents: (contentsData.contents || []).length, accounts: (accountsData.accounts || []).length });
-    } catch (err) {
-      console.error('[ERRO][Frontend:Publish] Erro ao carregar dados', { error: err.message });
-      notify('Erro ao carregar dados', 'error');
-    } finally {
-      setLoading(false);
+  /* Carrega conta ao trocar cliente */
+  const loadAccount = useCallback(async () => {
+    if (!selectedClientId) {
+      setAccount(null);
+      return;
     }
-  }
-
-  // Upload de imagem para publicação rápida
-  async function handleQuickUpload(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setQuickPublish((prev) => ({ ...prev, uploading: true, imageUrl: '', localPath: '' }));
-    console.log('[INFO][Frontend:Publish] Fazendo upload de imagem para publicação rápida', { fileName: file.name, fileSize: file.size });
+    setLoadingAccount(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const res = await fetch(`/api/instagram/account?clientId=${selectedClientId}`);
       const data = await res.json();
-      if (data.success) {
-        console.log('[SUCESSO][Frontend:Publish] Upload concluído', { url: data.url });
-        notify('Imagem enviada com sucesso!', 'success');
-        setQuickPublish((prev) => ({
-          ...prev,
-          imageUrl: data.url,       // URL absoluta para a Meta
-          localPath: data.localPath, // URL relativa para preview local
-          uploading: false,
-        }));
-      } else {
-        console.error('[ERRO][Frontend:Publish] Falha no upload', { error: data.error || 'erro desconhecido' });
-        notify('Falha no upload: ' + (data.error || 'erro desconhecido'), 'error');
-        setQuickPublish((prev) => ({ ...prev, uploading: false }));
-      }
-    } catch (err) {
-      console.error('[ERRO][Frontend:Publish] Erro no upload', { error: err.message });
-      notify('Erro no upload: ' + err.message, 'error');
-      setQuickPublish((prev) => ({ ...prev, uploading: false }));
+      if (data.success) setAccount(data.account);
+    } catch {
+      notify('Falha ao carregar conta', 'error');
+    } finally {
+      setLoadingAccount(false);
     }
+  }, [selectedClientId]);
+
+  useEffect(() => { loadAccount(); }, [loadAccount]);
+
+  /* Reset ao trocar tipo */
+  function handleTypeChange(t) {
+    setMediaType(t);
+    if (t === 'REELS') setImageMedia([]);
+    if (t === 'IMAGE' || t === 'CAROUSEL') setVideoMedia([]);
   }
 
-  // Publicar agora diretamente no Instagram
-  async function handleQuickPublish() {
-    const { accountId, caption, imageUrl } = quickPublish;
+  function reset() {
+    setStage('idle');
+    setResultLink('');
+    setErrorMsg('');
+    setImageMedia([]);
+    setVideoMedia([]);
+    setCaption('');
+  }
 
-    if (!accountId) return alert('Selecione uma conta');
-    if (!imageUrl) return alert('Faca o upload de uma imagem primeiro');
-
-    const account = accounts.find((a) => a.id === accountId);
-    if (!account?.oauthToken) {
-      return alert('Conta sem token Meta. Conecte o Instagram primeiro em Configuracoes.');
+  async function handlePublish() {
+    if (!account) {
+      notify('Cliente não tem Instagram conectado', 'error');
+      return;
     }
 
-    setQuickPublish((prev) => ({ ...prev, status: 'publishing', message: '' }));
-    console.log('[INFO][Frontend:Publish] Publicando diretamente no Instagram', { accountId, imageUrl });
+    // Validação client-side
+    const errs = [];
+    if (mediaType === 'IMAGE' && imageMedia.length === 0) errs.push('Adicione uma imagem');
+    if (mediaType === 'REELS' && videoMedia.length === 0) errs.push('Adicione um vídeo');
+    if (mediaType === 'CAROUSEL' && imageMedia.length < 2) errs.push('Carrossel exige 2+ imagens');
+    if (mediaType === 'STORIES' && imageMedia.length === 0 && videoMedia.length === 0) {
+      errs.push('Adicione uma mídia para o Stories');
+    }
+    if (caption.length > 2200) errs.push('Legenda excede 2200 caracteres');
+    if (errs.length > 0) {
+      errs.forEach((e) => notify(e, 'error'));
+      return;
+    }
+
+    setStage('sending');
+    setErrorMsg('');
+    notify('Enviando para o Instagram', 'info');
+
+    const imageUrls = imageMedia.map((m) => m.url);
+    const videoUrl = videoMedia[0]?.url;
 
     try {
-      const res = await fetch('/api/meta-publish', {
+      const res = await fetch('/api/instagram/publish-now', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          token: account.oauthToken,
-          imageUrl,
-          caption: caption || '',
+          clientId: selectedClientId,
+          mediaType,
+          imageUrl: imageUrls[0] || undefined,
+          videoUrl: videoUrl || undefined,
+          imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
+          caption,
         }),
       });
+
+      setStage('processing');
       const data = await res.json();
 
       if (data.success) {
-        console.log('[SUCESSO][Frontend:Publish] Publicado no Instagram', { postId: data.id || 'ok' });
-        notify('Publicado no Instagram com sucesso!', 'success');
-        setQuickPublish((prev) => ({
-          ...prev,
-          status: 'success',
-          message: `Publicado! ID: ${data.id || 'ok'}`,
-        }));
+        setStage('success');
+        setResultLink(data.permalink || '');
+        notify('Publicado com sucesso', 'success');
       } else {
-        console.error('[ERRO][Frontend:Publish] Falha ao publicar no Instagram', { error: data.error || 'Erro desconhecido' });
-        notify('Erro ao publicar: ' + (data.error || 'Erro desconhecido'), 'error');
-        setQuickPublish((prev) => ({
-          ...prev,
-          status: 'error',
-          message: data.error || 'Erro desconhecido',
-        }));
+        setStage('error');
+        setErrorMsg(data.error || 'Erro desconhecido');
+        notify(data.error || 'Erro ao publicar', 'error');
       }
     } catch (err) {
-      console.error('[ERRO][Frontend:Publish] Erro ao publicar no Instagram', { error: err.message });
-      notify('Erro ao publicar: ' + err.message, 'error');
-      setQuickPublish((prev) => ({
-        ...prev,
-        status: 'error',
-        message: err.message,
-      }));
+      setStage('error');
+      setErrorMsg(err.message);
+      notify('Erro ao publicar', 'error');
     }
   }
 
-  function resetQuickPublish() {
-    setQuickPublish((prev) => ({
-      ...prev,
-      caption: '',
-      imageUrl: '',
-      localPath: '',
-      status: null,
-      message: '',
-    }));
-  }
-
-  // Upload no formulario de salvar conteudo
-  async function handleFormUpload(e) {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
-
-    console.log('[INFO][Frontend:Publish] Fazendo upload de mídia para formulário', { fileCount: files.length });
-    const uploadedUrls = [];
-    for (const file of files) {
-      const fd = new FormData();
-      fd.append('file', file);
-      try {
-        const res = await fetch('/api/upload', { method: 'POST', body: fd });
-        const data = await res.json();
-        if (data.success) {
-          console.log('[SUCESSO][Frontend:Publish] Upload de mídia concluído', { fileName: file.name, url: data.url });
-          uploadedUrls.push(data.url);
-        } else {
-          console.error('[ERRO][Frontend:Publish] Falha no upload de mídia', { fileName: file.name, error: data.error || 'erro desconhecido' });
-          notify('Falha no upload: ' + file.name, 'error');
-        }
-      } catch (err) {
-        console.error('[ERRO][Frontend:Publish] Erro no upload de mídia', { fileName: file.name, error: err.message });
-        notify('Erro no upload: ' + err.message, 'error');
-      }
-    }
-
-    if (uploadedUrls.length > 0) {
-      notify(`${uploadedUrls.length} mídia(s) enviada(s) com sucesso!`, 'success');
-    }
-
-    setFormData((prev) => ({
-      ...prev,
-      mediaUrls: [...prev.mediaUrls, ...uploadedUrls],
-    }));
-  }
-
-  async function handleSave() {
-    if (!formData.title.trim()) return alert('Titulo obrigatorio');
-    if (formData.mediaUrls.length === 0) return alert('Adicione pelo menos uma midia');
-
-    console.log('[INFO][Frontend:Publish] Salvando conteúdo', { title: formData.title, type: formData.type, status: formData.status });
-    try {
-      const hashtags = formData.hashtags
-        .split(/[,\s]+/)
-        .filter(Boolean)
-        .map((h) => (h.startsWith('#') ? h : `#${h}`));
-
-      const payload = {
-        title: formData.title,
-        description: formData.description || null,
-        type: formData.type,
-        status: formData.status,
-        hashtags,
-        mediaUrls: formData.mediaUrls,
-        accountId: formData.accountId || null,
-        scheduledAt: formData.scheduledAt ? new Date(formData.scheduledAt).toISOString() : null,
-        order: 0,
-      };
-
-      const res = await fetch('/api/contents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        console.log('[SUCESSO][Frontend:Publish] Conteúdo salvo com sucesso', { title: formData.title });
-        notify('Conteúdo salvo com sucesso!', 'success');
-        setShowForm(false);
-        resetForm();
-        loadData();
-      } else {
-        console.error('[ERRO][Frontend:Publish] Falha ao salvar conteúdo', { error: data.error || 'erro desconhecido' });
-        notify('Erro ao salvar: ' + (data.error || 'erro desconhecido'), 'error');
-      }
-    } catch (err) {
-      console.error('[ERRO][Frontend:Publish] Erro ao salvar conteúdo', { error: err.message });
-      notify('Erro ao salvar: ' + err.message, 'error');
-    }
-  }
-
-  async function handlePublishContent(contentId) {
-    setPublishing(true);
-    try {
-      const content = contents.find((c) => c.id === contentId);
-      if (!content) return;
-
-      const account = accounts.find((a) => a.id === content.accountId);
-      if (!account?.oauthToken) {
-        notify('Conta sem token Meta. Conecte o Instagram em Configurações.', 'error');
-        return;
-      }
-
-      const imageUrl = content.mediaUrls?.[0];
-      if (!imageUrl) {
-        notify('Conteúdo sem mídia', 'error');
-        return;
-      }
-
-      const caption = [content.title, content.description, (content.hashtags || []).join(' ')]
-        .filter(Boolean)
-        .join('\n\n');
-
-      console.log('[INFO][Frontend:Publish] Publicando conteúdo salvo no Instagram', { contentId, imageUrl });
-      const res = await fetch('/api/meta-publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: account.oauthToken, imageUrl, caption }),
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        console.log('[SUCESSO][Frontend:Publish] Conteúdo publicado no Instagram', { contentId, postId: data.id });
-        notify('Publicado com sucesso!', 'success');
-        loadData();
-      } else {
-        console.error('[ERRO][Frontend:Publish] Falha ao publicar conteúdo', { contentId, error: data.error });
-        notify('Erro ao publicar: ' + data.error, 'error');
-      }
-    } catch (err) {
-      console.error('[ERRO][Frontend:Publish] Erro ao publicar conteúdo', { contentId, error: err.message });
-      notify('Erro ao publicar: ' + err.message, 'error');
-    } finally {
-      setPublishing(false);
-    }
-  }
-
-  function resetForm() {
-    setFormData({
-      title: '',
-      description: '',
-      type: 'post',
-      status: 'draft',
-      hashtags: '',
-      accountId: accounts[0]?.id || '',
-      scheduledAt: '',
-      mediaUrls: [],
-    });
-  }
-
-  function removeMedia(index) {
-    setFormData((prev) => ({
-      ...prev,
-      mediaUrls: prev.mediaUrls.filter((_, i) => i !== index),
-    }));
-  }
-
-  const qpStatusColor = {
-    success: 'var(--success)',
-    error: 'var(--danger)',
-    publishing: 'var(--accent)',
-  };
+  // Para o preview
+  const previewImageUrls = imageMedia.map((m) => m.url);
+  const previewVideoUrl = videoMedia[0]?.url;
 
   return (
     <DashboardLayout activeTab="publish">
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className={styles.header}>
         <div>
-          <h1 className="page-title">Publicacao</h1>
-          <p className="page-subtitle">Publique agora ou agende conteudo para o Instagram</p>
+          <h1 className="page-title">Publicar Agora</h1>
+          <p className="page-subtitle">Publique conteúdo imediatamente no Instagram do cliente</p>
         </div>
-        <button className="btn btn-secondary" onClick={() => setShowForm(true)}>
-          + Salvar Conteudo
-        </button>
+        <ClientSelect
+          clients={clients}
+          value={selectedClientId}
+          onChange={setSelectedClientId}
+          loading={loadingClients}
+          allowEmpty
+        />
       </div>
 
-      {/* ========== PUBLICAR AGORA (direto) ========== */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div className="card-header">
-          <h3 className="card-title">Publicar Agora</h3>
-          <span className="text-muted text-sm">Upload de imagem + legenda → publica diretamente no Instagram</span>
+      {!selectedClientId ? (
+        <div className={`glass-card ${styles.emptyState}`}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,0,51,0.4)" strokeWidth="1.5">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+          <div className={styles.emptyTitle}>Selecione um cliente</div>
+          <div className={styles.emptyDesc}>Escolha um cliente para começar a publicar.</div>
         </div>
-
-        {accounts.length === 0 ? (
-          <p className="text-muted" style={{ padding: '16px 0' }}>
-            Nenhuma conta Instagram conectada.{' '}
-            <a href="/dashboard/settings" style={{ color: 'var(--accent)' }}>Conecte em Configuracoes</a>
-          </p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* Selecionar conta */}
-            <div>
-              <label className="label">Conta Instagram</label>
-              <select
-                className="select"
-                value={quickPublish.accountId}
-                onChange={(e) => setQuickPublish((prev) => ({ ...prev, accountId: e.target.value }))}
-                style={{ maxWidth: 320 }}
-              >
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name} ({a.handle})
-                  </option>
+      ) : loadingAccount ? (
+        <div className={`glass-card ${styles.emptyState}`}>
+          <div className="spinner" />
+        </div>
+      ) : !account ? (
+        <div className={`glass-card ${styles.emptyState}`}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,0,51,0.4)" strokeWidth="1.5">
+            <rect x="2" y="2" width="20" height="20" rx="5" />
+            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+          </svg>
+          <div className={styles.emptyTitle}>Instagram não conectado</div>
+          <div className={styles.emptyDesc}>Conecte o Instagram deste cliente para publicar.</div>
+          <Link href={`/dashboard/clients/${selectedClientId}?tab=instagram`} className="sigma-btn-primary" style={{ marginTop: 12 }}>
+            Conectar Instagram
+          </Link>
+        </div>
+      ) : (
+        <div className={styles.layout}>
+          {/* FORMULÁRIO */}
+          <div className={`glass-card ${styles.form}`}>
+            {/* Tipo */}
+            <div className={styles.section}>
+              <div className={styles.sectionLabel}>// TIPO DE PUBLICAÇÃO</div>
+              <div className={styles.typeGrid}>
+                {MEDIA_TYPES.map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    className={`${styles.typeBtn} ${mediaType === t.value ? styles.typeBtnActive : ''}`}
+                    onClick={() => handleTypeChange(t.value)}
+                  >
+                    {t.label}
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-              {/* Upload da imagem */}
-              <div style={{ flex: '0 0 auto' }}>
-                <label className="label">Imagem</label>
-                <label
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 160,
-                    height: 160,
-                    border: '2px dashed var(--border)',
-                    borderRadius: 12,
-                    cursor: 'pointer',
-                    background: 'var(--bg-secondary)',
-                    overflow: 'hidden',
-                    position: 'relative',
-                  }}
-                >
-                  {quickPublish.localPath ? (
-                    <img
-                      src={quickPublish.localPath}
-                      alt="preview"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  ) : quickPublish.uploading ? (
-                    <div className="spinner" />
-                  ) : (
-                    <>
-                      <span style={{ fontSize: 32, marginBottom: 8 }}>+</span>
-                      <span className="text-sm text-muted">Clique para enviar</span>
-                    </>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    style={{ display: 'none' }}
-                    onChange={handleQuickUpload}
-                    disabled={quickPublish.uploading}
-                  />
-                </label>
-                {quickPublish.imageUrl && (
-                  <p className="text-sm text-muted" style={{ marginTop: 4, wordBreak: 'break-all', maxWidth: 160 }}>
-                    URL pronta para Meta
-                  </p>
-                )}
-              </div>
+            {/* Mídia */}
+            <div className={styles.section}>
+              <div className={styles.sectionLabel}>// MÍDIA</div>
 
-              {/* Legenda */}
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <label className="label">Legenda / Caption</label>
-                <textarea
-                  className="textarea"
-                  rows={6}
-                  value={quickPublish.caption}
-                  onChange={(e) => setQuickPublish((prev) => ({ ...prev, caption: e.target.value }))}
-                  placeholder="Escreva a legenda do post... #hashtags"
-                  style={{ resize: 'vertical' }}
+              {(mediaType === 'IMAGE' || mediaType === 'CAROUSEL' || mediaType === 'STORIES') && (
+                <MediaUploader
+                  accept="image"
+                  multiple={mediaType === 'CAROUSEL'}
+                  value={imageMedia}
+                  onChange={setImageMedia}
+                  label={mediaType === 'CAROUSEL' ? 'Imagens do carrossel (2+)' : 'Imagem'}
                 />
-              </div>
+              )}
+
+              {(mediaType === 'REELS' || mediaType === 'STORIES') && (
+                <MediaUploader
+                  accept="video"
+                  multiple={false}
+                  value={videoMedia}
+                  onChange={setVideoMedia}
+                  label="Vídeo"
+                />
+              )}
             </div>
 
-            {/* Status feedback */}
-            {quickPublish.status && (
-              <div
-                style={{
-                  padding: '12px 16px',
-                  borderRadius: 8,
-                  background: `${qpStatusColor[quickPublish.status]}22`,
-                  border: `1px solid ${qpStatusColor[quickPublish.status]}`,
-                  color: qpStatusColor[quickPublish.status],
-                  fontWeight: 500,
-                }}
-              >
-                {quickPublish.status === 'publishing' && 'Publicando...'}
-                {quickPublish.status === 'success' && `Publicado com sucesso! ${quickPublish.message}`}
-                {quickPublish.status === 'error' && `Erro: ${quickPublish.message}`}
+            {/* Legenda */}
+            {mediaType !== 'STORIES' && (
+              <div className={styles.section}>
+                <div className={styles.sectionLabel}>// LEGENDA</div>
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel}>
+                    Texto <span className={styles.charCount}>{caption.length} / 2200</span>
+                  </label>
+                  <textarea
+                    className="sigma-input"
+                    rows={6}
+                    maxLength={2200}
+                    placeholder="Escreva a legenda do post..."
+                    value={caption}
+                    onChange={(e) => setCaption(e.target.value)}
+                    style={{ resize: 'vertical' }}
+                  />
+                </div>
               </div>
             )}
 
-            {/* Acoes */}
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                className="btn btn-instagram"
-                onClick={handleQuickPublish}
-                disabled={quickPublish.status === 'publishing' || quickPublish.uploading}
-              >
-                {quickPublish.status === 'publishing' ? 'Publicando...' : 'Publicar Agora'}
-              </button>
-              {(quickPublish.imageUrl || quickPublish.caption || quickPublish.status) && (
-                <button className="btn btn-secondary" onClick={resetQuickPublish}>
-                  Limpar
+            {/* Status feedback */}
+            {stage !== 'idle' && (
+              <div className={`${styles.statusBox} ${styles[`status_${stage}`]}`}>
+                {stage === 'sending' && (
+                  <>
+                    <div className="spinner" /> Enviando para o Instagram...
+                  </>
+                )}
+                {stage === 'processing' && (
+                  <>
+                    <div className="spinner" /> Aguardando processamento...
+                  </>
+                )}
+                {stage === 'success' && (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    Publicado com sucesso
+                    {resultLink && (
+                      <a href={resultLink} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8 }}>
+                        Ver no Instagram →
+                      </a>
+                    )}
+                  </>
+                )}
+                {stage === 'error' && (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    Erro: {errorMsg}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Ações */}
+            <div className={styles.actions}>
+              {stage === 'success' || stage === 'error' ? (
+                <button className="btn btn-secondary" onClick={reset}>
+                  Nova publicação
+                </button>
+              ) : (
+                <button
+                  className="sigma-btn-primary"
+                  onClick={handlePublish}
+                  disabled={stage === 'sending' || stage === 'processing'}
+                >
+                  {stage === 'idle' ? 'PUBLICAR AGORA' : 'PUBLICANDO...'}
                 </button>
               )}
             </div>
           </div>
-        )}
-      </div>
 
-      {/* ========== KPIs ========== */}
-      <div className="kpi-grid">
-        <div className="kpi-card">
-          <span className="kpi-label">Total</span>
-          <span className="kpi-value">{contents.length}</span>
-        </div>
-        <div className="kpi-card">
-          <span className="kpi-label">Agendados</span>
-          <span className="kpi-value" style={{ color: 'var(--accent)' }}>
-            {contents.filter((c) => c.status === 'scheduled').length}
-          </span>
-        </div>
-        <div className="kpi-card">
-          <span className="kpi-label">Publicados</span>
-          <span className="kpi-value" style={{ color: 'var(--success)' }}>
-            {contents.filter((c) => c.status === 'published').length}
-          </span>
-        </div>
-        <div className="kpi-card">
-          <span className="kpi-label">Falhas</span>
-          <span className="kpi-value" style={{ color: 'var(--danger)' }}>
-            {contents.filter((c) => c.status === 'failed').length}
-          </span>
-        </div>
-      </div>
-
-      {/* ========== LISTA DE CONTEUDOS ========== */}
-      <div className="card">
-        <div className="card-header">
-          <h3 className="card-title">Conteudos Salvos</h3>
-        </div>
-
-        {loading ? (
-          <div style={{ padding: 40, textAlign: 'center' }}>
-            <div className="spinner" style={{ margin: '0 auto' }} />
-          </div>
-        ) : contents.length === 0 ? (
-          <p className="text-muted" style={{ textAlign: 'center', padding: 40 }}>
-            Nenhum conteudo salvo ainda.
-          </p>
-        ) : (
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Titulo</th>
-                  <th>Tipo</th>
-                  <th>Status</th>
-                  <th>Agendado</th>
-                  <th>Acoes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {contents.map((content) => {
-                  const statusInfo = CONTENT_STATUSES.find((s) => s.value === content.status);
-                  return (
-                    <tr key={content.id}>
-                      <td style={{ maxWidth: 250 }} className="truncate">
-                        {content.title}
-                      </td>
-                      <td>
-                        <span className="badge badge-info">{content.type}</span>
-                      </td>
-                      <td>
-                        <span
-                          className="badge"
-                          style={{ background: `${statusInfo?.color}22`, color: statusInfo?.color }}
-                        >
-                          {statusInfo?.label || content.status}
-                        </span>
-                      </td>
-                      <td className="text-sm text-muted">
-                        {content.scheduledAt
-                          ? new Date(content.scheduledAt).toLocaleString('pt-BR')
-                          : '-'}
-                      </td>
-                      <td>
-                        {content.status !== 'published' && (
-                          <button
-                            className="btn btn-primary btn-sm"
-                            onClick={() => handlePublishContent(content.id)}
-                            disabled={publishing}
-                          >
-                            {publishing ? '...' : 'Publicar'}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ========== MODAL - SALVAR CONTEUDO ========== */}
-      {showForm && (
-        <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2 className="modal-title">Salvar Conteudo</h2>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div>
-                <label className="label">Titulo *</label>
-                <input
-                  className="input"
-                  value={formData.title}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
-                  placeholder="Titulo do post"
-                />
-              </div>
-
-              <div>
-                <label className="label">Descricao / Legenda</label>
-                <textarea
-                  className="textarea"
-                  value={formData.description}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-                  placeholder="Texto da legenda..."
-                />
-              </div>
-
-              <div className="grid-2">
-                <div>
-                  <label className="label">Tipo</label>
-                  <select
-                    className="select"
-                    value={formData.type}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, type: e.target.value }))}
-                  >
-                    {CONTENT_TYPES.map((t) => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Status</label>
-                  <select
-                    className="select"
-                    value={formData.status}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, status: e.target.value }))}
-                  >
-                    {CONTENT_STATUSES.map((s) => (
-                      <option key={s.value} value={s.value}>{s.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="label">Conta</label>
-                <select
-                  className="select"
-                  value={formData.accountId}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, accountId: e.target.value }))}
-                >
-                  <option value="">Selecione...</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>{a.name} ({a.handle})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="label">Hashtags (separadas por virgula)</label>
-                <input
-                  className="input"
-                  value={formData.hashtags}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, hashtags: e.target.value }))}
-                  placeholder="#marketing, #instagram, #ads"
-                />
-              </div>
-
-              {formData.status === 'scheduled' && (
-                <div>
-                  <label className="label">Data/Hora de Agendamento</label>
-                  <input
-                    type="datetime-local"
-                    className="input"
-                    value={formData.scheduledAt}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, scheduledAt: e.target.value }))}
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="label">Midia</label>
-                <input type="file" accept="image/*,video/*" multiple onChange={handleFormUpload} />
-                {formData.mediaUrls.length > 0 && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                    {formData.mediaUrls.map((url, i) => (
-                      <div key={i} style={{ position: 'relative' }}>
-                        <img
-                          src={url}
-                          alt=""
-                          style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8 }}
-                          onError={(e) => { e.target.style.display = 'none'; }}
-                        />
-                        <button
-                          onClick={() => removeMedia(i)}
-                          style={{
-                            position: 'absolute', top: -6, right: -6,
-                            width: 20, height: 20, borderRadius: '50%',
-                            background: 'var(--danger)', color: 'white',
-                            border: 'none', cursor: 'pointer', fontSize: 12,
-                          }}
-                        >
-                          x
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => { setShowForm(false); resetForm(); }}>
-                Cancelar
-              </button>
-              <button className="btn btn-primary" onClick={handleSave}>
-                Salvar
-              </button>
-            </div>
+          {/* PREVIEW */}
+          <div className={styles.previewWrapper}>
+            <div className={styles.previewLabel}>// PREVIEW EM TEMPO REAL</div>
+            <InstagramPreview
+              mode="post"
+              account={account}
+              mediaType={mediaType}
+              imageUrls={previewImageUrls}
+              videoUrl={previewVideoUrl}
+              caption={caption}
+            />
           </div>
         </div>
       )}
