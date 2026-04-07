@@ -154,11 +154,14 @@ function PlaceholderTab({ label }) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   BOTÃO + POPUP: ENVIAR FORMULÁRIO VIA WHATSAPP (Z-API)
-   1. Clica → gera token → abre popup com mensagem editável
-   2. No popup o operador revisa/edita a mensagem
-   3. Clica "Enviar" → dispara via Z-API (send-text)
-   Fica na aba Respostas e na coluna Ações da listagem.
+   BOTÃO + POPUP: ENVIAR ONBOARDING VIA WHATSAPP (Z-API)
+   1. Clica → /api/onboarding/prepare → abre popup com copy editável
+   2. No popup o operador revisa/edita a mensagem do DIA 1
+   3. Clica "Enviar" → dispara via Z-API (send-text) → ativa o onboarding
+      → o cron dos próximos dias manda as etapas 2-12 automaticamente
+
+   O link que vai na mensagem é do NOVO sistema de 15 dias:
+   /onboarding/{token} (não mais /form/{token}).
 ═══════════════════════════════════════════════════════════ */
 function WhatsAppFormModal({ client, onClose, onSent }) {
   const { notify } = useNotification();
@@ -167,13 +170,13 @@ function WhatsAppFormModal({ client, onClose, onSent }) {
   const [message, setMessage] = useState('');
   const [error, setError]     = useState(null);
 
-  // Ao abrir: gera o token e monta a mensagem template
+  // Ao abrir: cria o progress (sem ativar) e monta a copy do dia 1
   useEffect(() => {
     (async () => {
       try {
-        console.log('[INFO][Frontend:WhatsAppFormModal] Gerando token', { clientId: client.id });
-        notify('# Gerando link do formulário...', 'info');
-        const res = await fetch('/api/form/generate-token', {
+        console.log('[INFO][Frontend:WhatsAppFormModal] Preparando onboarding', { clientId: client.id });
+        notify('# Gerando link do onboarding...', 'info');
+        const res = await fetch('/api/onboarding/prepare', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ clientId: client.id }),
@@ -185,32 +188,33 @@ function WhatsAppFormModal({ client, onClose, onSent }) {
         setMessage(
           `⚠️ *SIGMA HACKER // ACESSO ATIVADO*\n\n` +
           `Olá, *${client.company_name}*.\n\n` +
-          `Isso não é um formulário.\n` +
-          `É um *raio-X do seu negócio*.\n\n` +
-          `O que você escrever aqui… define o nível da estratégia que você vai receber.\n\n` +
-          `⏱ 25 a 40 min\n` +
-          `📋 11 etapas (pode pausar e continuar)\n\n` +
+          `Isso não é um formulário de briefing.\n` +
+          `É um *raio-X do seu negócio em 15 dias*.\n\n` +
+          `Todo dia, uma etapa curta. Um vídeo + perguntas.\n` +
+          `5 a 7 minutos por dia. Sem pressão, sem 40 min de enxurrada.\n\n` +
+          `⏱ 5 a 7 min por dia\n` +
+          `📋 12 etapas · 15 dias (com 3 dias de descanso)\n` +
+          `🎥 Vídeo curto antes de cada etapa\n` +
+          `🎙 Pode responder por áudio (a IA transcreve pra você)\n\n` +
           `⸻\n\n` +
-          `🔐 *RESTRIÇÃO DE ACESSO*\n\n` +
-          `Esse link foi gerado só pra você.\n\n` +
-          `1 pessoa.\n` +
-          `1 dispositivo.\n` +
-          `7 dias.\n\n` +
-          `Se trocar de aparelho ou encaminhar…\n` +
-          `o sistema bloqueia.\n\n` +
+          `🔐 *COMO FUNCIONA*\n\n` +
+          `Hoje é o *dia 1*: o link abaixo libera a primeira etapa.\n\n` +
+          `Amanhã e nos próximos dias, você recebe o link da próxima etapa ` +
+          `aqui no WhatsApp, automaticamente.\n\n` +
+          `Cada etapa é um tijolo da sua estratégia. Vai montando aos poucos.\n\n` +
           `⸻\n\n` +
           `Aqui não entra resposta rasa.\n\n` +
           `Ou você joga no raso…\n` +
           `ou você extrai o que poucos têm acesso.\n\n` +
           `⸻\n\n` +
-          `👉 *LINK DO FORMULÁRIO* 🔓\n` +
+          `👉 *ETAPA 1 — DIA 1* 🔓\n` +
           `${json.link}`
         );
         setStep('ready');
-        console.log('[SUCESSO][Frontend:WhatsAppFormModal] Token gerado', { link: json.link });
+        console.log('[SUCESSO][Frontend:WhatsAppFormModal] Onboarding preparado', { link: json.link });
       } catch (err) {
-        console.error('[ERRO][Frontend:WhatsAppFormModal] Falha ao gerar token', { error: err.message });
-        notify('! Erro ao gerar link: ' + err.message, 'error');
+        console.error('[ERRO][Frontend:WhatsAppFormModal] Falha ao preparar onboarding', { error: err.message });
+        notify('! Erro ao preparar: ' + err.message, 'error');
         setError(err.message);
         setStep('ready');
       }
@@ -232,6 +236,7 @@ function WhatsAppFormModal({ client, onClose, onSent }) {
       console.log('[INFO][Frontend:WhatsAppFormModal] Enviando via Z-API', { clientId: client.id });
       notify('# Enviando mensagem via WhatsApp...', 'info');
 
+      // 1. Envia a mensagem via Z-API (reusa o endpoint existente)
       const res = await fetch('/api/form/send-whatsapp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -243,6 +248,26 @@ function WhatsAppFormModal({ client, onClose, onSent }) {
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
+
+      // 2. Ativa o onboarding (status=active, started_at=now, loga no cron log)
+      // Isso é feito DEPOIS do envio pra que, se a Z-API falhar, o onboarding
+      // não fique ativo sem o cliente ter recebido nada.
+      try {
+        const activateRes = await fetch('/api/onboarding/activate-first', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId: client.id, message }),
+        });
+        const activateJson = await activateRes.json();
+        if (!activateJson.success) {
+          console.warn('[WARN][WhatsAppFormModal] activate-first falhou — envio ok mas jornada não ativou', activateJson);
+          notify('Mensagem enviada, mas houve erro ao ativar a jornada. Verifica o log.', 'warning', 6000);
+        } else {
+          console.log('[SUCESSO][WhatsAppFormModal] Onboarding ativado', activateJson.progress);
+        }
+      } catch (activateErr) {
+        console.error('[ERRO][WhatsAppFormModal] erro em activate-first', activateErr);
+      }
 
       setStep('done');
       notify('Link enviado para ' + client.company_name + ' via WhatsApp', 'success');
@@ -286,7 +311,7 @@ function WhatsAppFormModal({ client, onClose, onSent }) {
             </div>
             <div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                Enviar Formulário
+                Iniciar Onboarding (Dia 1)
               </div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
                 {client.company_name} · {client.phone ? maskPhone(client.phone) : 'sem telefone'}
@@ -307,7 +332,7 @@ function WhatsAppFormModal({ client, onClose, onSent }) {
           <div style={{ textAlign: 'center', padding: '30px 0' }}>
             <div className="spinner" style={{ margin: '0 auto 12px' }} />
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-              Gerando link exclusivo...
+              Preparando jornada de 15 dias...
             </div>
           </div>
         )}
@@ -378,7 +403,7 @@ function WhatsAppFormModal({ client, onClose, onSent }) {
                   <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
                   <path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 0 0 .612.616l4.573-1.453A11.949 11.949 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.336 0-4.512-.752-6.278-2.03l-.346-.27-3.277 1.042 1.076-3.2-.293-.372A9.953 9.953 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
                 </svg>
-                {step === 'sending' ? 'Enviando...' : 'Enviar via WhatsApp'}
+                {step === 'sending' ? 'Enviando...' : 'Enviar e Ativar'}
               </button>
             </div>
           </>
@@ -396,10 +421,10 @@ function WhatsAppFormModal({ client, onClose, onSent }) {
               ✓
             </div>
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color: 'var(--success)', marginBottom: 4 }}>
-              Mensagem enviada!
+              Jornada ativada
             </div>
             <div style={{ fontFamily: 'var(--font-sans)', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              {client.company_name} recebeu o formulário via WhatsApp.
+              {client.company_name} recebeu a etapa 1. As próximas 11 etapas serão enviadas automaticamente.
             </div>
           </div>
         )}
@@ -414,10 +439,8 @@ function SendFormButton({ client, onSent, size = 'md' }) {
   const [showModal, setShowModal] = useState(false);
 
   function handleClick() {
-    if (client.form_done) {
-      notify('O formulario deste cliente ja foi preenchido.', 'error');
-      return;
-    }
+    // NOTA: a checagem de "já enviou" agora é feita pelo form-status
+    // via onboarding_progress — este botão só aparece no estado 'not_sent'.
     if (!client.phone) {
       notify('Cadastre o telefone do cliente antes de enviar.', 'error');
       return;
@@ -431,7 +454,7 @@ function SendFormButton({ client, onSent, size = 'md' }) {
     <>
       <button
         onClick={handleClick}
-        title="Enviar formulário via WhatsApp"
+        title="Iniciar onboarding de 15 dias via WhatsApp"
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: isSmall ? '6px 10px' : '8px 14px', borderRadius: 6,
@@ -448,7 +471,7 @@ function SendFormButton({ client, onSent, size = 'md' }) {
           <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
           <path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 0 0 .612.616l4.573-1.453A11.949 11.949 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.336 0-4.512-.752-6.278-2.03l-.346-.27-3.277 1.042 1.076-3.2-.293-.372A9.953 9.953 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" />
         </svg>
-        Enviar Formulário
+        Iniciar Onboarding
       </button>
       {showModal && (
         <WhatsAppFormModal
@@ -506,13 +529,113 @@ function TabRespostas({ clientId, client }) {
     );
   }
 
+  // ── Estado: onboarding ativo ou concluído (NOVO SISTEMA) ──
+  if (status && (status.formStatus === 'onboarding_active' ||
+                 status.formStatus === 'onboarding_completed' ||
+                 status.formStatus === 'onboarding_paused')) {
+    const onb = status.onboarding || {};
+    const pct = Math.round((onb.stagesSubmitted / (onb.totalStages || 12)) * 100);
+    const isCompleted = status.formStatus === 'onboarding_completed';
+
+    const badgeColor = isCompleted ? 'var(--success)' : 'var(--warning)';
+    const badgeBg    = isCompleted ? 'rgba(34,197,94,0.1)' : 'rgba(249,115,22,0.1)';
+    const badgeBorder = isCompleted ? 'rgba(34,197,94,0.25)' : 'rgba(249,115,22,0.25)';
+    const badgeLabel = isCompleted ? 'Onboarding concluído' : 'Onboarding em andamento';
+
+    return (
+      <div>
+        <HowItWorks>
+          Jornada de 15 dias em andamento. As etapas são liberadas automaticamente
+          via WhatsApp, uma por dia. O cliente também pode adiantar etapas pelo link.
+        </HowItWorks>
+
+        <div style={{ maxWidth: 600 }}>
+          <div className="glass-card" style={{ padding: '24px' }}>
+            {/* Badge de estado */}
+            <div style={{ marginBottom: 18 }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px',
+                borderRadius: 20, background: badgeBg, border: `1px solid ${badgeBorder}`,
+                fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
+                letterSpacing: '0.06em', textTransform: 'uppercase', color: badgeColor,
+              }}>
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: badgeColor }} />
+                {badgeLabel}
+              </span>
+            </div>
+
+            {/* Métricas */}
+            <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', marginBottom: 20 }}>
+              <div>
+                <Label>Etapa atual</Label>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {onb.currentStage || 0} <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 400 }}>de {onb.totalStages}</span>
+                </div>
+              </div>
+              <div>
+                <Label>Dia da jornada</Label>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {onb.currentDay || 0} <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 400 }}>de 15</span>
+                </div>
+              </div>
+              <div>
+                <Label>Etapas concluídas</Label>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {onb.stagesSubmitted || 0}
+                </div>
+              </div>
+              <div>
+                <Label>Iniciado em</Label>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-primary)' }}>
+                  {onb.startedAt
+                    ? new Date(onb.startedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                    : '—'}
+                </div>
+              </div>
+            </div>
+
+            {/* Barra de progresso */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Progresso da jornada
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: badgeColor }}>{pct}%</span>
+              </div>
+              <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,0,51,0.08)' }}>
+                <div style={{
+                  width: `${pct}%`, height: '100%', borderRadius: 2,
+                  background: badgeColor, transition: 'width 0.5s',
+                }} />
+              </div>
+            </div>
+
+            {/* Link público */}
+            {onb.token && (
+              <div style={{ padding: '12px 14px', background: 'rgba(10,10,10,0.6)', border: '1px solid var(--border-default)', borderRadius: 8 }}>
+                <Label>Link do cliente</Label>
+                <div style={{
+                  fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-secondary)',
+                  wordBreak: 'break-all', marginTop: 4,
+                }}>
+                  /onboarding/{onb.token}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── Estado: nunca enviou ──
   if (!status || status.formStatus === 'not_sent') {
     return (
       <div>
       <HowItWorks>
-        Envie o formulário de briefing para o cliente responder. As respostas serão usadas para construir a estratégia de marketing.
-        O link é válido por 7 dias e pode ser enviado via WhatsApp diretamente pelo sistema.
+        Envie o onboarding de 15 dias ao cliente. Hoje libera a etapa 1 (com vídeo + perguntas)
+        e as etapas seguintes são enviadas automaticamente via WhatsApp, uma por dia.
+        Clique abaixo para revisar a mensagem de boas-vindas e disparar.
       </HowItWorks>
       <div style={{ padding: '40px 0', textAlign: 'center' }}>
         <div className="glass-card" style={{ maxWidth: 480, margin: '0 auto', padding: '40px 32px' }}>
@@ -526,10 +649,11 @@ function TabRespostas({ clientId, client }) {
             </svg>
           </div>
           <h3 style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
-            Formulário não enviado
+            Onboarding não enviado
           </h3>
           <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.5 }}>
-            O cliente ainda não recebeu o link do formulário de briefing.
+            O cliente ainda não recebeu a jornada de 15 dias.
+            Clique para disparar a etapa 1 — o resto vai automático.
           </p>
           <SendFormButton client={client} onSent={() => loadStatus()} />
         </div>
@@ -2057,6 +2181,7 @@ function TabFinanceiro({ clientId, clientServices }) {
   const EMPTY_FORM = {
     monthly_value: '', num_installments: '12',
     first_due_date: '', notes: '', services: [],
+    different_first_due: false, regular_due_day: '10',
   };
   const [form, setForm] = useState(EMPTY_FORM);
 
@@ -2114,12 +2239,18 @@ function TabFinanceiro({ clientId, clientServices }) {
 
   function openEditForm(c) {
     const mv = parseFloat(c.monthly_value) || parseFloat(c.contract_value) / (c.num_installments || 12);
+    const startDate = c.start_date ? c.start_date.split('T')[0] : '';
+    const startDayOfMonth = startDate ? new Date(startDate + 'T12:00:00').getDate() : 0;
+    const contractDueDay = parseInt(c.due_day) || startDayOfMonth;
+    const hasDifferentFirstDue = startDate && contractDueDay && contractDueDay !== startDayOfMonth;
     setForm({
       monthly_value: mv.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       num_installments: String(c.num_installments || 12),
-      first_due_date: c.start_date ? c.start_date.split('T')[0] : '',
+      first_due_date: startDate,
       notes: c.notes || '',
       services: Array.isArray(c.services) ? c.services : (typeof c.services === 'string' ? JSON.parse(c.services || '[]') : []),
+      different_first_due: !!hasDifferentFirstDue,
+      regular_due_day: String(contractDueDay || 10),
     });
     setEditingId(c.id);
     setShowForm(true);
@@ -2128,9 +2259,14 @@ function TabFinanceiro({ clientId, clientServices }) {
   async function handleSaveContract(e) {
     e.preventDefault();
     const rawVal = parseFloat((form.monthly_value || '0').replace(/\./g, '').replace(',', '.')) || 0;
-    if (!rawVal || !form.first_due_date) { notify('Valor mensal e data da primeira parcela são obrigatórios.', 'error'); return; }
+    if (!rawVal || !form.first_due_date) { notify('Valor da parcela e data da primeira parcela são obrigatórios.', 'error'); return; }
     const firstDue = new Date(form.first_due_date + 'T12:00:00');
-    const dueDay   = firstDue.getDate();
+    let dueDay = firstDue.getDate();
+    if (form.different_first_due) {
+      const rd = parseInt(form.regular_due_day);
+      if (isNaN(rd) || rd < 1 || rd > 31) { notify('Dia de vencimento das demais parcelas inválido (1-31).', 'error'); return; }
+      dueDay = rd;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -2246,7 +2382,7 @@ function TabFinanceiro({ clientId, clientServices }) {
   return (
     <div>
       <HowItWorks>
-        Cada contrato é vinculado a serviços específicos. As parcelas são geradas automaticamente (valor mensal x quantidade).
+        Cada contrato é vinculado a serviços específicos. O total é calculado como <strong>valor da parcela × quantidade de parcelas</strong>.
         Você pode ter múltiplos contratos por cliente. Parcelas vencidas são marcadas como <strong style={{ color: '#f97316' }}>Atrasadas</strong> automaticamente.
       </HowItWorks>
 
@@ -2297,7 +2433,7 @@ function TabFinanceiro({ clientId, clientServices }) {
           <form onSubmit={handleSaveContract}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px', marginBottom: 14 }}>
               <div>
-                <Label>Valor Mensal (R$)</Label>
+                <Label>Valor da Parcela (R$)</Label>
                 <input value={form.monthly_value} onChange={handleValueMask} placeholder="0,00" style={INP} />
               </div>
               <div>
@@ -2309,10 +2445,36 @@ function TabFinanceiro({ clientId, clientServices }) {
                 <Label>Data da Primeira Parcela</Label>
                 <input type="date" value={form.first_due_date}
                   onChange={e => setForm(f => ({ ...f, first_due_date: e.target.value }))} style={INP} />
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginTop: 3 }}>
-                  As demais parcelas seguem o mesmo dia do mês
-                </div>
+                {!form.different_first_due && (
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginTop: 3 }}>
+                    As demais parcelas seguem o mesmo dia do mês
+                  </div>
+                )}
               </div>
+              <div style={{ gridColumn: '1/-1' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+                  <input
+                    type="checkbox"
+                    checked={form.different_first_due}
+                    onChange={e => setForm(f => ({ ...f, different_first_due: e.target.checked }))}
+                    style={{ accentColor: '#ff0033', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', color: 'var(--text-secondary)' }}>
+                    A 1ª parcela tem data diferente das demais
+                  </span>
+                </label>
+              </div>
+              {form.different_first_due && (
+                <div style={{ gridColumn: '1/-1' }}>
+                  <Label>Dia de Vencimento das Demais Parcelas</Label>
+                  <input type="number" min="1" max="31" value={form.regular_due_day}
+                    onChange={e => setForm(f => ({ ...f, regular_due_day: e.target.value }))}
+                    placeholder="ex: 10" style={INP} />
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginTop: 3 }}>
+                    Da 2ª parcela em diante, todas vencem neste dia do mês
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Serviços vinculados */}
@@ -2353,7 +2515,9 @@ function TabFinanceiro({ clientId, clientServices }) {
                 background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)',
               }}>
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: '#22c55e' }}>
-                  {numP}x de {fmtBRL(rawMonthly)} = {fmtBRL(totalPreview)}{form.first_due_date ? ` · 1ª parcela: ${form.first_due_date.split('-').reverse().join('/')}` : ''}
+                  {numP}x de {fmtBRL(rawMonthly)} = {fmtBRL(totalPreview)}
+                  {form.first_due_date ? ` · 1ª parcela: ${form.first_due_date.split('-').reverse().join('/')}` : ''}
+                  {form.different_first_due && form.regular_due_day ? ` · demais: dia ${form.regular_due_day}` : ''}
                 </span>
               </div>
             )}

@@ -270,20 +270,6 @@ function Lbl({ children, req }) {
   );
 }
 
-const FREQ_OPTS = [
-  { value: 'monthly',    label: 'Mensal'     },
-  { value: 'quarterly',  label: 'Trimestral' },
-  { value: 'semiannual', label: 'Semestral'  },
-  { value: 'annual',     label: 'Anual'      },
-  { value: 'one_time',   label: 'Único'      },
-];
-
-function numInstallments(freq, months) {
-  const map = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12, one_time: 9999 };
-  if (freq === 'one_time') return 1;
-  return Math.ceil(months / (map[freq] || 1));
-}
-
 /* ── Phone mask ── */
 function maskPhone(v) {
   let d = v.replace(/\D/g, '').slice(0, 11);
@@ -307,8 +293,6 @@ function FieldErr({ msg }) {
   return <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: '#ff6680', marginTop: 3 }}>{msg}</div>;
 }
 
-const FREQ_LABELS_MAP = { monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual', one_time: 'Único' };
-
 const DEFAULT_SERVICES = [
   'Planejamento de campanha',
   'Edição de foto',
@@ -331,7 +315,8 @@ function AddClientModal({ onClose, notify }) {
   );
   const [customSvc, setCustomSvc] = useState('');
   const [fin, setFin] = useState({
-    contract_value: '', frequency: 'monthly', period_months: '12', due_day: '10', start_date: '',
+    installment_value: '', num_installments: '12', first_due_date: '',
+    different_first_due: false, regular_due_day: '10',
   });
 
   const [errs,   setErrs  ] = useState({});
@@ -363,14 +348,16 @@ function AddClientModal({ onClose, notify }) {
 
   /* Tab 2 validation */
   function validateTab2() {
-    const val = parseTicket(fin.contract_value);
+    const val = parseTicket(fin.installment_value);
     const e = {};
-    if (val > 0 && !fin.start_date) e.start_date = 'Informe a data de início.';
-    if (!val && fin.start_date)     e.contract_value = 'Informe o valor do contrato.';
-    const day = parseInt(fin.due_day);
-    if (val > 0 && (isNaN(day) || day < 1 || day > 31)) e.due_day = 'Dia inválido (1-31).';
-    const months = parseInt(fin.period_months);
-    if (val > 0 && fin.frequency !== 'one_time' && (isNaN(months) || months < 1)) e.period_months = 'Período inválido.';
+    if (val > 0 && !fin.first_due_date) e.first_due_date = 'Informe a data da primeira parcela.';
+    if (!val && fin.first_due_date)     e.installment_value = 'Informe o valor da parcela.';
+    const n = parseInt(fin.num_installments);
+    if (val > 0 && (isNaN(n) || n < 1 || n > 120)) e.num_installments = 'Quantidade inválida (1-120).';
+    if (val > 0 && fin.different_first_due) {
+      const dd = parseInt(fin.regular_due_day);
+      if (isNaN(dd) || dd < 1 || dd > 31) e.regular_due_day = 'Dia inválido (1-31).';
+    }
     setErrs(e);
     return Object.keys(e).length === 0;
   }
@@ -404,22 +391,29 @@ function AddClientModal({ onClose, notify }) {
       const clientId = cJson.client.id;
       console.log('[SUCESSO][Frontend:Clients] Cliente criado com sucesso', { clientId, company_name: info.company_name });
 
-      const val = parseTicket(fin.contract_value);
-      if (val > 0 && fin.start_date) {
-        console.log('[INFO][Frontend:Clients] Criando contrato para cliente', { clientId, contract_value: val, frequency: fin.frequency });
+      const val = parseTicket(fin.installment_value);
+      if (val > 0 && fin.first_due_date) {
+        const firstDue = new Date(fin.first_due_date + 'T12:00:00');
+        const dueDay = fin.different_first_due
+          ? (parseInt(fin.regular_due_day) || firstDue.getDate())
+          : firstDue.getDate();
+        const nInst = parseInt(fin.num_installments) || 12;
+        console.log('[INFO][Frontend:Clients] Criando contrato para cliente', { clientId, installment_value: val, num_installments: nInst });
         const contractRes = await fetch(`/api/clients/${clientId}/contracts`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contract_value: val,
-            frequency:      fin.frequency,
-            period_months:  parseInt(fin.period_months) || 12,
-            due_day:        parseInt(fin.due_day) || 10,
-            start_date:     fin.start_date,
+            monthly_value:    val,
+            num_installments: nInst,
+            due_day:          dueDay,
+            start_date:       fin.first_due_date,
+            services:         selectedServices.map(s => s.name),
           }),
         });
         const contractJson = await contractRes.json();
         if (contractJson.success) {
-          console.log('[SUCESSO][Frontend:Clients] Contrato criado com sucesso', { clientId, contract_value: val });
+          console.log('[SUCESSO][Frontend:Clients] Contrato criado com sucesso', { clientId, installment_value: val, total: val * nInst });
+        } else {
+          console.error('[ERRO][Frontend:Clients] Falha ao criar contrato', { error: contractJson.error });
         }
       }
 
@@ -436,9 +430,9 @@ function AddClientModal({ onClose, notify }) {
 
   const TABS_LBL = ['Informações', 'Serviços', 'Valores'];
 
-  const valNum    = parseTicket(fin.contract_value);
-  const nParcels  = numInstallments(fin.frequency, parseInt(fin.period_months) || 12);
-  const perParcel = valNum > 0 && nParcels > 0 ? valNum / nParcels : 0;
+  const valNum   = parseTicket(fin.installment_value);
+  const nParcels = parseInt(fin.num_installments) || 0;
+  const totalVal = valNum * nParcels;
 
   const inpErr = (field) => errs[field]
     ? { ...INP_STYLE, border: '1px solid rgba(255,26,77,0.5)' }
@@ -614,54 +608,73 @@ function AddClientModal({ onClose, notify }) {
               }}>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'rgba(255,185,0,0.7)', lineHeight: 1.7 }}>
                   <strong style={{ color: 'rgba(255,185,0,0.9)', display: 'block', marginBottom: 3 }}>ℹ Como funciona o financeiro</strong>
-                  Ao cadastrar um contrato, todas as parcelas são geradas automaticamente com base na frequência e duração.
-                  Cada parcela pode ser marcada como <strong>Pago</strong> manualmente. Parcelas não pagas após o vencimento são
-                  sinalizadas como <strong>Atrasadas</strong> automaticamente. Esta aba é opcional — o contrato pode ser criado depois.
+                  O total do contrato é <strong>valor da parcela × quantidade de parcelas</strong>. Todas as parcelas são
+                  geradas automaticamente a partir da data da 1ª parcela. Cada parcela pode ser marcada como <strong>Pago</strong>
+                  manualmente e as não pagas após o vencimento viram <strong>Atrasadas</strong> automaticamente. Esta aba é
+                  opcional — o contrato pode ser criado depois.
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 18px' }}>
-                <div style={{ gridColumn: '1/-1' }}>
-                  <Lbl>Valor do Contrato (R$)</Lbl>
+                <div>
+                  <Lbl>Valor da Parcela (R$)</Lbl>
                   <input
-                    value={fin.contract_value}
-                    onChange={e => setFinField('contract_value', applyBRLMask(e.target.value))}
+                    value={fin.installment_value}
+                    onChange={e => setFinField('installment_value', applyBRLMask(e.target.value))}
                     placeholder="0,00" inputMode="numeric"
-                    style={inpErr('contract_value')}
+                    style={inpErr('installment_value')}
                   />
-                  <FieldErr msg={errs.contract_value} />
+                  <FieldErr msg={errs.installment_value} />
                 </div>
                 <div>
-                  <Lbl>Frequência</Lbl>
-                  <select value={fin.frequency} onChange={e => setFinField('frequency', e.target.value)} style={INP_STYLE}>
-                    {FREQ_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
+                  <Lbl>Quantidade de Parcelas</Lbl>
+                  <input type="number" min="1" max="120" value={fin.num_installments}
+                    onChange={e => setFinField('num_installments', e.target.value)}
+                    style={inpErr('num_installments')} />
+                  <FieldErr msg={errs.num_installments} />
                 </div>
-                <div>
-                  <Lbl>Duração (meses)</Lbl>
-                  <input type="number" min="1" max="120" value={fin.period_months}
-                    onChange={e => setFinField('period_months', e.target.value)}
-                    style={inpErr('period_months')} disabled={fin.frequency === 'one_time'} />
-                  <FieldErr msg={errs.period_months} />
+                <div style={{ gridColumn: '1/-1' }}>
+                  <Lbl>Data da Primeira Parcela</Lbl>
+                  <input type="date" value={fin.first_due_date}
+                    onChange={e => setFinField('first_due_date', e.target.value)}
+                    style={inpErr('first_due_date')} />
+                  <FieldErr msg={errs.first_due_date} />
+                  {!fin.different_first_due && (
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                      As demais parcelas seguem o mesmo dia do mês
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <Lbl>Dia de Vencimento</Lbl>
-                  <input type="number" min="1" max="31" value={fin.due_day}
-                    onChange={e => setFinField('due_day', e.target.value)}
-                    style={inpErr('due_day')} />
-                  <FieldErr msg={errs.due_day} />
+                <div style={{ gridColumn: '1/-1' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+                    <input
+                      type="checkbox"
+                      checked={fin.different_first_due}
+                      onChange={e => setFinField('different_first_due', e.target.checked)}
+                      style={{ accentColor: '#ff0033', cursor: 'pointer' }}
+                    />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', color: 'var(--text-secondary)' }}>
+                      A 1ª parcela tem data diferente das demais
+                    </span>
+                  </label>
                 </div>
-                <div>
-                  <Lbl>Data de Início</Lbl>
-                  <input type="date" value={fin.start_date}
-                    onChange={e => setFinField('start_date', e.target.value)}
-                    style={inpErr('start_date')} />
-                  <FieldErr msg={errs.start_date} />
-                </div>
+                {fin.different_first_due && (
+                  <div style={{ gridColumn: '1/-1' }}>
+                    <Lbl>Dia de Vencimento das Demais Parcelas</Lbl>
+                    <input type="number" min="1" max="31" value={fin.regular_due_day}
+                      onChange={e => setFinField('regular_due_day', e.target.value)}
+                      placeholder="ex: 10"
+                      style={inpErr('regular_due_day')} />
+                    <FieldErr msg={errs.regular_due_day} />
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                      Da 2ª parcela em diante, todas vencem neste dia do mês
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Preview de parcelas */}
-              {valNum > 0 && (
+              {valNum > 0 && nParcels > 0 && (
                 <div style={{ padding: '14px 16px', borderRadius: 8, background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.15)' }}>
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'rgba(34,197,94,0.6)', marginBottom: 10, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                     Prévia das parcelas
@@ -672,17 +685,20 @@ function AddClientModal({ onClose, notify }) {
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-muted)' }}>parcelas</div>
                     </div>
                     <div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-primary)' }}>{formatBRL(perParcel)}</div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-muted)' }}>por parcela · {FREQ_LABELS_MAP[fin.frequency]}</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--text-primary)' }}>{formatBRL(valNum)}</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-muted)' }}>por parcela · Mensal</div>
                     </div>
                     <div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700, color: '#f97316' }}>{formatBRL(valNum)}</div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.3rem', fontWeight: 700, color: '#f97316' }}>{formatBRL(totalVal)}</div>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-muted)' }}>total do contrato</div>
                     </div>
                   </div>
-                  {fin.start_date && (
+                  {fin.first_due_date && (
                     <div style={{ marginTop: 8, fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
-                      Primeira parcela: dia {fin.due_day} · a partir de {new Date(fin.start_date + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                      1ª parcela: {fin.first_due_date.split('-').reverse().join('/')}
+                      {fin.different_first_due && fin.regular_due_day
+                        ? ` · demais: dia ${fin.regular_due_day} de cada mês`
+                        : ''}
                     </div>
                   )}
                 </div>

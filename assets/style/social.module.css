@@ -19,7 +19,9 @@
   padding: 20px 24px;
   margin-bottom: 24px;
   position: relative;
-  overflow: hidden;
+  /* overflow visible — dropdown do ClientSelect e absolutely-positioned
+     e precisa escapar do painel. O ::before e um 1px gradient cujas
+     pontas ja sao transparentes, entao nao requer clipping nas quinas. */
 }
 
 .topPanel::before {

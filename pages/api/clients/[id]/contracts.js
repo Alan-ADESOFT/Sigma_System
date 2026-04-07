@@ -15,15 +15,23 @@ function buildInstallments(contractId, clientId, monthlyValue, numInstallments, 
   const base = new Date(startDate);
 
   for (let i = 0; i < numInstallments; i++) {
-    const d = new Date(base);
-    d.setMonth(d.getMonth() + i);
-    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-    d.setDate(Math.min(dueDay, lastDay));
+    let iso;
+    if (i === 0) {
+      // Primeira parcela sempre cai na data exata de startDate — permite
+      // que o usuario defina uma data diferente do dia-de-vencimento recorrente.
+      iso = base.toISOString().split('T')[0];
+    } else {
+      const d = new Date(base);
+      d.setMonth(d.getMonth() + i);
+      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      d.setDate(Math.min(dueDay, lastDay));
+      iso = d.toISOString().split('T')[0];
+    }
     installments.push({
       contractId,
       clientId,
       num: i + 1,
-      dueDate: d.toISOString().split('T')[0],
+      dueDate: iso,
       value: monthlyValue,
     });
   }
