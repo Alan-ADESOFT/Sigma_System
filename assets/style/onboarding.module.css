@@ -1,0 +1,1618 @@
+/* ============================================================
+   onboarding.module.css
+   ─────────────────────────────────────────────────────────────
+   Estilos do sistema de onboarding por etapas (15 dias).
+   Mobile-first. Tudo via tokens semânticos do globals.css.
+   Nada de hex hard-coded. Nada de Tailwind.
+
+   Usado por:
+     pages/onboarding/[token].js
+     components/OnboardingStageView.js
+     components/OnboardingVideoPlayer.js
+     components/OnboardingFormFields.js
+     components/AudioRecorderPopup.js
+     components/MicroCelebration.js
+   ============================================================ */
+
+/* ============================================================
+   PAGE WRAPPER + CHROME (mesma estrutura do form/[token].js)
+   ============================================================ */
+
+.pageWrapper {
+  min-height: 100vh;
+  background: var(--surface-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow-x: hidden;
+}
+
+.circuitBg {
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 0, 51, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 0, 51, 0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.topBar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: rgba(5, 5, 5, 0.85);
+  border-bottom: 1px solid var(--border-default);
+  backdrop-filter: blur(12px);
+}
+
+.topBarBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topBarLogo {
+  height: 22px;
+  width: auto;
+  filter: drop-shadow(0 0 6px rgba(255, 0, 51, 0.3));
+}
+
+.topBarLabel {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.contentArea {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+  padding: 20px 16px 60px;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.footer {
+  text-align: center;
+  padding: 24px 16px;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-top: 1px solid var(--border-default);
+  background: rgba(5, 5, 5, 0.6);
+}
+
+/* ============================================================
+   PROGRESS BAR — sticky no topo da página
+   ============================================================ */
+
+.progressBarTrack {
+  position: sticky;
+  top: 47px; /* abaixo da topBar */
+  z-index: 40;
+  height: 3px;
+  background: var(--dark-800);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.progressBarFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--brand-600), var(--brand-500));
+  box-shadow: 0 0 12px rgba(255, 0, 51, 0.5);
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.progressLabel {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 8px 0 0;
+}
+
+/* ============================================================
+   STATE SCREENS (loading, expirado, completed, descanso, etc)
+   ============================================================ */
+
+.stateScreen {
+  text-align: center;
+  padding: 60px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  animation: fadeInUp 0.5s ease-out both;
+}
+
+.stateIcon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(17, 17, 17, 0.8);
+  border: 1px solid var(--border-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 24px rgba(255, 0, 51, 0.15);
+}
+
+.stateIcon.success {
+  border-color: rgba(34, 197, 94, 0.3);
+  box-shadow: 0 0 24px rgba(34, 197, 94, 0.15);
+}
+
+.stateIcon.warning {
+  border-color: rgba(249, 115, 22, 0.3);
+  box-shadow: 0 0 24px rgba(249, 115, 22, 0.15);
+}
+
+.stateTitle {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+
+.stateText {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  max-width: 380px;
+  line-height: 1.6;
+}
+
+/* ============================================================
+   STAGE HEADER (boas-vindas da etapa)
+   ============================================================ */
+
+.stageHeader {
+  background: linear-gradient(145deg, rgba(17, 17, 17, 0.95), rgba(10, 10, 10, 0.98));
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  padding: 24px 22px;
+  margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
+  animation: fadeInUp 0.45s ease-out both;
+}
+
+.stageHeader::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 0, 51, 0.35), transparent);
+}
+
+.stageDayTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brand-500);
+  margin-bottom: 12px;
+}
+
+.stageDayDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand-500);
+  box-shadow: 0 0 8px var(--brand-500);
+  animation: pulseDot 2s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(1.2); }
+}
+
+.stageTitleBig {
+  font-family: var(--font-mono);
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: linear-gradient(135deg, #f0f0f0 60%, #ff6680 130%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 8px;
+  line-height: 1.25;
+}
+
+.stageDescription {
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  margin-bottom: 18px;
+}
+
+.stageDivider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 0, 51, 0.35) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: dividerSweep 4s linear infinite;
+  margin: 18px 0;
+}
+
+@keyframes dividerSweep {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+
+/* Grid de meta cards (perguntas + tempo) */
+.stageMetaGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.metaCard {
+  background: rgba(10, 10, 10, 0.6);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metaCardIcon {
+  color: var(--brand-500);
+  margin-bottom: 6px;
+}
+
+.metaCardValue {
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.metaCardLabel {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+/* Card de insight (colapsável) */
+.insightCard {
+  background: rgba(255, 0, 51, 0.03);
+  border: 1px solid var(--border-accent);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.insightCard:hover {
+  background: rgba(255, 0, 51, 0.05);
+  border-color: var(--border-hover);
+}
+
+.insightIcon {
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+.insightText {
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* ============================================================
+   VÍDEO SECTION
+   ============================================================ */
+
+.videoSection {
+  margin-bottom: 24px;
+  animation: fadeInUp 0.5s ease-out 100ms both;
+}
+
+.videoLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--brand-500);
+  margin-bottom: 12px;
+}
+
+.videoLabelDot {
+  width: 6px;
+  height: 6px;
+  background: var(--brand-500);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--brand-500);
+}
+
+.videoFrame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  border: 1px solid var(--border-accent);
+  box-shadow: 0 0 40px rgba(255, 0, 51, 0.1);
+  overflow: hidden;
+  background: var(--dark-900);
+}
+
+.videoFrame video,
+.videoFrame iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+.videoPlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-align: center;
+  padding: 20px;
+}
+
+.videoStatus {
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+
+.videoStatus.watched {
+  color: #22c55e;
+  text-shadow: 0 0 4px rgba(34, 197, 94, 0.4);
+}
+
+/* ============================================================
+   START FORM BUTTON (3 estados)
+   ============================================================ */
+
+.startBlock {
+  margin: 24px auto;
+  max-width: 480px;
+  width: 100%;
+  text-align: center;
+  animation: fadeInUp 0.5s ease-out 200ms both;
+}
+
+.startBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 24px;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  border: 1px solid;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Estado 1: vídeo não assistido (locked) */
+.startBtn.locked {
+  background: var(--dark-800);
+  border-color: var(--dark-700);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* Estado 2: vídeo OK, countdown rolando */
+.startBtn.countdown {
+  background: rgba(255, 0, 51, 0.04);
+  border-color: var(--border-accent);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 16px rgba(255, 0, 51, 0.1); }
+  50%      { box-shadow: 0 0 24px rgba(255, 0, 51, 0.25); }
+}
+
+.countdownNumber {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--brand-500);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Estado 3: liberado */
+.startBtn.unlocked {
+  background: linear-gradient(135deg, #cc0029, #ff0033);
+  border-color: rgba(255, 0, 51, 0.5);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 0 24px rgba(255, 0, 51, 0.25);
+  animation: scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.startBtn.unlocked:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 32px rgba(255, 0, 51, 0.4);
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ============================================================
+   FORMULÁRIO
+   ============================================================ */
+
+.formCard {
+  background: linear-gradient(145deg, rgba(17, 17, 17, 0.95), rgba(10, 10, 10, 0.98));
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  padding: 24px 20px;
+  margin-top: 8px;
+  position: relative;
+  overflow: hidden;
+  animation: fadeInUp 0.5s ease-out both;
+}
+
+.formCard::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 0, 51, 0.35), transparent);
+}
+
+.formHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.formHeaderTitle {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.savedBadge {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: #22c55e;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.savedBadge.visible { opacity: 1; }
+
+/* Field group */
+.fieldGroup {
+  margin-bottom: 22px;
+  animation: fadeInUp 0.4s ease-out both;
+}
+
+.fieldLabel {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  line-height: 1.45;
+}
+
+.fieldRequired { color: var(--brand-500); margin-left: 4px; }
+
+/* Badge da numeração da pergunta — alinhada com a instrução do popup
+   de áudio ("fale: a pergunta 1.1 é..."). Tipo terminal/HUD. */
+.questionNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--brand-500);
+  background: rgba(255, 0, 51, 0.08);
+  border: 1px solid rgba(255, 0, 51, 0.2);
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-right: 8px;
+  vertical-align: middle;
+  text-shadow: 0 0 4px rgba(255, 0, 51, 0.4);
+  min-width: 32px;
+}
+
+.fieldHint {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Botão de info ao lado do label que abre o helpText */
+.helpButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 8px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: 50%;
+  color: var(--text-muted);
+  cursor: pointer;
+  vertical-align: middle;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.helpButton:hover {
+  border-color: var(--brand-500);
+  color: var(--brand-500);
+  background: rgba(255, 0, 51, 0.05);
+}
+
+.helpButton[aria-expanded="true"] {
+  border-color: var(--brand-500);
+  color: var(--brand-500);
+  background: rgba(255, 0, 51, 0.08);
+}
+
+/* Bloco expansível com o texto explicativo da pergunta */
+.helpBlock {
+  margin: 6px 0 10px;
+  padding: 12px 14px;
+  background: rgba(59, 130, 246, 0.05);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-left: 3px solid var(--info);
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  animation: fadeInUp 0.25s ease-out both;
+}
+
+/* Estado de erro de validação no fieldGroup */
+.fieldError .input,
+.fieldError .textarea,
+.fieldError .select,
+.fieldError .compositeWrap {
+  border-color: var(--brand-500) !important;
+  box-shadow: 0 0 0 2px rgba(255, 0, 51, 0.15) !important;
+}
+
+.fieldErrorMsg {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--brand-500);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Inputs */
+.input,
+.textarea,
+.select {
+  width: 100%;
+  padding: 12px 14px;
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.input:focus,
+.textarea:focus,
+.select:focus {
+  border-color: rgba(255, 0, 51, 0.5);
+  box-shadow: 0 0 0 3px rgba(255, 0, 51, 0.08);
+}
+
+.textarea {
+  min-height: 90px;
+  resize: vertical;
+  font-family: var(--font-sans);
+  line-height: 1.55;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* Highlight de campo preenchido por áudio (animação de "digitação") */
+.input.justFilled,
+.textarea.justFilled {
+  border-color: var(--brand-500);
+  box-shadow: 0 0 16px rgba(255, 0, 51, 0.25);
+  animation: justFilled 1.2s ease-out;
+}
+
+@keyframes justFilled {
+  0%   { background: rgba(255, 0, 51, 0.08); }
+  100% { background: rgba(10, 10, 10, 0.8); }
+}
+
+/* Radio group */
+.optionGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.optionItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(10, 10, 10, 0.6);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.optionItem:hover {
+  border-color: var(--border-hover);
+  background: rgba(255, 0, 51, 0.03);
+}
+
+.optionItem.selected {
+  border-color: var(--brand-500);
+  background: rgba(255, 0, 51, 0.06);
+  box-shadow: 0 0 16px rgba(255, 0, 51, 0.1);
+}
+
+.optionRadio {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--text-muted);
+  flex-shrink: 0;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.optionItem.selected .optionRadio {
+  border-color: var(--brand-500);
+}
+
+.optionItem.selected .optionRadio::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  background: var(--brand-500);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--brand-500);
+}
+
+.optionCheckbox {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 2px solid var(--text-muted);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.optionItem.selected .optionCheckbox {
+  border-color: var(--brand-500);
+  background: var(--brand-500);
+}
+
+.optionLabel {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.conditionalField {
+  margin-top: 10px;
+  padding-left: 28px;
+  animation: fadeInUp 0.3s ease-out both;
+}
+
+/* Slider (0-10) */
+.sliderWrapper {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.sliderInput {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: var(--dark-700);
+  border-radius: 3px;
+  outline: none;
+}
+
+.sliderInput::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  background: var(--brand-500);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(255, 0, 51, 0.5);
+  transition: transform 0.15s ease;
+}
+
+.sliderInput::-webkit-slider-thumb:hover { transform: scale(1.15); }
+
+.sliderValue {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--brand-500);
+  min-width: 30px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Composite (vários subcampos) */
+.compositeWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: rgba(10, 10, 10, 0.4);
+  border: 1px dashed var(--border-default);
+  border-radius: 8px;
+}
+
+/* Submit do form */
+.submitBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 24px;
+  margin-top: 10px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #cc0029, #ff0033);
+  border: 1px solid rgba(255, 0, 51, 0.5);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 20px rgba(255, 0, 51, 0.2);
+}
+
+.submitBtn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 0 32px rgba(255, 0, 51, 0.35);
+}
+
+.submitBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   BOTÃO MICROFONE FLUTUANTE
+   ============================================================ */
+
+.micFloatBtn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #cc0029, #ff0033);
+  border: 2px solid rgba(255, 0, 51, 0.5);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 24px rgba(255, 0, 51, 0.4),
+              0 0 0 0 rgba(255, 0, 51, 0.6);
+  z-index: 60;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: micPulse 3s ease-in-out infinite;
+}
+
+.micFloatBtn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 4px 32px rgba(255, 0, 51, 0.55);
+}
+
+/* Badge BETA pequeno fixado no canto superior direito do botão flutuante.
+   A IA de transcrição/parsing ainda erra com frequência — manter visível
+   pra calibrar a expectativa do cliente. */
+.micFloatBetaTag {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--warning);
+  color: #1a0a00;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.4);
+  pointer-events: none;
+  text-transform: uppercase;
+}
+
+/* Badge BETA inline (usado no header do popup de áudio) */
+.betaTag {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 2px 7px;
+  margin-left: 8px;
+  border-radius: 4px;
+  background: rgba(249, 115, 22, 0.15);
+  color: var(--warning);
+  border: 1px solid rgba(249, 115, 22, 0.4);
+  text-transform: uppercase;
+  vertical-align: middle;
+  text-shadow: 0 0 4px rgba(249, 115, 22, 0.3);
+}
+
+/* Aviso "ainda em beta" dentro do popup */
+.betaWarning {
+  margin-top: 12px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: rgba(249, 115, 22, 0.05);
+  border: 1px solid rgba(249, 115, 22, 0.2);
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.betaWarning strong {
+  color: var(--warning);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@keyframes micPulse {
+  0%, 100% { box-shadow: 0 4px 24px rgba(255, 0, 51, 0.4), 0 0 0 0 rgba(255, 0, 51, 0.5); }
+  50%      { box-shadow: 0 4px 24px rgba(255, 0, 51, 0.4), 0 0 0 14px rgba(255, 0, 51, 0); }
+}
+
+/* ============================================================
+   AUDIO RECORDER — WIDGET FLUTUANTE DURANTE GRAVAÇÃO
+   ─────────────────────────────────────────────────────────────
+   Aparece no canto inferior direito (mobile-first: canto inferior
+   ocupando 88% da largura da tela, mas com max-width no desktop).
+   Mostra waveform, timer e botão STOP. NÃO bloqueia a tela —
+   o cliente continua vendo as perguntas e consegue gravar em cima.
+   ============================================================ */
+
+.recordingWidget {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 95;
+  width: calc(100% - 32px);
+  max-width: 380px;
+  background: linear-gradient(145deg, rgba(17, 17, 17, 0.98), rgba(10, 10, 10, 1));
+  border: 2px solid var(--brand-500);
+  border-radius: 14px;
+  padding: 14px 18px;
+  box-shadow: 0 8px 40px rgba(255, 0, 51, 0.35),
+              0 0 0 0 rgba(255, 0, 51, 0.5);
+  animation: recordWidgetIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+             recordWidgetPulse 2s ease-in-out 0.3s infinite;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+@keyframes recordWidgetIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+@keyframes recordWidgetPulse {
+  0%, 100% { box-shadow: 0 8px 40px rgba(255, 0, 51, 0.35), 0 0 0 0 rgba(255, 0, 51, 0.5); }
+  50%      { box-shadow: 0 8px 40px rgba(255, 0, 51, 0.5), 0 0 0 12px rgba(255, 0, 51, 0); }
+}
+
+.recordingWidgetDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--brand-500);
+  box-shadow: 0 0 12px var(--brand-500);
+  flex-shrink: 0;
+  animation: recordDotBlink 1s ease-in-out infinite;
+}
+
+@keyframes recordDotBlink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}
+
+.recordingWidgetInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.recordingWidgetLabel {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--brand-500);
+  font-weight: 600;
+}
+
+.recordingWidgetTimer {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+}
+
+.recordingWidgetWave {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.recordingWidgetWave .waveBar {
+  width: 3px;
+  background: var(--brand-500);
+  border-radius: 1px;
+  animation: waveBar 1.2s ease-in-out infinite;
+}
+
+.recordingWidgetStopBtn {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--brand-500);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 12px rgba(255, 0, 51, 0.4);
+}
+
+.recordingWidgetStopBtn:hover {
+  background: var(--action-hover);
+  transform: scale(1.08);
+  box-shadow: 0 2px 16px rgba(255, 0, 51, 0.6);
+}
+
+/* Em telas muito pequenas (< 360px) */
+@media (max-width: 360px) {
+  .recordingWidget {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+  .recordingWidgetWave {
+    display: none; /* libera espaço */
+  }
+}
+
+/* ============================================================
+   AUDIO RECORDER POPUP (modal)
+   ============================================================ */
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.modalCard {
+  width: 100%;
+  max-width: 460px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: linear-gradient(145deg, rgba(17, 17, 17, 0.98), rgba(10, 10, 10, 1));
+  border: 1px solid var(--border-accent);
+  border-radius: 16px;
+  padding: 28px 24px;
+  position: relative;
+  box-shadow: 0 0 60px rgba(255, 0, 51, 0.15);
+  animation: modalIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.92) translateY(20px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modalClose {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.modalClose:hover {
+  border-color: var(--brand-500);
+  color: var(--brand-500);
+}
+
+.modalTitle {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  padding-right: 30px;
+}
+
+.modalSubtitle {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 18px;
+  line-height: 1.55;
+}
+
+.modalSection {
+  margin-bottom: 18px;
+}
+
+.modalSectionLabel {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.usageCounter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(10, 10, 10, 0.6);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 18px;
+}
+
+.usageCounter.warning { color: #f97316; border-color: rgba(249, 115, 22, 0.3); }
+.usageCounter.empty   { color: #ff1a4d; border-color: rgba(255, 0, 51, 0.3); }
+
+.questionsList {
+  background: rgba(10, 10, 10, 0.4);
+  border: 1px dashed var(--border-default);
+  border-radius: 8px;
+  padding: 12px 14px;
+  max-height: 180px;
+  overflow-y: auto;
+  margin-bottom: 18px;
+}
+
+.questionsListItem {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  padding: 6px 0;
+  display: flex;
+  gap: 8px;
+  line-height: 1.45;
+}
+
+.questionsListNumber {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--brand-500);
+  flex-shrink: 0;
+}
+
+.recordBtn {
+  width: 100%;
+  padding: 16px 24px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #cc0029, #ff0033);
+  border: 1px solid rgba(255, 0, 51, 0.5);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.recordBtn:hover:not(:disabled) {
+  box-shadow: 0 0 24px rgba(255, 0, 51, 0.4);
+  transform: translateY(-1px);
+}
+
+.recordBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.recordBtn.recording {
+  background: rgba(255, 0, 51, 0.15);
+  border-color: var(--brand-500);
+  animation: recordPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes recordPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 0, 51, 0.6); }
+  50%      { box-shadow: 0 0 0 14px rgba(255, 0, 51, 0); }
+}
+
+/* Waveform animado */
+.waveform {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 60px;
+  margin: 14px 0;
+}
+
+.waveBar {
+  width: 4px;
+  background: var(--brand-500);
+  border-radius: 2px;
+  animation: waveBar 1.2s ease-in-out infinite;
+}
+
+.waveBar:nth-child(1) { animation-delay: 0.0s; }
+.waveBar:nth-child(2) { animation-delay: 0.1s; }
+.waveBar:nth-child(3) { animation-delay: 0.2s; }
+.waveBar:nth-child(4) { animation-delay: 0.3s; }
+.waveBar:nth-child(5) { animation-delay: 0.4s; }
+.waveBar:nth-child(6) { animation-delay: 0.5s; }
+.waveBar:nth-child(7) { animation-delay: 0.4s; }
+.waveBar:nth-child(8) { animation-delay: 0.3s; }
+.waveBar:nth-child(9) { animation-delay: 0.2s; }
+.waveBar:nth-child(10) { animation-delay: 0.1s; }
+
+@keyframes waveBar {
+  0%, 100% { height: 8px; }
+  50%      { height: 50px; }
+}
+
+.timer {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--brand-500);
+  font-variant-numeric: tabular-nums;
+  margin: 8px 0;
+  text-shadow: 0 0 12px rgba(255, 0, 51, 0.4);
+}
+
+.processingSteps {
+  padding: 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+
+.processingStep {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  opacity: 0.4;
+  transition: all 0.3s ease;
+}
+
+.processingStep.active {
+  opacity: 1;
+  color: var(--text-primary);
+}
+
+.processingStep.done {
+  opacity: 1;
+  color: #22c55e;
+}
+
+.processingSpinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--brand-500);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   MICRO CELEBRATION
+   ============================================================ */
+
+.celebrationOverlay {
+  text-align: center;
+  padding: 40px 20px;
+  position: relative;
+  animation: fadeIn 0.5s ease-out;
+}
+
+.celebrationIcon {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.1);
+  border: 2px solid #22c55e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #22c55e;
+  box-shadow: 0 0 32px rgba(34, 197, 94, 0.4);
+  animation: scaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.celebrationTitle {
+  font-family: var(--font-mono);
+  font-size: 1.3rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #f0f0f0, #ff6680);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 8px;
+}
+
+.celebrationSubtitle {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.celebrationSummary {
+  background: rgba(17, 17, 17, 0.8);
+  border: 1px solid var(--border-accent);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin: 24px 0;
+  text-align: left;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--text-primary);
+}
+
+.celebrationSummaryLabel {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--brand-500);
+  margin-bottom: 8px;
+}
+
+.celebrationTeaser {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin: 16px 0;
+}
+
+.celebrationTeaser strong { color: var(--text-secondary); }
+
+.advanceBlock {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-default);
+}
+
+.advanceTitle {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.advanceSubtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.advanceBtn {
+  width: 100%;
+  padding: 14px 22px;
+  background: var(--dark-800);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.advanceBtn:hover {
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+  background: rgba(255, 0, 51, 0.04);
+}
+
+.advanceBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.advanceMeta {
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+/* Confete CSS */
+.confettiWrap {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 90;
+}
+
+.confettiPiece {
+  position: absolute;
+  top: -20px;
+  width: 8px;
+  height: 14px;
+  background: var(--brand-500);
+  opacity: 0.85;
+  animation: confettiFall 4s linear forwards;
+}
+
+@keyframes confettiFall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(105vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+/* ============================================================
+   CONFIG ADMIN — timeline + modal de etapa
+   ============================================================ */
+
+.configHeader {
+  margin-bottom: 28px;
+}
+
+.configTimeline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.timelineCard {
+  background: linear-gradient(145deg, rgba(17, 17, 17, 0.95), rgba(10, 10, 10, 0.98));
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 16px 14px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.timelineCard:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 0, 51, 0.08);
+}
+
+.timelineCard.rest {
+  border-style: dashed;
+  background: rgba(10, 10, 10, 0.5);
+}
+
+.timelineCard.rest .timelineCardLabel {
+  color: var(--warning);
+}
+
+.timelineCardDay {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.timelineCardLabel {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 4px 0;
+}
+
+.timelineCardMeta {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.timelineVideo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.625rem;
+  color: var(--text-muted);
+}
+
+.timelineVideo.has { color: #22c55e; }
+.timelineVideo.missing { color: var(--brand-500); }
+
+/* ============================================================
+   RESPONSIVO
+   ============================================================ */
+
+@media (min-width: 640px) {
+  .contentArea { padding: 28px 24px 80px; }
+  .stageHeader { padding: 32px 28px; }
+  .stageTitleBig { font-size: 1.7rem; }
+  .stageMetaGrid { grid-template-columns: 1fr 1fr; }
+  .formCard { padding: 32px 28px; }
+}
+
+@media (max-width: 480px) {
+  .stageHeader { padding: 22px 18px; }
+  .stageTitleBig { font-size: 1.25rem; }
+  .formCard { padding: 22px 16px; }
+}
+
+/* ============================================================
+   ANIMAÇÕES DE ENTRADA — stagger helpers
+   ============================================================ */
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.stagger1 { animation-delay: 50ms !important; }
+.stagger2 { animation-delay: 100ms !important; }
+.stagger3 { animation-delay: 150ms !important; }
+.stagger4 { animation-delay: 200ms !important; }

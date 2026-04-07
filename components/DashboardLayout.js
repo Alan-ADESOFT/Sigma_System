@@ -77,7 +77,8 @@ const NAV_SECTIONS = [
   {
     category: 'SISTEMA',
     items: [
-      { href: '/dashboard/settings',         label: 'Configurações',          tag: '11', icon: 'settings'  },
+      { href: '/dashboard/onboarding-config', label: 'Onboarding (15 dias)',  tag: '11', icon: 'calendar'  },
+      { href: '/dashboard/settings',          label: 'Configurações',          tag: '12', icon: 'settings'  },
     ],
   },
 ];

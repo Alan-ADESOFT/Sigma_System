@@ -118,6 +118,35 @@ async function markTokenAsUsed(tokenId) {
 async function getFormStatusForClient(clientId) {
   console.log('[INFO][ClientForm:getFormStatusForClient] Consultando status do formulário', { clientId });
 
+  // PRIORIDADE 1: onboarding de 15 dias (novo sistema)
+  // Se o cliente tem um onboarding_progress ativo ou concluído, esse é o
+  // estado real — ignoramos client_form_tokens (formulário antigo).
+  const onboarding = await queryOne(
+    `SELECT op.*,
+            (SELECT COUNT(*)::int FROM onboarding_stage_responses osr
+             WHERE osr.client_id = op.client_id AND osr.submitted = true) AS stages_submitted
+     FROM onboarding_progress op
+     WHERE op.client_id = $1`,
+    [clientId]
+  );
+
+  if (onboarding && onboarding.status !== 'not_started') {
+    return {
+      formStatus: 'onboarding_' + onboarding.status, // 'onboarding_active' | 'onboarding_completed' | 'onboarding_paused'
+      onboarding: {
+        token: onboarding.token,
+        status: onboarding.status,
+        startedAt: onboarding.started_at,
+        completedAt: onboarding.completed_at,
+        currentStage: onboarding.current_stage,
+        currentDay: onboarding.current_day,
+        stagesSubmitted: onboarding.stages_submitted || 0,
+        totalStages: 12,
+      },
+    };
+  }
+
+  // PRIORIDADE 2: formulário antigo (retrocompatibilidade)
   // Verifica se o cliente tem form_done = true
   const client = await queryOne(
     `SELECT form_done FROM marketing_clients WHERE id = $1`,

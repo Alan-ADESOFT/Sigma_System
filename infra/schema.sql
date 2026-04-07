@@ -631,6 +631,111 @@ CREATE INDEX IF NOT EXISTS idx_token_usage_month  ON ai_token_usage(tenant_id, d
 CREATE INDEX IF NOT EXISTS idx_token_usage_type   ON ai_token_usage(tenant_id, operation_type);
 
 -- ============================================================
+-- 31. ONBOARDING — Sistema de jornada por etapas (15 dias)
+-- Espelhado em infra/migrations/002_onboarding_stages.sql
+-- Substitui o formulário monolítico por uma sequência diária
+-- com vídeo + perguntas + controle por cron.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS onboarding_stages_config (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    stage_number    INTEGER NOT NULL,
+    title           TEXT NOT NULL,
+    description     TEXT,
+    video_url       TEXT,
+    video_duration  INTEGER,
+    questions_json  JSONB NOT NULL DEFAULT '[]',
+    day_release     INTEGER NOT NULL,
+    is_rest_day     BOOLEAN NOT NULL DEFAULT false,
+    rest_message    TEXT,
+    time_estimate   TEXT,
+    insight_text    TEXT,
+    active          BOOLEAN NOT NULL DEFAULT true,
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(tenant_id, stage_number)
+);
+CREATE INDEX IF NOT EXISTS idx_onb_config_tenant ON onboarding_stages_config(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_onb_config_day    ON onboarding_stages_config(tenant_id, day_release);
+
+CREATE TABLE IF NOT EXISTS onboarding_rest_days_config (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    day_number      INTEGER NOT NULL,
+    message         TEXT NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(tenant_id, day_number)
+);
+CREATE INDEX IF NOT EXISTS idx_onb_rest_tenant ON onboarding_rest_days_config(tenant_id);
+
+CREATE TABLE IF NOT EXISTS onboarding_progress (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    client_id       TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    current_stage   INTEGER NOT NULL DEFAULT 0,
+    current_day     INTEGER NOT NULL DEFAULT 0,
+    started_at      TIMESTAMPTZ,
+    completed_at    TIMESTAMPTZ,
+    status          TEXT NOT NULL DEFAULT 'not_started',
+    last_stage_at   TIMESTAMPTZ,
+    token           TEXT UNIQUE,
+    token_expires   TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(client_id)
+);
+CREATE INDEX IF NOT EXISTS idx_onb_progress_client ON onboarding_progress(client_id);
+CREATE INDEX IF NOT EXISTS idx_onb_progress_status ON onboarding_progress(status);
+CREATE INDEX IF NOT EXISTS idx_onb_progress_token  ON onboarding_progress(token);
+
+CREATE TABLE IF NOT EXISTS onboarding_stage_responses (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    client_id       TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    stage_number    INTEGER NOT NULL,
+    responses_json  JSONB NOT NULL DEFAULT '{}',
+    video_watched   BOOLEAN NOT NULL DEFAULT false,
+    video_watched_at TIMESTAMPTZ,
+    submitted       BOOLEAN NOT NULL DEFAULT false,
+    submitted_at    TIMESTAMPTZ,
+    time_spent_sec  INTEGER,
+    ai_summary      TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(client_id, stage_number)
+);
+CREATE INDEX IF NOT EXISTS idx_onb_responses_client ON onboarding_stage_responses(client_id);
+
+CREATE TABLE IF NOT EXISTS onboarding_audio_usage (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    client_id       TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    stage_number    INTEGER NOT NULL,
+    audio_duration  INTEGER NOT NULL,
+    transcription   TEXT,
+    parsed_answers  JSONB,
+    usage_date      DATE NOT NULL DEFAULT CURRENT_DATE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_onb_audio_client_date ON onboarding_audio_usage(client_id, usage_date);
+
+CREATE TABLE IF NOT EXISTS onboarding_notifications_log (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    client_id       TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    day_number      INTEGER NOT NULL,
+    type            TEXT NOT NULL,
+    message         TEXT,
+    sent_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(client_id, day_number, type)
+);
+CREATE INDEX IF NOT EXISTS idx_onb_notif_client ON onboarding_notifications_log(client_id);
+
+-- Colunas extras em marketing_clients para o sistema de onboarding
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS onboarding_started_at TIMESTAMPTZ;
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS onboarding_status     TEXT DEFAULT 'not_started';
+
+-- ============================================================
 -- CLEANUP (tabelas descontinuadas)
 -- ============================================================
 DROP TABLE IF EXISTS stage_quality_scores;
@@ -654,7 +759,9 @@ BEGIN
         'tenants','accounts','contents','collections','settings','analytics',
         'content_folders','marketing_clients','marketing_stages',
         'client_form_tokens','client_form_responses',
-        'copy_structures','copy_sessions'
+        'copy_structures','copy_sessions',
+        'onboarding_stages_config','onboarding_rest_days_config',
+        'onboarding_progress','onboarding_stage_responses'
     ])
     LOOP
         EXECUTE format('
