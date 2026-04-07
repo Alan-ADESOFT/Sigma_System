@@ -2,6 +2,7 @@ import { getClientsByTenant, createClient, seedStages } from '../../../models/cl
 import { query, queryOne } from '../../../infra/db';
 import { resolveTenantId } from '../../../infra/get-tenant-id';
 import { createNotification } from '../../../models/clientForm';
+import { getOrSet, invalidate } from '../../../infra/cache';
 
 function buildInstallments(contractId, clientId, monthlyValue, numInstallments, dueDay, startDate) {
   const installments = [];
@@ -26,7 +27,11 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const clients = await getClientsByTenant(tenantId);
+      const clients = await getOrSet(
+        `clients:list:${tenantId}`,
+        () => getClientsByTenant(tenantId),
+        60
+      );
       console.log('[SUCESSO][API:/api/clients] Resposta enviada', { count: clients.length });
       return res.json({ success: true, clients });
     }
@@ -65,6 +70,9 @@ export default async function handler(req, res) {
           );
         }
       }
+
+      // PERF: invalida cache de lista de clientes
+      invalidate(`clients:list:${tenantId}`);
 
       console.log('[SUCESSO][API:/api/clients] Cliente criado', { clientId: client.id, company_name });
 

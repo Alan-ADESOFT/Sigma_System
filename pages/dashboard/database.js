@@ -9,10 +9,13 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import DashboardLayout from '../../components/DashboardLayout';
-import StageModal from '../../components/StageModal';
-import PipelineModal from '../../components/PipelineModal';
 import { useNotification } from '../../context/NotificationContext';
+import { SkeletonCard } from '../../components/Skeleton';
+
+const StageModal = dynamic(() => import('../../components/StageModal'), { loading: () => null, ssr: false });
+const PipelineModal = dynamic(() => import('../../components/PipelineModal'), { loading: () => null, ssr: false });
 
 const STAGES_META = [
   { key: 'diagnosis',   index: 1, label: 'Diagnóstico do Negócio',  desc: 'Organiza os dados do cadastro e gera uma análise estratégica do negócio, produto e mercado.' },
@@ -198,10 +201,11 @@ function ClientStagesPopup({ client, onClose, onStageUpdated, onReloadClient }) 
     checkPipelineStatus();
   }, []);
 
-  // Polling de status do pipeline
+  // PERF: polling com visibilitychange — pausa quando aba inativa
   useEffect(() => {
     if (!pipelinePolling) return;
-    const interval = setInterval(async () => {
+    let interval;
+    const poll = async () => {
       const data = await checkPipelineStatus();
       if (data && data.status !== 'running') {
         setPipelinePolling(false);
@@ -213,8 +217,14 @@ function ClientStagesPopup({ client, onClose, onStageUpdated, onReloadClient }) 
         }
         onReloadClient?.(client.id);
       }
-    }, 5000);
-    return () => clearInterval(interval);
+    };
+    const start = () => { interval = setInterval(poll, 5000); };
+    const stop  = () => clearInterval(interval);
+    const onVis = () => { if (document.hidden) stop(); else { poll(); start(); } };
+
+    start();
+    document.addEventListener('visibilitychange', onVis);
+    return () => { stop(); document.removeEventListener('visibilitychange', onVis); };
   }, [pipelinePolling]);
 
   async function checkPipelineStatus() {
@@ -598,8 +608,8 @@ export default function DatabasePage() {
 
       {/* Estados */}
       {loading && (
-        <div className="glass-card" style={{ padding: 40, textAlign: 'center' }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)' }}>// carregando...</span>
+        <div style={{ display: 'grid', gap: 8 }}>
+          {[1,2,3].map(i => <SkeletonCard key={i} lines={3} />)}
         </div>
       )}
       {error && (

@@ -301,6 +301,9 @@ async function createNotification(tenantId, type, title, message, clientId = nul
     [tenantId, type, title, message, clientId, JSON.stringify(metadata)]
   );
 
+  // PERF: invalida cache de contagem de notificações
+  try { require('../infra/cache').invalidate(`notif:count:${tenantId}`); } catch {}
+
   console.log('[SUCESSO][ClientForm:createNotification] Notificação criada', { id: row.id, type });
   return row;
 }

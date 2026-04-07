@@ -15,6 +15,7 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
 } from '../../../models/clientForm';
+import { getOrSet, invalidate } from '../../../infra/cache';
 
 export default async function handler(req, res) {
   console.log('[INFO][API:/api/notifications] Requisição recebida', { method: req.method });
@@ -28,7 +29,7 @@ export default async function handler(req, res) {
 
       const [notifications, unreadCount] = await Promise.all([
         filter === 'all' ? getAllNotifications(tenantId) : getUnreadNotifications(tenantId),
-        countUnread(tenantId),
+        getOrSet(`notif:count:${tenantId}`, () => countUnread(tenantId), 30),
       ]);
 
       console.log('[SUCESSO][API:/api/notifications] Notificações retornadas', { filter, count: notifications.length, unreadCount });
@@ -44,15 +45,14 @@ export default async function handler(req, res) {
       }
 
       if (id) {
-        // Marca uma notificação específica
         await markNotificationRead(id);
         console.log('[SUCESSO][API:/api/notifications] Notificação marcada como lida', { id });
       } else {
-        // Marca todas do tenant
         await markAllNotificationsRead(tenantId);
         console.log('[SUCESSO][API:/api/notifications] Todas as notificações marcadas como lidas', { tenantId });
       }
 
+      invalidate(`notif:count:${tenantId}`);
       return res.json({ success: true });
     }
 

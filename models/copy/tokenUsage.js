@@ -17,8 +17,11 @@ const PRICES = {
   'gpt-4o-mini':                { input: 0.00000015, output: 0.0000006  },
   'claude-opus-4-20250514':     { input: 0.000015,   output: 0.000075   },
   'claude-sonnet-4-6-20250514': { input: 0.000003,   output: 0.000015   },
+  'claude-sonnet-4-5':          { input: 0.000003,   output: 0.000015   },
   'sonar-pro':                  { input: 0.000003,   output: 0.000015   },
   'sonar':                      { input: 0.000001,   output: 0.000001   },
+  'whisper-1':                  { input: 0,           output: 0          },
+  'eleven_multilingual_v2':     { input: 0.00003,    output: 0          }, // ~$0.03/1000 chars
 };
 
 /**

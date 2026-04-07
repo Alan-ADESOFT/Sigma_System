@@ -15,6 +15,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import DashboardLayout from '../../components/DashboardLayout';
 import CopyWorkspace from '../../components/CopyWorkspace';
 import { useNotification } from '../../context/NotificationContext';
+import { Skeleton } from '../../components/Skeleton';
 import styles from '../../assets/style/social.module.css';
 
 /* ─── Paleta de cores para as pastas ─────────────────────────────────────── */
@@ -569,7 +570,7 @@ function ContentEditorModal({ folder, account, onClose }) {
               </button>
 
               {loadingC ? (
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)' }}>carregando...</span>
+                <div style={{ padding: '4px 12px' }}><Skeleton width="80%" height={10} style={{ marginBottom: 6 }} /><Skeleton width="60%" height={10} /></div>
               ) : (
                 contents.map(c => (
                   <button

@@ -9,11 +9,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import DashboardLayout from '../../../components/DashboardLayout';
-import StageModal from '../../../components/StageModal';
-import PipelineModal from '../../../components/PipelineModal';
 import { useNotification } from '../../../context/NotificationContext';
+import { Skeleton, SkeletonCard } from '../../../components/Skeleton';
 import rs from '../../../assets/style/clientRespostas.module.css';
+
+const StageModal = dynamic(() => import('../../../components/StageModal'), { loading: () => null, ssr: false });
+const PipelineModal = dynamic(() => import('../../../components/PipelineModal'), { loading: () => null, ssr: false });
 
 /* ═══════════════════════════════════════════════════════════
    CONSTANTS
@@ -518,11 +521,8 @@ function TabRespostas({ clientId, client }) {
 
   if (loading) {
     return (
-      <div style={{ padding: '60px 0', textAlign: 'center' }}>
-        <div className="spinner" style={{ margin: '0 auto 12px' }} />
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-          Carregando status do formulário...
-        </div>
+      <div style={{ padding: '30px 0' }}>
+        <SkeletonCard lines={4} />
       </div>
     );
   }
@@ -999,9 +999,8 @@ function RespostasSectionRespostas({ clientId, notify }) {
 
   if (loading) {
     return (
-      <div style={{ padding: '30px 0', textAlign: 'center' }}>
-        <div className="spinner" style={{ margin: '0 auto 8px' }} />
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>Carregando respostas...</div>
+      <div style={{ padding: '30px 0' }}>
+        <SkeletonCard lines={5} />
       </div>
     );
   }
@@ -1859,7 +1858,7 @@ function TabAnexos({ clientId }) {
       </div>
 
       {/* Lista de anexos */}
-      {loading && <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Carregando...</div>}
+      {loading && <div style={{ padding: '12px 0' }}><Skeleton width="100%" height={12} style={{ marginBottom: 8 }} /><Skeleton width="80%" height={12} style={{ marginBottom: 8 }} /><Skeleton width="60%" height={12} /></div>}
       {!loading && attachments.length === 0 && (
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)', padding: '20px 0' }}>
           Nenhum anexo adicionado.
@@ -2031,7 +2030,7 @@ function TabObservacoes({ clientId }) {
       </div>
 
       {/* Lista */}
-      {loading && <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>Carregando...</div>}
+      {loading && <div style={{ padding: '12px 0' }}><Skeleton width="100%" height={12} style={{ marginBottom: 8 }} /><Skeleton width="80%" height={12} style={{ marginBottom: 8 }} /><Skeleton width="60%" height={12} /></div>}
       {!loading && observations.length === 0 && (
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)', padding: '12px 0' }}>
           Nenhuma observação ainda.

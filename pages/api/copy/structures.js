@@ -9,6 +9,7 @@
 import { resolveTenantId } from '../../../infra/get-tenant-id';
 import { query, queryOne } from '../../../infra/db';
 import { getStructures } from '../../../models/copy/copySession';
+import { getOrSet, invalidate } from '../../../infra/cache';
 
 export default async function handler(req, res) {
   const tenantId = await resolveTenantId(req);
@@ -16,7 +17,11 @@ export default async function handler(req, res) {
   try {
     // ── GET: lista estruturas ativas ──
     if (req.method === 'GET') {
-      const structures = await getStructures(tenantId);
+      const structures = await getOrSet(
+        `copy:structures:${tenantId}`,
+        () => getStructures(tenantId),
+        600
+      );
       return res.json({ success: true, data: structures });
     }
 
@@ -33,6 +38,7 @@ export default async function handler(req, res) {
         [tenantId, name, description || null, prompt_base, icon || 'file', sort_order || 0, JSON.stringify(questions || [])]
       );
 
+      invalidate(`copy:structures:${tenantId}`);
       console.log('[SUCESSO][API:structures] Estrutura criada', { id: row.id, name });
       return res.status(201).json({ success: true, data: row });
     }
@@ -65,6 +71,7 @@ export default async function handler(req, res) {
       );
 
       if (!row) return res.status(404).json({ success: false, error: 'Estrutura nao encontrada' });
+      invalidate(`copy:structures:${tenantId}`);
       console.log('[SUCESSO][API:structures] Estrutura atualizada', { id });
       return res.json({ success: true, data: row });
     }
@@ -87,6 +94,7 @@ export default async function handler(req, res) {
         [id, tenantId]
       );
 
+      invalidate(`copy:structures:${tenantId}`);
       console.log('[SUCESSO][API:structures] Estrutura desativada', { id });
       return res.json({ success: true });
     }

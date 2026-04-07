@@ -7,6 +7,7 @@
 
 import { getClientById, updateClient, deleteClient } from '../../../../models/client.model';
 import { resolveTenantId } from '../../../../infra/get-tenant-id';
+import { invalidate } from '../../../../infra/cache';
 
 export default async function handler(req, res) {
   console.log('[INFO][API:/api/clients/:id] Requisição recebida', { method: req.method, query: req.query });
@@ -26,6 +27,7 @@ export default async function handler(req, res) {
     if (req.method === 'PUT') {
       const client = await updateClient(id, tenantId, req.body);
       if (!client) return res.status(404).json({ success: false, error: 'Cliente nao encontrado' });
+      invalidate(`clients:list:${tenantId}`);
       console.log('[SUCESSO][API:/api/clients/:id] Cliente atualizado', { clientId: id });
       return res.json({ success: true, client });
     }
@@ -33,6 +35,7 @@ export default async function handler(req, res) {
     if (req.method === 'DELETE') {
       const deleted = await deleteClient(id, tenantId);
       if (!deleted) return res.status(404).json({ success: false, error: 'Cliente nao encontrado' });
+      invalidate(`clients:list:${tenantId}`);
       console.log('[SUCESSO][API:/api/clients/:id] Cliente removido', { clientId: id });
       return res.json({ success: true, id: deleted.id });
     }

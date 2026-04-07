@@ -14,6 +14,7 @@ import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useNotification } from '../../context/NotificationContext';
+import { Skeleton, SkeletonCard, SkeletonTable } from '../../components/Skeleton';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -445,8 +446,17 @@ export default function FinanceiroDashboard() {
       </div>
 
       {loading && (
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)', padding: '32px 0' }}>
-          // carregando...
+        <div>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+            {[1,2,3,4].map(i => (
+              <div key={i} className="glass-card" style={{ padding: '16px 20px', flex: 1, minWidth: 140 }}>
+                <Skeleton width="60%" height={18} style={{ marginBottom: 8 }} />
+                <Skeleton width="40%" height={10} />
+              </div>
+            ))}
+          </div>
+          <SkeletonCard lines={5} style={{ marginBottom: 16 }} />
+          <SkeletonTable rows={6} cols={5} />
         </div>
       )}
 

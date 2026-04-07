@@ -14,6 +14,8 @@ if (appUrl && !appUrl.includes('localhost')) {
 
 const nextConfig = {
   allowedDevOrigins,
+  poweredByHeader: false,
+  compress: true,
   experimental: {
     instrumentationHook: true,
   },
@@ -23,6 +25,7 @@ const nextConfig = {
       { protocol: 'https', hostname: '**.cdninstagram.com' },
       { protocol: 'https', hostname: 'scontent.cdninstagram.com' },
     ],
+    formats: ['image/webp', 'image/avif'],
   },
 };
 

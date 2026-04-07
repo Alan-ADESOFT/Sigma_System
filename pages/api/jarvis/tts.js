@@ -9,6 +9,8 @@ import { resolveTenantId } from '../../../infra/get-tenant-id';
 import { verifyToken } from '../../../lib/auth';
 import { getJarvisConfig } from '../../../models/jarvis/config';
 
+const { logUsage } = require('../../../models/copy/tokenUsage');
+
 const ELEVEN_BASE = 'https://api.elevenlabs.io/v1';
 
 export default async function handler(req, res) {
@@ -55,6 +57,20 @@ export default async function handler(req, res) {
 
     const buf = Buffer.from(await r.arrayBuffer());
     const audioBase64 = buf.toString('base64');
+
+    console.log('[SUCESSO][Jarvis:TTS] Síntese concluída', {
+      model: 'eleven_multilingual_v2',
+      charCount: cleaned.length,
+      audioSizeBytes: buf.length,
+    });
+
+    // Registra uso do TTS no relatório de tokens (caracteres como proxy de tokens)
+    logUsage({
+      tenantId, modelUsed: 'eleven_multilingual_v2', provider: 'elevenlabs',
+      operationType: 'jarvis_tts',
+      tokensInput: cleaned.length, tokensOutput: 0,
+      metadata: { charCount: cleaned.length, audioSizeBytes: buf.length },
+    });
 
     return res.json({ success: true, audioBase64, mime: 'audio/mpeg' });
   } catch (err) {

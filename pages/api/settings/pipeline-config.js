@@ -13,6 +13,7 @@
 import { resolveTenantId } from '../../../infra/get-tenant-id';
 import { getSetting, setSetting } from '../../../models/settings.model';
 import { query, queryOne } from '../../../infra/db';
+import { getOrSet, invalidate } from '../../../infra/cache';
 
 const MODEL_KEYS = [
   'pipeline_model_weak',
@@ -43,48 +44,51 @@ export default async function handler(req, res) {
   // ── GET ──────────────────────────────────────────────────────────────────
   if (req.method === 'GET') {
     try {
-      // Modelos
-      const models = {};
-      for (const key of MODEL_KEYS) {
-        const val = await getSetting(tenantId, key);
-        models[key] = val || ENV_DEFAULTS[key];
-      }
+      const data = await getOrSet(`settings:pipeline:${tenantId}`, async () => {
+        // Modelos — queries em paralelo
+        const allSettings = await query(
+          `SELECT key, value FROM settings WHERE tenant_id = $1 AND key = ANY($2)`,
+          [tenantId, [...MODEL_KEYS, ...FALLBACK_KEYS]]
+        );
+        const settingsMap = {};
+        for (const row of allSettings) settingsMap[row.key] = row.value;
 
-      // Fallback
-      const fallback = {};
-      for (const key of FALLBACK_KEYS) {
-        const val = await getSetting(tenantId, key);
-        fallback[key] = val || ENV_DEFAULTS[key];
-      }
+        const models = {};
+        for (const key of MODEL_KEYS) models[key] = settingsMap[key] || ENV_DEFAULTS[key];
 
-      // Prompts (overrides na KB)
-      const prompts = {};
-      const overrides = await query(
-        `SELECT key, value FROM ai_knowledge_base
-         WHERE tenant_id = $1 AND category = 'prompt_override' AND client_id IS NULL`,
-        [tenantId]
-      );
-      for (const row of overrides) {
-        prompts[row.key] = { isCustom: true, prompt: row.value };
-      }
+        const fallback = {};
+        for (const key of FALLBACK_KEYS) fallback[key] = settingsMap[key] || ENV_DEFAULTS[key];
 
-      // Prompts padrão (do arquivo) para agentes sem override
-      const { getAgent } = require('../../../models/agentes/copycreator/prompts/index');
-      for (const name of AGENT_NAMES) {
-        if (!prompts[name]) {
-          const mod = getAgent(name);
-          prompts[name] = {
-            isCustom: false,
-            prompt: mod ? mod.getPrompt() : '',
-          };
-        } else {
-          // Inclui também o prompt padrão para permitir "restaurar"
-          const mod = getAgent(name);
-          prompts[name].defaultPrompt = mod ? mod.getPrompt() : '';
+        // Prompts (overrides na KB)
+        const prompts = {};
+        const overrides = await query(
+          `SELECT key, value FROM ai_knowledge_base
+           WHERE tenant_id = $1 AND category = 'prompt_override' AND client_id IS NULL`,
+          [tenantId]
+        );
+        for (const row of overrides) {
+          prompts[row.key] = { isCustom: true, prompt: row.value };
         }
-      }
 
-      return res.json({ success: true, data: { models, fallback, prompts } });
+        // Prompts padrão (do arquivo) para agentes sem override
+        const { getAgent } = require('../../../models/agentes/copycreator/prompts/index');
+        for (const name of AGENT_NAMES) {
+          if (!prompts[name]) {
+            const mod = getAgent(name);
+            prompts[name] = {
+              isCustom: false,
+              prompt: mod ? mod.getPrompt() : '',
+            };
+          } else {
+            const mod = getAgent(name);
+            prompts[name].defaultPrompt = mod ? mod.getPrompt() : '';
+          }
+        }
+
+        return { models, fallback, prompts };
+      }, 300);
+
+      return res.json({ success: true, data });
     } catch (err) {
       console.error('[ERRO][API:pipeline-config] GET', { error: err.message });
       return res.status(500).json({ success: false, error: err.message });
@@ -101,6 +105,7 @@ export default async function handler(req, res) {
           return res.status(400).json({ success: false, error: 'Chave de modelo invalida' });
         }
         await setSetting(tenantId, key, value);
+        invalidate(`settings:pipeline:${tenantId}`);
         console.log('[SUCESSO][API:pipeline-config] Modelo salvo', { key, value });
         return res.json({ success: true });
       }
@@ -110,6 +115,7 @@ export default async function handler(req, res) {
           return res.status(400).json({ success: false, error: 'Chave de fallback invalida' });
         }
         await setSetting(tenantId, key, value);
+        invalidate(`settings:pipeline:${tenantId}`);
         console.log('[SUCESSO][API:pipeline-config] Fallback salvo', { key, value });
         return res.json({ success: true });
       }
@@ -126,6 +132,7 @@ export default async function handler(req, res) {
            DO UPDATE SET value = EXCLUDED.value, metadata = EXCLUDED.metadata, updated_at = now()`,
           [tenantId, agentName, value, metadata]
         );
+        invalidate(`settings:pipeline:${tenantId}`);
         console.log('[SUCESSO][API:pipeline-config] Prompt override salvo', { agentName });
         return res.json({ success: true });
       }
@@ -139,6 +146,7 @@ export default async function handler(req, res) {
            WHERE tenant_id = $1 AND category = 'prompt_override' AND key = $2 AND client_id IS NULL`,
           [tenantId, agentName]
         );
+        invalidate(`settings:pipeline:${tenantId}`);
         console.log('[SUCESSO][API:pipeline-config] Prompt restaurado ao padrao', { agentName });
         return res.json({ success: true });
       }

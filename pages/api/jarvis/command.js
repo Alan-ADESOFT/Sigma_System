@@ -21,6 +21,7 @@ import { executeCommand } from '../../../models/jarvis/commands';
 
 const { DEFAULT_SYSTEM_PT, DEFAULT_SYSTEM_EN, renderPrompt } = require('../../../models/jarvis/systemPrompt');
 const { getSetting } = require('../../../models/settings.model');
+const { logUsage } = require('../../../models/copy/tokenUsage');
 
 export const config = {
   api: {
@@ -107,7 +108,13 @@ async function callAnthropic({ model, systemPrompt, userText, tools }) {
       textOut += block.text;
     }
   }
-  return { toolCall, text: textOut };
+
+  // Extrai usage da resposta Anthropic
+  const usage = {
+    input:  data.usage?.input_tokens  || 0,
+    output: data.usage?.output_tokens || 0,
+  };
+  return { toolCall, text: textOut, usage };
 }
 
 async function callOpenAI({ model, systemPrompt, userText, tools }) {
@@ -142,7 +149,13 @@ async function callOpenAI({ model, systemPrompt, userText, tools }) {
     try { args = JSON.parse(tc.function?.arguments || '{}'); } catch {}
     toolCall = { name: tc.function?.name, args };
   }
-  return { toolCall, text: msg.content || '' };
+
+  // Extrai usage da resposta OpenAI
+  const usage = {
+    input:  data.usage?.prompt_tokens     || 0,
+    output: data.usage?.completion_tokens || 0,
+  };
+  return { toolCall, text: msg.content || '', usage };
 }
 
 /* ─────────────────────────────────────────────
@@ -182,11 +195,25 @@ export default async function handler(req, res) {
 
     /* 3. Texto (transcrição se vier áudio) */
     let { text, audioBase64, language } = req.body || {};
+    let inputSource = 'text';
     if (!text && audioBase64) {
+      inputSource = 'audio';
       try {
         text = await transcribeAudio(audioBase64);
+        console.log('[SUCESSO][Jarvis:Whisper] Transcrição concluída', {
+          inputSource: 'audio',
+          transcription: text?.slice(0, 200) + (text?.length > 200 ? '...' : ''),
+          charCount: text?.length || 0,
+        });
+        // Registra uso do Whisper no relatório de tokens
+        logUsage({
+          tenantId, modelUsed: 'whisper-1', provider: 'openai',
+          operationType: 'jarvis_transcription',
+          tokensInput: 0, tokensOutput: 0,
+          metadata: { charCount: text?.length || 0, source: 'jarvis_audio' },
+        });
       } catch (err) {
-        console.error('[ERRO][API:/api/jarvis/command] Falha na transcrição', { error: err.message });
+        console.error('[ERRO][Jarvis:Whisper] Falha na transcrição', { error: err.message });
         return res.status(400).json({ success: false, error: 'Falha ao transcrever áudio: ' + err.message });
       }
     }
@@ -194,6 +221,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: 'Mensagem vazia.' });
     }
     text = String(text).trim().slice(0, 2000);
+    console.log('[INFO][Jarvis:Input] Mensagem recebida', { inputSource, text: text.slice(0, 200) + (text.length > 200 ? '...' : '') });
 
     /* 4. Config + funções habilitadas */
     const cfg = await getJarvisConfig(tenantId);
@@ -214,16 +242,50 @@ export default async function handler(req, res) {
     const template = customPrompt || (lang === 'en' ? DEFAULT_SYSTEM_EN : DEFAULT_SYSTEM_PT);
     const systemPrompt = renderPrompt(template, ctx);
 
+    console.log('[INFO][Jarvis:LLM] Chamando modelo', { model: cfg.jarvis_model, provider, toolsCount: tools.length });
+
     let providerResult;
     try {
       providerResult = provider === 'anthropic'
         ? await callAnthropic({ model: cfg.jarvis_model, systemPrompt, userText: text, tools })
         : await callOpenAI   ({ model: cfg.jarvis_model, systemPrompt, userText: text, tools });
     } catch (err) {
-      console.error('[ERRO][API:/api/jarvis/command] Provider falhou', { error: err.message });
+      console.error('[ERRO][Jarvis:LLM] Provider falhou', { model: cfg.jarvis_model, provider, error: err.message });
       await logJarvisUsage(tenantId, user.id, 'error', text, null, Date.now() - startedAt, false, err.message);
       return res.status(502).json({ success: false, error: 'Falha ao consultar a IA: ' + err.message });
     }
+
+    // Registra tokens da chamada LLM no relatório de tokens
+    const llmUsage = providerResult.usage || { input: 0, output: 0 };
+    const llmDuration = Date.now() - startedAt;
+    console.log('[SUCESSO][Jarvis:LLM] Resposta recebida', {
+      model: cfg.jarvis_model,
+      provider,
+      tokensInput: llmUsage.input,
+      tokensOutput: llmUsage.output,
+      tokensTotal: llmUsage.input + llmUsage.output,
+      hasToolCall: !!providerResult.toolCall,
+      toolName: providerResult.toolCall?.name || null,
+      outputPreview: (providerResult.text || '').slice(0, 200) + ((providerResult.text || '').length > 200 ? '...' : ''),
+      durationMs: llmDuration,
+    });
+
+    logUsage({
+      tenantId,
+      modelUsed: cfg.jarvis_model,
+      provider,
+      operationType: providerResult.toolCall ? `jarvis_tool_${providerResult.toolCall.name}` : 'jarvis_chat',
+      tokensInput: llmUsage.input,
+      tokensOutput: llmUsage.output,
+      metadata: {
+        userId: user.id,
+        inputSource,
+        inputPreview: text.slice(0, 100),
+        outputPreview: (providerResult.text || '').slice(0, 100),
+        toolCall: providerResult.toolCall?.name || null,
+        durationMs: llmDuration,
+      },
+    });
 
     /* 6. Tool execution OU resposta direta */
     let responsePayload;
@@ -243,6 +305,11 @@ export default async function handler(req, res) {
           requiresConfirmation: !!cmdResult.requiresConfirmation,
           confirmAction:        cmdResult.confirmAction || null,
         };
+        console.log('[SUCESSO][Jarvis:Tool] Comando executado', {
+          command: providerResult.toolCall.name,
+          success: true,
+          outputPreview: (cmdResult.summary || '').slice(0, 200),
+        });
         await logJarvisUsage(
           tenantId, user.id,
           providerResult.toolCall.name,
@@ -250,18 +317,34 @@ export default async function handler(req, res) {
           Date.now() - startedAt, true, null
         );
       } catch (err) {
-        console.error('[ERRO][API:/api/jarvis/command] Tool execution falhou', { error: err.message });
+        console.error('[ERRO][Jarvis:Tool] Execução falhou', { command: providerResult.toolCall.name, error: err.message });
         await logJarvisUsage(tenantId, user.id, providerResult.toolCall.name, text, null, Date.now() - startedAt, false, err.message);
         return res.status(500).json({ success: false, error: 'Falha ao executar tool: ' + err.message });
       }
     } else {
       const txt = providerResult.text || 'Não consegui interpretar o pedido. Tente reformular.';
       responsePayload = { response: txt, command: null, data: null, requiresConfirmation: false };
+      console.log('[SUCESSO][Jarvis:Chat] Resposta direta', {
+        outputPreview: txt.slice(0, 200) + (txt.length > 200 ? '...' : ''),
+      });
       await logJarvisUsage(tenantId, user.id, 'chat', text, txt, Date.now() - startedAt, true, null);
     }
 
     /* 7. Quota atualizada */
+    const totalDuration = Date.now() - startedAt;
     const newQuota = { ...quota, used: quota.used + 1, remaining: Math.max(0, quota.remaining - 1) };
+
+    console.log('[INFO][Jarvis:Resumo] Requisição completa', {
+      model: cfg.jarvis_model,
+      provider,
+      inputSource,
+      tokensInput: llmUsage.input,
+      tokensOutput: llmUsage.output,
+      command: responsePayload.command,
+      success: true,
+      durationMs: totalDuration,
+      quotaRemaining: newQuota.remaining,
+    });
 
     return res.json({
       success: true,

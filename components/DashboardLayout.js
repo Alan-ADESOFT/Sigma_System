@@ -488,11 +488,20 @@ function NotificationBell() {
     }
   }
 
-  // Polling: busca ao montar e a cada 30 segundos
+  // PERF: polling com visibilitychange — pausa quando aba esta inativa
   useEffect(() => {
+    let interval;
+    const start = () => { interval = setInterval(fetchNotifications, 30000); };
+    const stop  = () => clearInterval(interval);
+    const onVisibility = () => {
+      if (document.hidden) stop();
+      else { fetchNotifications(); start(); }
+    };
+
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+    start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => { stop(); document.removeEventListener('visibilitychange', onVisibility); };
   }, []);
 
   // Fecha dropdown ao clicar fora

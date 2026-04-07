@@ -7,6 +7,7 @@
 
 import { resolveTenantId } from '../../../infra/get-tenant-id';
 import { getJarvisConfig, saveJarvisSetting, JARVIS_FUNCTIONS } from '../../../models/jarvis/config';
+import { getOrSet, invalidate } from '../../../infra/cache';
 
 export default async function handler(req, res) {
   console.log('[INFO][API:/api/settings/jarvis-config] Requisição', { method: req.method });
@@ -15,7 +16,11 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     try {
-      const cfg = await getJarvisConfig(tenantId);
+      const cfg = await getOrSet(
+        `settings:jarvis:${tenantId}`,
+        () => getJarvisConfig(tenantId),
+        300
+      );
       return res.json({
         success: true,
         config: cfg,
@@ -37,6 +42,7 @@ export default async function handler(req, res) {
       console.log('[INFO][API:/api/settings/jarvis-config] Salvando', { key, value: safeValue });
 
       await saveJarvisSetting(tenantId, key, value);
+      invalidate(`settings:jarvis:${tenantId}`);
       return res.json({ success: true });
     } catch (err) {
       console.error('[ERRO][API:/api/settings/jarvis-config] POST', { error: err.message });
