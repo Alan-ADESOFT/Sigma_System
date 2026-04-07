@@ -19,35 +19,14 @@ import { checkJarvisQuota, logJarvisUsage } from '../../../models/jarvis/rateLim
 import { getToolDefinitions } from '../../../models/jarvis/tools';
 import { executeCommand } from '../../../models/jarvis/commands';
 
+const { DEFAULT_SYSTEM_PT, DEFAULT_SYSTEM_EN, renderPrompt } = require('../../../models/jarvis/systemPrompt');
+const { getSetting } = require('../../../models/settings.model');
+
 export const config = {
   api: {
     bodyParser: { sizeLimit: '8mb' }, // áudio em base64 pode ser grande
   },
 };
-
-const SYSTEM_PROMPT_PT = ({ tenantName, userName, currentDate }) => `Você é o J.A.R.V.I.S da Sigma Marketing — assistente de inteligência artificial da agência.
-Você fala português do Brasil por padrão.
-Você tem acesso a dados reais do sistema: clientes, tarefas, financeiro e pipelines.
-
-REGRAS:
-- Seja direto, preciso e profissional. Sem rodeios.
-- Sempre que puder resolver com uma tool, USE a tool — não invente dados.
-- Para ações destrutivas ou criação de registros: sempre retorne dados para confirmação antes de executar.
-- Responda em menos de 3 frases quando possível — você é um assistente de ação, não um chatbot.
-- Se não conseguir ajudar, diga claramente o que pode fazer.
-
-CONTEXTO: ${tenantName || 'Sigma'} — usuário: ${userName || 'operador'} — data: ${currentDate}`;
-
-const SYSTEM_PROMPT_EN = ({ tenantName, userName, currentDate }) => `You are J.A.R.V.I.S — Sigma Marketing's AI command assistant.
-You have access to real-time system data: clients, tasks, finance, pipelines.
-
-RULES:
-- Be direct, precise, professional. No fluff.
-- ALWAYS use a tool when you can — never invent data.
-- For destructive or creation actions, return preview data for confirmation first.
-- Keep replies under 3 sentences when possible.
-
-CONTEXT: ${tenantName || 'Sigma'} — user: ${userName || 'operator'} — date: ${currentDate}`;
 
 /* ─────────────────────────────────────────────
    Helpers — providers
@@ -223,14 +202,17 @@ export default async function handler(req, res) {
     const provider = isAnthropic(cfg.jarvis_model) ? 'anthropic' : 'openai';
     const tools    = getToolDefinitions(enabledIds, provider);
 
-    /* 5. System prompt + chamada */
+    /* 5. System prompt (usa override da biblioteca se existir) */
     const lang = (language || cfg.jarvis_language || 'pt').toLowerCase();
     const ctx  = {
       tenantName:  user.name || 'Sigma',
       userName:    user.name || 'Operador',
       currentDate: new Date().toLocaleDateString('pt-BR'),
     };
-    const systemPrompt = lang === 'en' ? SYSTEM_PROMPT_EN(ctx) : SYSTEM_PROMPT_PT(ctx);
+    const promptKey = lang === 'en' ? 'jarvis_system_en' : 'jarvis_system_pt';
+    const customPrompt = await getSetting(tenantId, `prompt_library_${promptKey}`);
+    const template = customPrompt || (lang === 'en' ? DEFAULT_SYSTEM_EN : DEFAULT_SYSTEM_PT);
+    const systemPrompt = renderPrompt(template, ctx);
 
     let providerResult;
     try {

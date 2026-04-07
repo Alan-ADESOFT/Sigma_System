@@ -20,6 +20,7 @@ const { getAgent } = require('../../../models/agentes/copycreator/prompts/index'
 const { DEFAULT_GENERATE_SYSTEM, DEFAULT_MODIFY_SYSTEM } = require('../../../models/copy/copyPrompt');
 const { STRUCTURE_SYSTEM } = require('../../../models/copy/structurePrompt');
 const { MARKDOWN_INSTRUCTIONS } = require('../../../models/ia/markdownHelper');
+const { DEFAULT_SYSTEM_PT, DEFAULT_SYSTEM_EN } = require('../../../models/jarvis/systemPrompt');
 
 // ── Mapeamento completo ──────────────────────────────────────
 
@@ -46,10 +47,16 @@ const UTIL_PROMPTS = [
   { id: 'markdown_helper', title: 'Formatacao de Respostas', description: 'Instrui a IA a formatar outputs corretamente para o editor do sistema', defaultPrompt: MARKDOWN_INSTRUCTIONS },
 ];
 
+const JARVIS_PROMPTS = [
+  { id: 'jarvis_system_pt', title: 'J.A.R.V.I.S — System Prompt (PT-BR)', description: 'Prompt de sistema do assistente de voz em portugues. Placeholders: {TENANT_NAME}, {USER_NAME}, {CURRENT_DATE}', defaultPrompt: DEFAULT_SYSTEM_PT },
+  { id: 'jarvis_system_en', title: 'J.A.R.V.I.S — System Prompt (EN)',    description: 'Prompt de sistema do assistente de voz em ingles. Placeholders: {TENANT_NAME}, {USER_NAME}, {CURRENT_DATE}',    defaultPrompt: DEFAULT_SYSTEM_EN },
+];
+
 const CATEGORIES = [
-  { id: 'pipeline',    label: 'Pipeline de Agentes',    description: 'Prompts dos 7 agentes do pipeline estrategico',          icon: 'cpu' },
-  { id: 'copy',        label: 'Gerador de Copy',        description: 'Prompts do gerador de copies e legendas',               icon: 'edit' },
-  { id: 'structures',  label: 'Gerador de Estruturas',  description: 'Prompt para criar templates de copy reutilizaveis',      icon: 'layout' },
+  { id: 'pipeline',    label: 'Pipeline de Agentes',    description: 'Prompts dos 7 agentes do pipeline estrategico',            icon: 'cpu' },
+  { id: 'copy',        label: 'Gerador de Copy',        description: 'Prompts do gerador de copies e legendas',                 icon: 'edit' },
+  { id: 'structures',  label: 'Gerador de Estruturas',  description: 'Prompt para criar templates de copy reutilizaveis',        icon: 'layout' },
+  { id: 'jarvis',      label: 'J.A.R.V.I.S',           description: 'Prompts de sistema do assistente de voz',                  icon: 'bot' },
   { id: 'utils',       label: 'Utilitarios de IA',      description: 'Prompts auxiliares injetados automaticamente pelo sistema', icon: 'terminal' },
 ];
 
@@ -137,7 +144,7 @@ export default async function handler(req, res) {
             },
           });
         } else {
-          const allPrompts = [...COPY_PROMPTS, ...STRUCTURE_PROMPTS, ...UTIL_PROMPTS];
+          const allPrompts = [...COPY_PROMPTS, ...STRUCTURE_PROMPTS, ...JARVIS_PROMPTS, ...UTIL_PROMPTS];
           const p = allPrompts.find(x => x.id === id);
           if (!p) return res.status(404).json({ success: false, error: 'Prompt nao encontrado' });
           const override = await getSetting(tenantId, `prompt_library_${id}`);
@@ -158,14 +165,15 @@ export default async function handler(req, res) {
 
       // Lista completa
       const pipelineOverrides = await getPipelineOverrides(tenantId);
-      const genericIds = [...COPY_PROMPTS, ...STRUCTURE_PROMPTS, ...UTIL_PROMPTS].map(p => p.id);
+      const genericIds = [...COPY_PROMPTS, ...STRUCTURE_PROMPTS, ...JARVIS_PROMPTS, ...UTIL_PROMPTS].map(p => p.id);
       const settingsOverrides = await getSettingsOverrides(tenantId, genericIds);
 
       const categories = [
         { ...CATEGORIES[0], prompts: buildPipelinePrompts(pipelineOverrides) },
         { ...CATEGORIES[1], prompts: buildGenericPrompts(COPY_PROMPTS, settingsOverrides) },
         { ...CATEGORIES[2], prompts: buildGenericPrompts(STRUCTURE_PROMPTS, settingsOverrides) },
-        { ...CATEGORIES[3], prompts: buildGenericPrompts(UTIL_PROMPTS, settingsOverrides) },
+        { ...CATEGORIES[3], prompts: buildGenericPrompts(JARVIS_PROMPTS, settingsOverrides) },
+        { ...CATEGORIES[4], prompts: buildGenericPrompts(UTIL_PROMPTS, settingsOverrides) },
       ];
 
       return res.json({ success: true, categories });
