@@ -226,7 +226,7 @@ export default async function handler(req, res) {
     const [cfg, contextSnapshot, recentUsage] = await Promise.all([
       getJarvisConfig(tenantId),
       buildContextSnapshot(tenantId),
-      getRecentUsage(tenantId, user.id, 5),
+      getRecentUsage(tenantId, user.id, 3),
     ]);
 
     const enabledIds = Object.entries(cfg.functions || {}).filter(([, v]) => v).map(([k]) => k);
@@ -253,7 +253,11 @@ export default async function handler(req, res) {
       '',
       memory,
       '',
-      'INSTRUCAO: Voce ja tem os dados acima. Responda diretamente usando eles. So chame uma tool se precisar de dados que NAO estao no contexto (ex: buscar cliente especifico por nome, criar tarefa, registrar receita/despesa, gerar resumo IA). Para perguntas gerais sobre metricas, financeiro, tarefas e clientes, USE OS DADOS ACIMA sem chamar tools.',
+      'INSTRUCOES CRITICAS:',
+      '1. LEITURA: Para perguntas sobre metricas, financeiro, tarefas, clientes — USE OS DADOS ACIMA sem chamar tools.',
+      '2. ESCRITA: Para QUALQUER acao que cria, edita ou envia algo (registrar despesa, registrar receita, criar tarefa, enviar formulario, rodar pipeline) — SEMPRE chame a tool correspondente. NUNCA tente fazer por chat.',
+      '3. MEMORIA: O historico recente acima mostra suas ultimas conversas com o usuario. Se o usuario disser "sim", "confirmo", "exato", "isso mesmo", "pode fazer" — ele esta CONFIRMANDO a ultima acao discutida. Chame a tool correspondente imediatamente.',
+      '4. ERROS: Se algo nao for possivel (ex: formulario nao preenchido, telefone nao cadastrado), explique o motivo de forma clara e objetiva.',
     ].filter(Boolean).join('\n');
 
     console.log('[INFO][Jarvis:LLM] Chamando modelo', {
@@ -330,12 +334,16 @@ export default async function handler(req, res) {
       let secondResult;
       try {
         if (provider === 'anthropic') {
-          // Anthropic: assistant content (rawContent) → tool_result
+          // Anthropic: reconstroi assistant content explicitamente (mesmo approach do OpenAI)
+          const assistantContent = [];
+          if (firstResult.text) assistantContent.push({ type: 'text', text: firstResult.text });
+          assistantContent.push({ type: 'tool_use', id: firstResult.toolUseId, name: toolName, input: toolArgs });
+
           secondResult = await callAnthropic({
             model: cfg.jarvis_model, systemPrompt, tools,
             messages: [
               { role: 'user', content: text },
-              { role: 'assistant', content: firstResult.rawContent },
+              { role: 'assistant', content: assistantContent },
               { role: 'user', content: [{ type: 'tool_result', tool_use_id: firstResult.toolUseId, content: toolResultStr }] },
             ],
           });

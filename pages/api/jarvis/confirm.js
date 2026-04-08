@@ -148,6 +148,11 @@ export default async function handler(req, res) {
       if (!data.client_id) return res.status(400).json({ success: false, error: 'client_id obrigatório' });
       if (!data.phone) return res.status(400).json({ success: false, error: 'Cliente não tem telefone cadastrado.' });
 
+      // Formata telefone: garante DDI 55 (Brasil)
+      let phone = String(data.phone).replace(/\D/g, '');
+      if (!phone.startsWith('55')) phone = '55' + phone;
+      data.phone = phone;
+
       // Gera token do formulario
       const { generateFormToken } = require('../../../models/clientForm');
       let tokenRow;

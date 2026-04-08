@@ -554,10 +554,12 @@ export default function JarvisOrb() {
     setPending(null);
   }
 
-  function cancelAction() {
+  async function cancelAction() {
     setPending(null);
-    setResponse('');
-    setState('idle');
+    const msg = 'Ação cancelada. Se precisar, é só pedir novamente.';
+    setResponse(msg);
+    setState('speaking');
+    await playTTS(msg);
   }
 
   async function startRecording() {

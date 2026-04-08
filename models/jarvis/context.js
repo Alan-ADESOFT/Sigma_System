@@ -217,20 +217,27 @@ async function buildContextSnapshot(tenantId) {
 
 /**
  * Monta o bloco de memoria das ultimas interacoes do JARVIS.
- * Formato compacto para nao gastar muitos tokens.
+ * Formato conversacional para que o modelo entenda o contexto.
+ * Limitado a 3 interacoes (~200 tokens) para nao estourar.
  */
 function formatMemory(recentUsage) {
   if (!recentUsage || recentUsage.length === 0) return '';
 
-  const lines = ['── HISTORICO RECENTE ──'];
+  const lines = [
+    '── CONVERSA RECENTE (use para entender o contexto da pergunta atual) ──',
+  ];
   // Inverte para ordem cronologica (mais antigo primeiro)
   const sorted = [...recentUsage].reverse();
   for (const u of sorted) {
     const time = new Date(u.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    const cmd = u.command && u.command !== 'chat' ? ` [${u.command}]` : '';
-    lines.push(`[${time}] Usuario: ${(u.input_text || '').slice(0, 80)}`);
-    lines.push(`[${time}] Jarvis${cmd}: ${(u.response || '').slice(0, 120)}`);
+    const cmd = u.command && u.command !== 'chat' && u.command !== 'error'
+      ? ` (executou: ${u.command})` : '';
+    const input = (u.input_text || '').slice(0, 60);
+    const output = (u.response || '').slice(0, 100);
+    lines.push(`[${time}] USUARIO: "${input}"`);
+    lines.push(`[${time}] JARVIS${cmd}: "${output}"`);
   }
+  lines.push('(Se o usuario disser "sim", "confirmo", "exato", "pode fazer" — ele esta confirmando a ultima acao acima.)');
   return lines.join('\n');
 }
 
