@@ -153,11 +153,21 @@ export default function FinanceiroDashboard() {
   const [filterYear,   setFilterYear  ] = useState(String(new Date().getFullYear()));
   const [filterStatus, setFilterStatus] = useState('all');
 
+  /* Company filters */
+  const [compPeriod,     setCompPeriod    ] = useState('this_year');
+  const [compDateFrom,   setCompDateFrom  ] = useState('');
+  const [compDateTo,     setCompDateTo    ] = useState('');
+  const [compTypeFilter, setCompTypeFilter] = useState('');
+  const [compCatFilter,  setCompCatFilter ] = useState('');
+
+  /* Categories */
+  const [categories, setCategories] = useState([]);
+
   /* Form for company finances */
   const [showCompForm, setShowCompForm] = useState(false);
   const [editingComp,  setEditingComp ] = useState(null);
   const [compForm, setCompForm] = useState({
-    type: 'expense', category: '', description: '', value: '', date: new Date().toISOString().split('T')[0], notes: '',
+    type: 'expense', category_id: '', description: '', value: '', date: new Date().toISOString().split('T')[0], notes: '',
   });
   const [savingComp, setSavingComp] = useState(false);
 
@@ -181,8 +191,17 @@ export default function FinanceiroDashboard() {
     setLoadingComp(true);
     try {
       const params = new URLSearchParams();
-      if (filterYear) params.set('year', filterYear);
-      console.log('[INFO][Frontend:Financeiro] Buscando registros da empresa', { endpoint: '/api/financeiro/company', filterYear });
+      if (compPeriod && compPeriod !== 'custom') params.set('period', compPeriod);
+      if (compPeriod === 'custom') {
+        if (compDateFrom) params.set('dateFrom', compDateFrom);
+        if (compDateTo) params.set('dateTo', compDateTo);
+      }
+      if (!compPeriod) {
+        if (filterYear) params.set('year', filterYear);
+      }
+      if (compTypeFilter) params.set('type', compTypeFilter);
+      if (compCatFilter) params.set('categoryId', compCatFilter);
+      console.log('[INFO][Frontend:Financeiro] Buscando registros da empresa', { endpoint: '/api/financeiro/company' });
       const j = await fetch(`/api/financeiro/company?${params}`).then(r => r.json());
       if (!j.success) throw new Error(j.error);
       console.log('[SUCESSO][Frontend:Financeiro] Registros da empresa carregados', { total: (j.records || []).length });
@@ -195,8 +214,17 @@ export default function FinanceiroDashboard() {
     finally { setLoadingComp(false); }
   }
 
-  useEffect(() => { loadInstallments(); }, []);
-  useEffect(() => { loadCompany(); }, [filterYear]);
+  async function loadCategories() {
+    try {
+      const j = await fetch('/api/finance-categories').then(r => r.json());
+      if (j.success) setCategories(j.categories || []);
+    } catch (e) {
+      console.error('[ERRO][Frontend:Financeiro] Falha ao carregar categorias', { error: e.message });
+    }
+  }
+
+  useEffect(() => { loadInstallments(); loadCategories(); }, []);
+  useEffect(() => { loadCompany(); }, [compPeriod, compDateFrom, compDateTo, compTypeFilter, compCatFilter, filterYear]);
 
   /* Toggle installment */
   async function toggleInst(inst) {
@@ -227,7 +255,7 @@ export default function FinanceiroDashboard() {
   }
 
   function openNewCompForm() {
-    setCompForm({ type: 'expense', category: '', description: '', value: '', date: new Date().toISOString().split('T')[0], notes: '' });
+    setCompForm({ type: 'expense', category_id: '', description: '', value: '', date: new Date().toISOString().split('T')[0], notes: '' });
     setEditingComp(null);
     setShowCompForm(true);
   }
@@ -235,7 +263,7 @@ export default function FinanceiroDashboard() {
   function openEditCompForm(rec) {
     setCompForm({
       type: rec.type,
-      category: rec.category || '',
+      category_id: rec.category_id || '',
       description: rec.description,
       value: parseFloat(rec.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       date: rec.date ? rec.date.split('T')[0] : '',
@@ -254,7 +282,7 @@ export default function FinanceiroDashboard() {
     }
     setSavingComp(true);
     try {
-      const payload = { ...compForm, value: rawVal };
+      const payload = { type: compForm.type, category_id: compForm.category_id || null, description: compForm.description, value: rawVal, date: compForm.date, notes: compForm.notes };
       if (editingComp) payload.id = editingComp;
       const method = editingComp ? 'PUT' : 'POST';
       console.log('[INFO][Frontend:Financeiro] Salvando registro financeiro', { method, payload });
@@ -557,11 +585,13 @@ export default function FinanceiroDashboard() {
               </div>
               {(() => {
                 const catMap = {};
+                const catColors = {};
                 companyRecords.filter(r => r.type === 'expense').forEach(r => {
-                  const cat = r.category || 'Outros';
+                  const cat = r.category_name || r.category || 'Outros';
                   catMap[cat] = (catMap[cat] || 0) + parseFloat(r.value);
+                  if (r.category_color) catColors[cat] = r.category_color;
                 });
-                const data = Object.entries(catMap).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+                const data = Object.entries(catMap).map(([name, value]) => ({ name, value, color: catColors[name] })).sort((a, b) => b.value - a.value);
                 if (data.length === 0) return (
                   <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
                     Sem despesas cadastradas
@@ -575,7 +605,7 @@ export default function FinanceiroDashboard() {
                         labelLine={{ stroke: 'var(--text-muted)', strokeWidth: 0.5 }}
                         style={{ fontFamily: 'var(--font-mono)', fontSize: '0.55rem' }}
                       >
-                        {data.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                        {data.map((d, i) => <Cell key={i} fill={d.color || CHART_COLORS[i % CHART_COLORS.length]} />)}
                       </Pie>
                       <Tooltip {...tooltipStyle} formatter={(v) => fmtBRL(v)} />
                     </PieChart>
@@ -753,23 +783,87 @@ export default function FinanceiroDashboard() {
               color={compKpis.profit >= 0 ? '#22c55e' : '#ff6680'} />
           </div>
 
-          {/* Filtro + botão */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)' }}>Ano:</span>
-              <select value={filterYear} onChange={e => setFilterYear(e.target.value)} style={SEL}>
-                {years.map(y => <option key={y} value={y}>{y}</option>)}
+          {/* Filtros */}
+          <div className="glass-card" style={{ padding: '12px 16px', marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <select value={compPeriod} onChange={e => setCompPeriod(e.target.value)} style={SEL}>
+                <option value="7d">Ultimos 7 dias</option>
+                <option value="30d">Ultimos 30 dias</option>
+                <option value="90d">Ultimos 90 dias</option>
+                <option value="this_month">Este mes</option>
+                <option value="last_month">Mes passado</option>
+                <option value="this_year">Este ano</option>
+                <option value="custom">Personalizado</option>
               </select>
+              {compPeriod === 'custom' && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>De:</span>
+                    <input type="date" value={compDateFrom} onChange={e => setCompDateFrom(e.target.value)} style={{ ...INP, width: 140 }} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>Ate:</span>
+                    <input type="date" value={compDateTo} onChange={e => setCompDateTo(e.target.value)} style={{ ...INP, width: 140 }} />
+                  </div>
+                </>
+              )}
+              <select value={compTypeFilter} onChange={e => setCompTypeFilter(e.target.value)} style={SEL}>
+                <option value="">Todos os tipos</option>
+                <option value="income">Entradas</option>
+                <option value="expense">Saidas</option>
+              </select>
+              <select value={compCatFilter} onChange={e => setCompCatFilter(e.target.value)} style={SEL}>
+                <option value="">Todas as categorias</option>
+                {(() => {
+                  const fixed = categories.filter(c => c.type === 'fixed');
+                  const variable = categories.filter(c => c.type === 'variable');
+                  const opts = [];
+                  if (fixed.length > 0) {
+                    opts.push(<optgroup key="fixed" label="Fixos">{fixed.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>);
+                  }
+                  if (variable.length > 0) {
+                    opts.push(<optgroup key="variable" label="Variaveis">{variable.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>);
+                  }
+                  return opts;
+                })()}
+              </select>
+              {(compPeriod !== 'this_year' || compTypeFilter || compCatFilter) && (
+                <button onClick={() => { setCompPeriod('this_year'); setCompTypeFilter(''); setCompCatFilter(''); setCompDateFrom(''); setCompDateTo(''); }} style={{
+                  padding: '6px 12px', borderRadius: 6, cursor: 'pointer',
+                  border: '1px solid rgba(255,255,255,0.07)', background: 'transparent',
+                  color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+                }}>
+                  Limpar filtros x
+                </button>
+              )}
+              {compCatFilter && (() => {
+                const cat = categories.find(c => c.id === compCatFilter);
+                if (!cat) return null;
+                return (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '3px 10px', borderRadius: 20,
+                    fontSize: '0.6rem', fontFamily: 'var(--font-mono)', fontWeight: 600,
+                    background: `${cat.color}20`, border: `1px solid ${cat.color}`,
+                    color: cat.color,
+                  }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: cat.color }} />
+                    {cat.name}
+                  </span>
+                );
+              })()}
+              <div style={{ marginLeft: 'auto' }}>
+                {!showCompForm && (
+                  <button onClick={openNewCompForm} style={{
+                    padding: '7px 16px', borderRadius: 7, cursor: 'pointer',
+                    border: '1px solid rgba(255,0,51,0.35)', background: 'rgba(255,0,51,0.09)',
+                    color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 600,
+                  }}>
+                    + Adicionar
+                  </button>
+                )}
+              </div>
             </div>
-            {!showCompForm && (
-              <button onClick={openNewCompForm} style={{
-                padding: '7px 16px', borderRadius: 7, cursor: 'pointer',
-                border: '1px solid rgba(255,0,51,0.35)', background: 'rgba(255,0,51,0.09)',
-                color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 600,
-              }}>
-                + Adicionar
-              </button>
-            )}
           </div>
 
           {/* Formulário */}
@@ -784,7 +878,7 @@ export default function FinanceiroDashboard() {
                     <SectionLabel>Tipo</SectionLabel>
                     <div style={{ display: 'flex', gap: 6 }}>
                       {[{ v: 'expense', l: 'Despesa' }, { v: 'income', l: 'Receita' }].map(o => (
-                        <button key={o.v} type="button" onClick={() => setCompForm(f => ({ ...f, type: o.v }))} style={{
+                        <button key={o.v} type="button" onClick={() => setCompForm(f => ({ ...f, type: o.v, category_id: o.v === 'income' ? '' : f.category_id }))} style={{
                           padding: '7px 14px', borderRadius: 6, cursor: 'pointer', flex: 1,
                           background: compForm.type === o.v ? (o.v === 'expense' ? 'rgba(255,26,77,0.1)' : 'rgba(34,197,94,0.1)') : 'rgba(17,17,17,0.6)',
                           border: compForm.type === o.v ? (o.v === 'expense' ? '1px solid rgba(255,26,77,0.4)' : '1px solid rgba(34,197,94,0.4)') : '1px solid var(--border-default)',
@@ -796,11 +890,30 @@ export default function FinanceiroDashboard() {
                       ))}
                     </div>
                   </div>
-                  <div>
-                    <SectionLabel>Categoria</SectionLabel>
-                    <input value={compForm.category} onChange={e => setCompForm(f => ({ ...f, category: e.target.value }))}
-                      placeholder="ex: Aluguel, Software, Freelancer..." style={INP} />
-                  </div>
+                  {compForm.type === 'expense' && (
+                    <div>
+                      <SectionLabel>Categoria</SectionLabel>
+                      {categories.length > 0 ? (
+                        <select value={compForm.category_id} onChange={e => setCompForm(f => ({ ...f, category_id: e.target.value }))} style={{ ...SEL, width: '100%' }}>
+                          <option value="">Sem categoria</option>
+                          {(() => {
+                            const fixed = categories.filter(c => c.type === 'fixed');
+                            const variable = categories.filter(c => c.type === 'variable');
+                            const opts = [];
+                            if (fixed.length > 0) opts.push(<optgroup key="fixed" label="Fixos">{fixed.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>);
+                            if (variable.length > 0) opts.push(<optgroup key="variable" label="Variaveis">{variable.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>);
+                            return opts;
+                          })()}
+                        </select>
+                      ) : (
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)', padding: '8px 0' }}>
+                          <Link href="/dashboard/settings/financeiro" style={{ color: 'var(--brand-400)', textDecoration: 'underline' }}>
+                            Configure suas categorias em Config. Financeiro
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div style={{ gridColumn: '1/-1' }}>
                     <SectionLabel>Descrição</SectionLabel>
                     <input value={compForm.description} onChange={e => setCompForm(f => ({ ...f, description: e.target.value }))}
@@ -871,8 +984,22 @@ export default function FinanceiroDashboard() {
                           {rec.type === 'income' ? 'Receita' : 'Despesa'}
                         </span>
                       </td>
-                      <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                        {rec.category || '—'}
+                      <td style={{ padding: '10px 14px' }}>
+                        {rec.category_name || rec.category ? (
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            padding: '2px 8px', borderRadius: 20,
+                            fontSize: '0.6rem', fontFamily: 'var(--font-mono)', fontWeight: 600,
+                            background: rec.category_color ? `${rec.category_color}20` : 'rgba(99,102,241,0.1)',
+                            border: `1px solid ${rec.category_color || 'rgba(99,102,241,0.3)'}`,
+                            color: rec.category_color || '#6366f1',
+                          }}>
+                            <span style={{ width: 5, height: 5, borderRadius: '50%', background: rec.category_color || '#6366f1' }} />
+                            {rec.category_name || rec.category}
+                          </span>
+                        ) : (
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>—</span>
+                        )}
                       </td>
                       <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
                         {rec.description}
