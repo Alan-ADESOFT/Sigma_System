@@ -449,26 +449,30 @@ export default function JarvisOrb({ userName }) {
 
   useEffect(() => { loadQuota(); }, [open, loadQuota]);
 
-  // Saudação ao abrir o painel
+  // Saudação ao abrir o painel — limitada a 8x por dia
   useEffect(() => {
     if (!open) return;
-    const firstName = (userName || 'Operador').split(' ')[0];
-    // Primeira abertura da sessão: saudação completa
-    // Aberturas seguintes: "bem-vindo de volta"
-    const alreadyGreeted = sessionStorage.getItem('jarvis_greeted');
-    let greeting;
-    if (!alreadyGreeted) {
-      greeting = `Olá, ${firstName}! Seja bem-vindo. Como posso ajudar?`;
-      sessionStorage.setItem('jarvis_greeted', '1');
-    } else {
-      greeting = `Bem-vindo de volta, ${firstName}. No que posso ajudar?`;
-    }
-    // Evita repetir se o painel já estava aberto
     if (greetedRef.current) return;
     greetedRef.current = true;
+
+    const firstName = (userName || 'Operador').split(' ')[0];
+    const today = new Date().toISOString().slice(0, 10);
+    const stored = JSON.parse(localStorage.getItem('jarvis_greet') || '{}');
+    const count = (stored.date === today) ? (stored.count || 0) : 0;
+    const isFirst = count === 0;
+
+    const greeting = isFirst
+      ? `Olá, ${firstName}! Seja bem-vindo. Como posso ajudar?`
+      : `Bem-vindo de volta, ${firstName}. No que posso ajudar?`;
     setResponse(greeting);
-    setState('speaking');
-    playTTS(greeting);
+
+    if (count < 8) {
+      localStorage.setItem('jarvis_greet', JSON.stringify({ date: today, count: count + 1 }));
+      setState('speaking');
+      playTTS(greeting);
+    } else {
+      setState('idle');
+    }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -476,6 +480,9 @@ export default function JarvisOrb({ userName }) {
       setTimeout(() => inputRef.current?.focus(), 150);
     }
   }, [showChat]);
+
+  const openRef = useRef(false);
+  useEffect(() => { openRef.current = open; }, [open]);
 
   async function playTTS(textToSpeak) {
     try {
@@ -485,10 +492,11 @@ export default function JarvisOrb({ userName }) {
         body: JSON.stringify({ text: textToSpeak }),
       });
       const d = await r.json();
+      if (!openRef.current) return false;
       if (d.success && d.audioBase64) {
         const audio = new Audio(`data:${d.mime || 'audio/mpeg'};base64,${d.audioBase64}`);
         audioRef.current = audio;
-        audio.onended = () => { audioRef.current = null; setState('idle'); };
+        audio.onended = () => { audioRef.current = null; if (openRef.current) setState('idle'); };
         await audio.play();
         return true;
       }
@@ -503,7 +511,7 @@ export default function JarvisOrb({ userName }) {
       try { audioRef.current.pause(); audioRef.current.currentTime = 0; } catch {}
       audioRef.current = null;
     }
-    setState('idle');
+    if (openRef.current) setState('idle');
   }
 
   async function sendCommand(payload) {
@@ -603,6 +611,7 @@ export default function JarvisOrb({ userName }) {
       mr.onstop = async () => {
         try {
           const blob = new Blob(chunksRef.current, { type: mr.mimeType || 'audio/webm' });
+          if (blob.size < 5000) { setState('idle'); return; }
           const reader = new FileReader();
           reader.onloadend = async () => { await sendCommand({ audioBase64: reader.result }); };
           reader.readAsDataURL(blob);
