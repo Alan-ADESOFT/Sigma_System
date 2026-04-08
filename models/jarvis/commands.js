@@ -425,13 +425,43 @@ async function cmdStatusPipeline(params, tenantId /*, userId */) {
 async function cmdGerarResumoCliente(params, tenantId, userId) {
   console.log('[INFO][Jarvis:GerarResumo]', { tenantId, userId, params });
 
-  const client = await findClientByName(tenantId, params?.nome);
-  if (!client) return { summary: `Cliente "${params?.nome}" não encontrado.`, data: null };
+  const nome = (params?.nome || '').trim();
+
+  // Bloqueia "rodar para todos" — exige cliente especifico
+  if (!nome || /\btodos\b|\btodas\b|\bgeral\b/i.test(nome)) {
+    return {
+      summary: 'Não é permitido rodar o pipeline para todos os clientes de uma vez. Por segurança, selecione um cliente específico. Por exemplo: "roda o pipeline do cliente FlowTech".',
+      data: null,
+    };
+  }
+
+  const client = await findClientByName(tenantId, nome);
+  if (!client) return { summary: `Não encontrei nenhum cliente com o nome "${nome}". Verifique o nome e tente novamente.`, data: null };
+
+  // Valida se o formulário foi preenchido
+  if (!client.form_done) {
+    return {
+      summary: `Não é possível rodar o pipeline de ${client.company_name} porque o formulário de briefing ainda não foi preenchido. Envie o formulário primeiro usando "enviar formulário para ${client.company_name}".`,
+      data: null,
+    };
+  }
+
+  // Verifica se já tem pipeline rodando
+  const running = await queryOne(
+    `SELECT id FROM pipeline_jobs WHERE client_id = $1 AND status = 'running' LIMIT 1`,
+    [client.id]
+  );
+  if (running) {
+    return {
+      summary: `Já existe um pipeline em andamento para ${client.company_name}. Aguarde a conclusão antes de iniciar outro.`,
+      data: null,
+    };
+  }
 
   const preview = { client_id: client.id, client_name: client.company_name };
 
   return {
-    summary: `Pronto para gerar o resumo IA de ${client.company_name}. Confirme para iniciar.`,
+    summary: `Pipeline de ${client.company_name} pronto para ser iniciado. Isso vai gerar os rascunhos estratégicos de diagnóstico, concorrentes, público-alvo, avatar e posicionamento. Confirme para iniciar.`,
     data: preview,
     requiresConfirmation: true,
     confirmAction: 'generate_summary',
@@ -512,6 +542,87 @@ async function cmdOnboardingsPendentes(params, tenantId /*, userId */) {
 }
 
 /* ═════════════════════════════════════════════════════════════════════════
+   GRUPO 5 — FORMULÁRIO
+═════════════════════════════════════════════════════════════════════════ */
+
+async function cmdClientesSemFormulario(params, tenantId) {
+  console.log('[INFO][Jarvis:ClientesSemFormulario]', { tenantId });
+
+  const rows = await query(
+    `SELECT mc.id, mc.company_name, mc.phone, mc.email
+     FROM marketing_clients mc
+     WHERE mc.tenant_id = $1 AND mc.form_done = false
+     ORDER BY mc.company_name ASC
+     LIMIT 30`,
+    [tenantId]
+  );
+
+  if (!rows.length) return { summary: 'Todos os clientes já preencheram o formulário de briefing.', data: [] };
+
+  const top = rows.slice(0, 10).map(r => {
+    const contact = r.phone ? ` (${r.phone})` : r.email ? ` (${r.email})` : '';
+    return `· ${r.company_name}${contact}`;
+  }).join('\n');
+
+  return {
+    summary: `${rows.length} cliente(s) ainda não preencheram o formulário:\n${top}`,
+    data: rows,
+  };
+}
+
+async function cmdEnviarFormulario(params, tenantId, userId) {
+  console.log('[INFO][Jarvis:EnviarFormulario]', { tenantId, userId, params });
+
+  const nome = (params?.nome || '').trim();
+  if (!nome) return { summary: 'Informe o nome do cliente para quem deseja enviar o formulário.', data: null };
+
+  // Bloqueia "enviar para todos"
+  if (/\btodos\b|\btodas\b|\bgeral\b/i.test(nome)) {
+    return {
+      summary: 'Por segurança, não é permitido enviar o formulário para todos os clientes de uma vez. Informe o nome de um cliente específico.',
+      data: null,
+    };
+  }
+
+  const client = await findClientByName(tenantId, nome);
+  if (!client) return { summary: `Não encontrei nenhum cliente com o nome "${nome}". Verifique o nome e tente novamente.`, data: null };
+
+  // Verifica se já preencheu
+  if (client.form_done) {
+    return {
+      summary: `${client.company_name} já preencheu o formulário de briefing. Não é necessário enviar novamente.`,
+      data: null,
+    };
+  }
+
+  // Verifica se tem telefone cadastrado
+  const fullClient = await queryOne(
+    `SELECT id, company_name, phone, email FROM marketing_clients WHERE id = $1`,
+    [client.id]
+  );
+
+  if (!fullClient?.phone) {
+    return {
+      summary: `${client.company_name} não tem telefone cadastrado. Cadastre o número do cliente antes de enviar o formulário via WhatsApp.`,
+      data: null,
+    };
+  }
+
+  const preview = {
+    client_id: client.id,
+    client_name: client.company_name,
+    phone: fullClient.phone,
+  };
+
+  return {
+    summary: `Formulário de briefing será enviado via WhatsApp para ${client.company_name} (${fullClient.phone}). Confirme para enviar.`,
+    data: preview,
+    requiresConfirmation: true,
+    confirmAction: 'send_form',
+  };
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
    DISPATCHER
 ═════════════════════════════════════════════════════════════════════════ */
 
@@ -530,6 +641,8 @@ const REGISTRY = {
   metricas_gerais:         cmdMetricasGerais,
   clientes_sem_pipeline:   cmdClientesSemPipeline,
   onboardings_pendentes:   cmdOnboardingsPendentes,
+  clientes_sem_formulario: cmdClientesSemFormulario,
+  enviar_formulario:       cmdEnviarFormulario,
 };
 
 /**

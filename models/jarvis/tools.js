@@ -164,6 +164,26 @@ const TOOL_SCHEMAS = [
     description: 'Clientes com onboarding ativo travados há mais de 3 dias sem nova submissão. Use para "quem travou no onboarding".',
     parameters: { type: 'object', properties: {}, required: [] },
   },
+
+  // ── FORMULÁRIO ───────────────────────────────────────────────────────────
+  {
+    id: 'clientes_sem_formulario',
+    name: 'clientes_sem_formulario',
+    description: 'Lista clientes que ainda NÃO preencheram o formulário de briefing (form_done = false). Use quando o usuário perguntar "quem não preencheu o formulário", "formulários pendentes", "quem falta preencher".',
+    parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    id: 'enviar_formulario',
+    name: 'enviar_formulario',
+    description: 'Envia o link do formulário de briefing para um cliente específico via WhatsApp. Gera o token, monta a mensagem e envia. Requer confirmação. Use quando o usuário disser "envia o formulário para o cliente X", "manda o link do form pro X".',
+    parameters: {
+      type: 'object',
+      properties: {
+        nome: { type: 'string', description: 'Nome (ou parte) do cliente que deve receber o formulário.' },
+      },
+      required: ['nome'],
+    },
+  },
 ];
 
 /**

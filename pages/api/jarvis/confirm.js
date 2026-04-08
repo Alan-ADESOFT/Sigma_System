@@ -143,6 +143,57 @@ export default async function handler(req, res) {
       });
     }
 
+    /* ── SEND FORM (gera token + envia via WhatsApp) ──────── */
+    if (action === 'send_form') {
+      if (!data.client_id) return res.status(400).json({ success: false, error: 'client_id obrigatório' });
+      if (!data.phone) return res.status(400).json({ success: false, error: 'Cliente não tem telefone cadastrado.' });
+
+      // Gera token do formulario
+      const { generateFormToken } = require('../../../models/clientForm');
+      let tokenRow;
+      try {
+        tokenRow = await generateFormToken(tenantId, data.client_id);
+      } catch (err) {
+        console.error('[ERRO][Jarvis:Confirm] Falha ao gerar token', { error: err.message });
+        return res.status(500).json({ success: false, error: 'Falha ao gerar o link do formulário.' });
+      }
+
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001';
+      const link = `${baseUrl}/form/${tokenRow.token}`;
+
+      // Monta mensagem e envia via WhatsApp
+      const message = `Olá! Segue o link do formulário de briefing da SIGMA Marketing:\n\n${link}\n\nPreencha com atenção — suas respostas serão usadas para gerar toda a estratégia de marketing.\n\nO link expira em 7 dias.`;
+
+      try {
+        const { sendText } = require('../../../infra/api/zapi');
+        const result = await sendText(data.phone, message, { delayTyping: 3 });
+        console.log('[SUCESSO][Jarvis:Confirm] Formulário enviado via WhatsApp', {
+          clientId: data.client_id, phone: data.phone, messageId: result?.messageId,
+        });
+        await logJarvisUsage(tenantId, user.id, 'confirm:send_form', JSON.stringify(data), `sent to ${data.phone}`, 0, true, null);
+
+        try {
+          await createNotification(
+            tenantId, 'jarvis_action', 'Formulário enviado via JARVIS',
+            `Link do formulário enviado para ${data.client_name || 'cliente'} (${data.phone}) via WhatsApp.`,
+            data.client_id, { action: 'send_form', messageId: result?.messageId, createdBy: 'jarvis' }
+          );
+        } catch {}
+
+        return res.json({
+          success: true,
+          message: `Formulário enviado para ${data.client_name || 'cliente'} via WhatsApp.`,
+          link,
+        });
+      } catch (err) {
+        console.error('[ERRO][Jarvis:Confirm] Falha ao enviar WhatsApp', { error: err.message });
+        return res.status(500).json({
+          success: false,
+          error: `Não consegui enviar o formulário via WhatsApp. Verifique se o número ${data.phone} está correto e se a instância Z-API está conectada.`,
+        });
+      }
+    }
+
     return res.status(400).json({ success: false, error: 'Ação desconhecida' });
   } catch (err) {
     console.error('[ERRO][API:/api/jarvis/confirm] Falha', { error: err.message, stack: err.stack });

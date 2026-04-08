@@ -42,6 +42,10 @@ const JARVIS_FUNCTIONS = [
   { id: 'metricas_gerais',         group: 'DASHBOARD',        title: 'Métricas Gerais',         description: 'Visão geral do sistema: clientes ativos, pipelines rodados, tokens usados e faturamento.' },
   { id: 'clientes_sem_pipeline',   group: 'DASHBOARD',        title: 'Clientes sem Pipeline',   description: 'Lista clientes que preencheram o formulário mas ainda não tiveram o pipeline rodado.' },
   { id: 'onboardings_pendentes',   group: 'DASHBOARD',        title: 'Onboardings Pendentes',   description: 'Clientes com onboarding ativo que estão travados há mais de 3 dias sem nova submissão.' },
+
+  // FORMULÁRIO
+  { id: 'clientes_sem_formulario', group: 'FORMULÁRIO',       title: 'Clientes sem Formulário', description: 'Lista clientes que ainda não preencheram o formulário de briefing.' },
+  { id: 'enviar_formulario',       group: 'FORMULÁRIO',       title: 'Enviar Formulário',       description: 'Envia o link do formulário de briefing para um cliente via WhatsApp.' },
 ];
 
 const DEFAULTS = {
