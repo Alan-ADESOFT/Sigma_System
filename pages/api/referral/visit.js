@@ -46,6 +46,18 @@ export default async function handler(req, res) {
     // 2. Marca a visita (idempotente — não reseta timer se já visitou)
     const referral = await markPageVisited(refCode);
 
+    // 2b. Notifica o tenant na primeira visita
+    if (!existing.first_access_at) {
+      try {
+        const { createNotification } = require('../../../models/clientForm');
+        await createNotification(
+          referral.tenantId, 'referral_visited', 'Indicação acessada',
+          `Um indicado abriu o link de ${referral.referredName || 'indicação'}.`,
+          null, { refCode, referralId: referral.id }
+        );
+      } catch {}
+    }
+
     // 3. Carrega config do tenant pra renderizar a página
     const config = await getReferralConfig(referral.tenantId);
 

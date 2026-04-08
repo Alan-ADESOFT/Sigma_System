@@ -29,6 +29,7 @@ export default function OnboardingConfigPage() {
   const [stages, setStages]   = useState([]);
   const [restDays, setRestDays] = useState([]);
   const [editing, setEditing] = useState(null); // { type: 'stage'|'rest', data }
+  const [activeTab, setActiveTab] = useState('timeline'); // 'timeline' | 'messages'
 
   /* ─── Carrega config ─── */
   async function loadConfig() {
@@ -114,9 +115,26 @@ export default function OnboardingConfigPage() {
           </p>
         </div>
 
+        {/* ── Tabs ── */}
+        <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          {[{ id: 'timeline', label: 'Timeline' }, { id: 'messages', label: 'Mensagens WhatsApp' }].map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+              padding: '10px 20px', cursor: 'pointer', background: 'transparent', border: 'none',
+              fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 600,
+              letterSpacing: '0.08em', color: activeTab === t.id ? '#ff0033' : 'var(--text-muted)',
+              borderBottom: activeTab === t.id ? '2px solid #ff0033' : '2px solid transparent',
+              transition: 'all 0.15s',
+            }}>{t.label}</button>
+          ))}
+        </div>
+
         {loading && <div className="skeleton" style={{ height: 200 }} />}
 
-        {!loading && (
+        {/* ── TAB: MENSAGENS ── */}
+        {!loading && activeTab === 'messages' && <OnboardingMessagesTab notify={notify} />}
+
+        {/* ── TAB: TIMELINE ── */}
+        {!loading && activeTab === 'timeline' && (
           <div className="set-section-card">
             <div className="set-section-header">
               <div className="set-section-header-left">
@@ -143,6 +161,9 @@ export default function OnboardingConfigPage() {
             </div>
           </div>
         )}
+
+        {/* ── Controle de Dias (God only) ── */}
+        {!loading && activeTab === 'timeline' && <DayControlSection />}
 
         {/* Modal de edição de etapa */}
         {editing?.type === 'stage' && (
@@ -777,6 +798,460 @@ function RestDayEditModal({ rest, onClose, onSave }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DAY CONTROL — avança/retrocede o dia de onboarding de um cliente
+═══════════════════════════════════════════════════════════ */
+function DayControlSection() {
+  const [clients, setClients] = useState([]);
+  const [selectedClient, setSelectedClient] = useState('');
+  const [targetDay, setTargetDay] = useState('');
+  const [applying, setApplying] = useState(false);
+  const [result, setResult] = useState(null);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/clients');
+        const d = await r.json();
+        if (d.success) setClients((d.clients || []).filter(c => c.status === 'active'));
+      } catch {}
+    })();
+  }, []);
+
+  function handleApplyClick() {
+    if (!selectedClient || !targetDay) return;
+    const day = parseInt(targetDay, 10);
+    if (day < 1 || day > 15) return;
+    setShowConfirm(true);
+  }
+
+  async function confirmApply() {
+    setShowConfirm(false);
+    setApplying(true);
+    setResult(null);
+    try {
+      const r = await fetch('/api/onboarding/admin/set-day', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: selectedClient, targetDay: parseInt(targetDay, 10) }),
+      });
+      const d = await r.json();
+      if (d.success) {
+        setResult({ type: 'success', message: d.message, detail: `Dia ${d.progress.previousDay} → Dia ${d.progress.currentDay}` });
+      } else {
+        setResult({ type: 'error', message: d.error });
+      }
+    } catch {
+      setResult({ type: 'error', message: 'Erro de conexão.' });
+    }
+    setApplying(false);
+  }
+
+  const client = clients.find(c => c.id === selectedClient);
+
+  const inputStyle = {
+    padding: '10px 12px',
+    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 6, color: '#f0f0f0',
+    fontFamily: 'var(--font-mono)', fontSize: '0.75rem', outline: 'none',
+  };
+
+  return (
+    <div className="set-section-card" style={{ marginTop: 24 }}>
+      <div className="set-section-header">
+        <div className="set-section-header-left">
+          <div className="set-section-title-row">
+            <span className="set-section-dot" />
+            <span className="set-section-title-text">Controle de Dias</span>
+            <span className="set-section-line" />
+          </div>
+          <div className="set-section-description">
+            Avance ou retroceda o dia do onboarding de um cliente. Ferramenta para testes e correções.
+          </div>
+        </div>
+      </div>
+
+      {/* Aviso */}
+      <div style={{
+        padding: '14px 18px', borderRadius: 8, marginBottom: 18,
+        background: 'rgba(255,170,0,0.06)', border: '1px solid rgba(255,170,0,0.2)',
+      }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.63rem', color: 'rgba(255,200,100,0.85)', lineHeight: 1.75 }}>
+          <strong style={{ color: '#ffaa00', display: 'block', marginBottom: 4 }}>Atenção</strong>
+          Alterar o dia do onboarding modifica o ponto de partida (started_at) do cliente.
+          O cron diário passará a enviar a etapa do novo dia na próxima execução (8h BRT).
+          Respostas já enviadas pelo cliente não são apagadas.
+          Use com cuidado — o cliente pode receber mensagens fora de ordem se retroceder para um dia com etapa já respondida.
+        </div>
+      </div>
+
+      {/* Controles */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px auto', gap: 12, alignItems: 'end' }}>
+        <div>
+          <label style={{
+            fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
+            letterSpacing: '0.1em', textTransform: 'uppercase',
+            color: 'var(--text-muted)', marginBottom: 4, display: 'block',
+          }}>Cliente</label>
+          <select
+            style={{ ...inputStyle, width: '100%', cursor: 'pointer' }}
+            value={selectedClient}
+            onChange={e => { setSelectedClient(e.target.value); setResult(null); }}
+          >
+            <option value="">— Selecione um cliente —</option>
+            {clients.map(c => (
+              <option key={c.id} value={c.id}>{c.company_name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label style={{
+            fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
+            letterSpacing: '0.1em', textTransform: 'uppercase',
+            color: 'var(--text-muted)', marginBottom: 4, display: 'block',
+          }}>Dia (1-15)</label>
+          <input
+            type="number" min="1" max="15"
+            style={{ ...inputStyle, width: '100%' }}
+            value={targetDay}
+            onChange={e => { setTargetDay(e.target.value); setResult(null); }}
+            placeholder="1-15"
+          />
+        </div>
+        <button
+          onClick={handleApplyClick}
+          disabled={applying || !selectedClient || !targetDay}
+          style={{
+            padding: '10px 20px', borderRadius: 6,
+            cursor: (applying || !selectedClient || !targetDay) ? 'not-allowed' : 'pointer',
+            background: applying ? 'rgba(255,0,51,0.3)' : 'rgba(255,0,51,0.9)',
+            border: 'none', color: '#fff',
+            fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 600,
+            letterSpacing: '0.06em', opacity: (applying || !selectedClient || !targetDay) ? 0.5 : 1,
+            height: 40,
+          }}
+        >
+          {applying ? 'Aplicando...' : 'Aplicar'}
+        </button>
+      </div>
+
+      {/* Resultado */}
+      {result && (
+        <div style={{
+          marginTop: 14, padding: '10px 14px', borderRadius: 7,
+          background: result.type === 'success' ? 'rgba(34,197,94,0.08)' : 'rgba(255,26,77,0.08)',
+          border: `1px solid ${result.type === 'success' ? 'rgba(34,197,94,0.25)' : 'rgba(255,26,77,0.25)'}`,
+          fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
+          color: result.type === 'success' ? '#22c55e' : '#ff6680',
+        }}>
+          {result.message}
+          {result.detail && <span style={{ marginLeft: 8, opacity: 0.7 }}>({result.detail})</span>}
+        </div>
+      )}
+
+      {/* Modal de confirmação */}
+      {showConfirm && (
+        <div
+          onClick={() => setShowConfirm(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="glass-card animate-scale-in"
+            style={{ width: '100%', maxWidth: 440, padding: '28px 24px' }}
+          >
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 700,
+              letterSpacing: '0.12em', textTransform: 'uppercase',
+              color: '#ffaa00', marginBottom: 14,
+            }}>
+              Confirmar alteração
+            </div>
+
+            <div style={{
+              fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-primary)',
+              lineHeight: 1.7, marginBottom: 20,
+            }}>
+              Alterar o dia do onboarding de <strong style={{ color: '#ff0033' }}>{client?.company_name}</strong> para <strong style={{ color: '#ff0033' }}>dia {targetDay}</strong>.
+              <br /><br />
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>
+                Isso recalcula o ponto de partida da jornada. O cron de envio diário usará o novo dia
+                na próxima execução. Respostas já enviadas não são apagadas.
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowConfirm(false)}
+                style={{
+                  padding: '8px 18px', borderRadius: 6, cursor: 'pointer',
+                  background: 'transparent', border: '1px solid rgba(255,255,255,0.08)',
+                  color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 600,
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmApply}
+                style={{
+                  padding: '8px 18px', borderRadius: 6, cursor: 'pointer',
+                  background: 'rgba(255,170,0,0.9)', border: 'none', color: '#000',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 700,
+                }}
+              >
+                Confirmar Alteração
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TAB: MENSAGENS — templates WhatsApp editáveis
+═══════════════════════════════════════════════════════════ */
+
+const MSG_TEMPLATES = [
+  {
+    key: 'onboarding_msg_stage_link',
+    label: 'Link da Etapa (diário)',
+    description: 'Enviada toda manhã quando uma etapa é liberada.',
+    placeholders: ['{NOME}', '{ETAPA}', '{TITULO}', '{LINK}'],
+    defaultValue: `Bom dia, *{NOME}*.
+
+Etapa *{ETAPA}* liberada: _{TITULO}_
+Hoje o dia é teu. Pega 5-7 minutos, assiste o vídeo e responde sem pressa.
+
+{LINK}
+
+Quanto mais real, mais a estratégia vira teu jeito — não um molde genérico.`,
+  },
+  {
+    key: 'onboarding_msg_reminder',
+    label: 'Lembrete (fim do dia)',
+    description: 'Enviada no fim do dia se o cliente não respondeu a etapa.',
+    placeholders: ['{NOME}', '{ETAPA}', '{LINK}'],
+    defaultValue: `Oi, *{NOME}*.
+
+A etapa *{ETAPA}* de hoje ainda tá te esperando.
+Sem pressão — só pra lembrar que o link tá aqui:
+
+{LINK}
+
+Se hoje não rolar, amanhã libera a próxima do mesmo jeito.`,
+  },
+  {
+    key: 'onboarding_msg_rest_4',
+    label: 'Dia de Descanso 4',
+    description: 'Mensagem motivacional do 4o dia (primeiro descanso).',
+    placeholders: [],
+    defaultValue: `Tá indo muito bem. Suas respostas já mostram muita coisa.
+Amanhã: campo de batalha — *concorrentes*.
+Hoje, descansa. Sem etapa, sem link, sem cobrança.`,
+  },
+  {
+    key: 'onboarding_msg_rest_8',
+    label: 'Dia de Descanso 8',
+    description: 'Mensagem motivacional do 8o dia (metade da jornada).',
+    placeholders: [],
+    defaultValue: `*Metade*. Você tá na frente de 99% dos empresários que abriram a empresa e nunca pararam pra pensar nela.
+Segunda metade: dados, números, vendas.
+Amanhã: história da sua marca. A etapa mais bonita do briefing. Prepara o coração.`,
+  },
+  {
+    key: 'onboarding_msg_rest_13',
+    label: 'Dia de Descanso 13',
+    description: 'Mensagem motivacional do 13o dia (penúltimo descanso).',
+    placeholders: [],
+    defaultValue: `Último respiro antes do fechamento.
+Você já olhou seu negócio com lupa por 12 dias.
+Amanhã e depois: objetivos e fechamento. Vamos terminar com força.`,
+  },
+  {
+    key: 'onboarding_msg_completion',
+    label: 'Conclusão',
+    description: 'Enviada quando o cliente completa todas as 12 etapas.',
+    placeholders: ['{NOME}'],
+    defaultValue: `*{NOME}*, terminamos.
+
+15 dias. 12 etapas. 157 perguntas.
+Você fez algo que 99% dos empresários nunca fizeram: parar e olhar o próprio negócio do começo ao fim.
+
+Agora é com a Sigma. Em até 7 dias o time devolve:
+- Posicionamento estratégico
+- Avatar e mapa de objeções
+- Plano de conteúdo do primeiro mês
+- Próximos passos comerciais
+
+Obrigado pela honestidade nas respostas. Foi ela que fez esse trabalho valer.`,
+  },
+];
+
+function OnboardingMessagesTab({ notify }) {
+  const [values, setValues] = useState({});
+  const [saving, setSaving] = useState({});
+  const [saved, setSaved] = useState({});
+
+  // Carrega valores customizados do banco
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/settings/jarvis-config'); // reutiliza a API de settings
+        const d = await r.json();
+        if (d.success && d.config) {
+          const loaded = {};
+          MSG_TEMPLATES.forEach(t => {
+            loaded[t.key] = d.config[t.key] || '';
+          });
+          setValues(loaded);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  async function handleSave(key) {
+    setSaving(s => ({ ...s, [key]: true }));
+    try {
+      const r = await fetch('/api/settings/jarvis-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value: values[key] || '' }),
+      });
+      const d = await r.json();
+      if (d.success) {
+        setSaved(s => ({ ...s, [key]: true }));
+        setTimeout(() => setSaved(s => ({ ...s, [key]: false })), 2000);
+        notify('Mensagem salva.', 'success');
+      } else {
+        notify(d.error || 'Erro.', 'error');
+      }
+    } catch {
+      notify('Erro de conexão.', 'error');
+    }
+    setSaving(s => ({ ...s, [key]: false }));
+  }
+
+  function handleReset(key, defaultValue) {
+    setValues(v => ({ ...v, [key]: defaultValue }));
+    setSaved(s => ({ ...s, [key]: false }));
+  }
+
+  const textareaStyle = {
+    width: '100%', padding: '12px 14px', resize: 'vertical',
+    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 8, color: '#f0f0f0',
+    fontFamily: 'var(--font-mono)', fontSize: '0.72rem', lineHeight: 1.7,
+    outline: 'none', transition: 'border-color 0.15s',
+  };
+
+  return (
+    <div>
+      {/* Aviso */}
+      <div style={{
+        padding: '14px 18px', borderRadius: 8, marginBottom: 20,
+        background: 'rgba(99,102,241,0.04)', border: '1px solid rgba(99,102,241,0.15)',
+      }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.63rem', color: 'rgba(165,180,252,0.75)', lineHeight: 1.75 }}>
+          <strong style={{ color: 'rgba(165,180,252,0.95)', display: 'block', marginBottom: 4 }}>Como funciona</strong>
+          O cron diário (8h BRT) envia uma mensagem diferente por dia via WhatsApp.
+          Nos dias de etapa, envia o link. Nos dias de descanso, a mensagem motivacional.
+          Se o cliente não responder, envia o lembrete no fim do dia.
+          Edite qualquer template abaixo — deixe vazio para usar o padrão.
+        </div>
+      </div>
+
+      {MSG_TEMPLATES.map((tmpl, idx) => {
+        const val = values[tmpl.key] || tmpl.defaultValue;
+        const isSaving = saving[tmpl.key];
+        const isSaved = saved[tmpl.key];
+
+        return (
+          <div key={tmpl.key} className="glass-card" style={{ padding: '20px 24px', marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+              <div>
+                <div style={{
+                  fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 600,
+                  color: 'var(--text-primary)',
+                }}>
+                  {tmpl.label}
+                </div>
+                <div style={{
+                  fontFamily: 'var(--font-mono)', fontSize: '0.58rem',
+                  color: 'var(--text-muted)', marginTop: 2,
+                }}>
+                  {tmpl.description}
+                </div>
+              </div>
+            </div>
+
+            <textarea
+              value={val}
+              onChange={e => { setValues(v => ({ ...v, [tmpl.key]: e.target.value })); setSaved(s => ({ ...s, [tmpl.key]: false })); }}
+              rows={tmpl.key.includes('rest') ? 4 : 7}
+              style={textareaStyle}
+              onFocus={e => { e.target.style.borderColor = 'rgba(255,0,51,0.3)'; }}
+              onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+            />
+
+            {/* Placeholders clicáveis */}
+            {tmpl.placeholders.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                {tmpl.placeholders.map(ph => (
+                  <span key={ph} style={{
+                    fontFamily: 'var(--font-mono)', fontSize: '0.55rem',
+                    padding: '2px 8px', borderRadius: 4,
+                    background: 'rgba(255,0,51,0.06)', border: '1px solid rgba(255,0,51,0.15)',
+                    color: '#ff6680', cursor: 'pointer',
+                  }}
+                    title={`Inserir ${ph}`}
+                    onClick={() => setValues(v => ({ ...v, [tmpl.key]: (v[tmpl.key] || tmpl.defaultValue) + ph }))}
+                  >
+                    {ph}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button
+                onClick={() => handleSave(tmpl.key)}
+                disabled={isSaving}
+                style={{
+                  padding: '7px 18px', borderRadius: 6,
+                  cursor: isSaving ? 'not-allowed' : 'pointer',
+                  background: isSaved ? 'rgba(34,197,94,0.12)' : 'rgba(255,0,51,0.1)',
+                  border: isSaved ? '1px solid rgba(34,197,94,0.3)' : '1px solid rgba(255,0,51,0.25)',
+                  color: isSaved ? '#22c55e' : '#ff6680',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600,
+                }}
+              >
+                {isSaving ? 'Salvando...' : isSaved ? 'Salvo' : 'Salvar'}
+              </button>
+              <button
+                onClick={() => handleReset(tmpl.key, tmpl.defaultValue)}
+                style={{
+                  padding: '7px 14px', borderRadius: 6, cursor: 'pointer',
+                  background: 'transparent', border: '1px solid rgba(255,255,255,0.08)',
+                  color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+                }}
+              >
+                Restaurar padrão
+              </button>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

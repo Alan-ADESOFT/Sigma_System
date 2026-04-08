@@ -124,34 +124,9 @@ export default function IndicacaoPage() {
     );
   }
 
-  /* ─── Expirado ─── */
+  /* ─── Expirado — animação de dissolução ─── */
   if (expired || (msRemaining !== null && msRemaining <= 0)) {
-    return (
-      <>
-        <Head>
-          <title>SIGMA · Acesso expirado</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-          <meta name="robots" content="noindex, nofollow" />
-        </Head>
-        <div className={styles.secretPage}>
-          <div className={styles.secretContainer}>
-            <div className={styles.expiredScreen}>
-              <div className={styles.expiredIcon}>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <polyline points="12 6 12 12 16 14" />
-                </svg>
-              </div>
-              <h1 className={styles.expiredTitle}>Acesso expirado</h1>
-              <p className={styles.expiredText}>
-                Esse acesso era exclusivo e durou 72h. Peça ao amigo que
-                reenvie o link.
-              </p>
-            </div>
-          </div>
-        </div>
-      </>
-    );
+    return <ExpiredScreen />;
   }
 
   return <SecretPageContent
@@ -169,12 +144,310 @@ export default function IndicacaoPage() {
    isso, mostra um aviso "ASSISTA O VÍDEO EM DESTAQUE".
 ═══════════════════════════════════════════════════════════ */
 
+/* ═══════════════════════════════════════════════════════════
+   EXPIRED SCREEN — animação cinematográfica de dissolução
+═══════════════════════════════════════════════════════════ */
+function ExpiredScreen() {
+  const [phase, setPhase] = useState(0); // 0=glitch, 1=dissolve, 2=message
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase(1), 800);
+    const t2 = setTimeout(() => setPhase(2), 2200);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  return (
+    <>
+      <Head>
+        <title>SIGMA · Acesso expirado</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <meta name="robots" content="noindex, nofollow" />
+      </Head>
+      <style jsx global>{`
+        @keyframes expGlitch {
+          0%, 100% { transform: translate(0); filter: none; }
+          20% { transform: translate(-3px, 2px); filter: hue-rotate(90deg); }
+          40% { transform: translate(3px, -2px); filter: hue-rotate(-90deg) saturate(3); }
+          60% { transform: translate(-2px, -1px); filter: brightness(1.5) contrast(2); }
+          80% { transform: translate(2px, 1px); filter: invert(0.1); }
+        }
+        @keyframes expDissolve {
+          0% { opacity: 1; filter: blur(0px) brightness(1); transform: scale(1); }
+          40% { opacity: 0.6; filter: blur(2px) brightness(0.8); transform: scale(0.98); }
+          100% { opacity: 0; filter: blur(12px) brightness(0.3); transform: scale(0.92); }
+        }
+        @keyframes expFadeIn {
+          0% { opacity: 0; transform: translateY(20px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes expPulse {
+          0%, 100% { opacity: 0.6; }
+          50% { opacity: 1; }
+        }
+      `}</style>
+      <div style={{
+        minHeight: '100vh', background: '#000', display: 'flex',
+        alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+      }}>
+        {/* Fase 0-1: conteúdo fantasma que "dissolve" */}
+        {phase < 2 && (
+          <div style={{
+            textAlign: 'center', padding: '0 24px',
+            animation: phase === 0 ? 'expGlitch 0.8s ease-in-out' : 'expDissolve 1.4s ease-out forwards',
+          }}>
+            <div style={{
+              width: 64, height: 64, borderRadius: '50%', margin: '0 auto 20px',
+              background: 'rgba(255,0,51,0.1)', border: '2px solid rgba(255,0,51,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ff0033" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+              </svg>
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '1.1rem', color: '#fff', fontWeight: 700 }}>
+              SIGMA
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.7rem', color: '#555', marginTop: 8 }}>
+              Acesso Exclusivo
+            </div>
+          </div>
+        )}
+
+        {/* Fase 2: mensagem final */}
+        {phase === 2 && (
+          <div style={{
+            textAlign: 'center', padding: '0 32px', maxWidth: 440,
+            animation: 'expFadeIn 0.8s ease-out',
+          }}>
+            <div style={{
+              width: 72, height: 72, borderRadius: '50%', margin: '0 auto 24px',
+              background: 'rgba(255,0,51,0.06)', border: '1px solid rgba(255,0,51,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ff0033" strokeWidth="1.5" strokeLinecap="round">
+                <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+              </svg>
+            </div>
+            <h1 style={{
+              fontFamily: 'var(--font-mono, monospace)', fontSize: '1.2rem',
+              color: '#fff', fontWeight: 700, marginBottom: 12, lineHeight: 1.3,
+            }}>
+              Infelizmente, seu tempo acabou
+            </h1>
+            <p style={{
+              fontFamily: 'var(--font-mono, monospace)', fontSize: '0.72rem',
+              color: '#666', lineHeight: 1.7, marginBottom: 24,
+            }}>
+              Essa oferta era exclusiva e tinha validade de 72 horas
+              a partir do primeiro acesso. O prazo expirou e a página
+              não está mais disponível.
+            </p>
+            <div style={{
+              padding: '12px 18px', borderRadius: 8,
+              background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+              fontFamily: 'var(--font-mono, monospace)', fontSize: '0.62rem', color: '#444',
+              animation: 'expPulse 3s infinite',
+            }}>
+              Se tiver interesse, converse com quem te indicou para saber mais sobre a Sigma.
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   NAME GATE — coleta nome + telefone antes de liberar conteúdo
+═══════════════════════════════════════════════════════════ */
+function NameGate({ refCode, onComplete }) {
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  function maskPhone(v) {
+    let d = (v || '').replace(/\D/g, '').slice(0, 11);
+    if (!d) return '';
+    if (d.length <= 2) return `(${d}`;
+    if (d.length <= 6) return `(${d.slice(0,2)}) ${d.slice(2)}`;
+    if (d.length <= 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+    return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!name.trim()) { setError('Informe seu nome'); return; }
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 10) { setError('Informe um telefone válido'); return; }
+
+    setSaving(true); setError('');
+    try {
+      const r = await fetch('/api/referral/collect-info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refCode, name: name.trim(), phone: digits }),
+      });
+      const d = await r.json();
+      if (!d.success) { setError(d.error || 'Erro ao salvar'); setSaving(false); return; }
+      // Salva no localStorage para não pedir de novo
+      try { localStorage.setItem(`ref_gate_${refCode}`, '1'); } catch {}
+      onComplete();
+    } catch {
+      setError('Erro de conexão');
+    }
+    setSaving(false);
+  }
+
+  const inputStyle = {
+    width: '100%', padding: '14px 16px',
+    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: 8, color: '#fff',
+    fontFamily: 'var(--font-mono, monospace)', fontSize: '0.85rem',
+    outline: 'none', transition: 'border-color 0.2s',
+  };
+
+  return (
+    <>
+      <Head>
+        <title>SIGMA · Acesso Exclusivo</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <meta name="robots" content="noindex, nofollow" />
+        <meta name="theme-color" content="#000000" />
+      </Head>
+      <style jsx global>{`
+        @keyframes gateIn { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
+        @keyframes gatePulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,0,51,0.4); } 50% { box-shadow: 0 0 20px 4px rgba(255,0,51,0.15); } }
+      `}</style>
+      <div style={{
+        minHeight: '100vh', background: '#000',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '24px',
+      }}>
+        <form
+          onSubmit={handleSubmit}
+          style={{
+            width: '100%', maxWidth: 400,
+            animation: 'gateIn 0.6s ease-out',
+          }}
+        >
+          {/* Logo / Badge */}
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
+            <div style={{
+              display: 'inline-block', padding: '6px 16px', borderRadius: 20,
+              background: 'rgba(212,168,67,0.08)', border: '1px solid rgba(212,168,67,0.25)',
+              fontFamily: 'var(--font-mono, monospace)', fontSize: '0.55rem',
+              fontWeight: 700, letterSpacing: '0.2em', color: '#D4A843',
+              textTransform: 'uppercase', marginBottom: 20,
+            }}>
+              Acesso Exclusivo
+            </div>
+            <h1 style={{
+              fontFamily: 'var(--font-mono, monospace)', fontSize: '1.15rem',
+              color: '#fff', fontWeight: 700, lineHeight: 1.4, marginBottom: 8,
+            }}>
+              Você foi convidado para algo especial
+            </h1>
+            <p style={{
+              fontFamily: 'var(--font-mono, monospace)', fontSize: '0.68rem',
+              color: '#666', lineHeight: 1.6,
+            }}>
+              Para liberar seu acesso exclusivo, informe seus dados abaixo.
+            </p>
+          </div>
+
+          {/* Campos */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 20 }}>
+            <div>
+              <label style={{
+                fontFamily: 'var(--font-mono, monospace)', fontSize: '0.58rem',
+                fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase',
+                color: '#555', marginBottom: 6, display: 'block',
+              }}>Seu nome</label>
+              <input
+                style={inputStyle}
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Como podemos te chamar?"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label style={{
+                fontFamily: 'var(--font-mono, monospace)', fontSize: '0.58rem',
+                fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase',
+                color: '#555', marginBottom: 6, display: 'block',
+              }}>WhatsApp</label>
+              <input
+                style={inputStyle}
+                value={maskPhone(phone)}
+                onChange={e => setPhone(e.target.value)}
+                placeholder="(11) 99999-9999"
+                inputMode="tel"
+              />
+            </div>
+          </div>
+
+          {error && (
+            <div style={{
+              padding: '8px 12px', borderRadius: 6, marginBottom: 14,
+              background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.2)',
+              fontFamily: 'var(--font-mono, monospace)', fontSize: '0.68rem', color: '#ff6680',
+              textAlign: 'center',
+            }}>
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={saving}
+            style={{
+              width: '100%', padding: '16px 0', borderRadius: 8, border: 'none',
+              cursor: saving ? 'not-allowed' : 'pointer',
+              background: saving ? 'rgba(255,0,51,0.4)' : 'linear-gradient(135deg, #ff0033, #cc0029)',
+              color: '#fff', fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8rem',
+              fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+              animation: saving ? 'none' : 'gatePulse 2.4s infinite',
+              opacity: saving ? 0.6 : 1, transition: 'opacity 0.2s',
+            }}
+          >
+            {saving ? 'Liberando...' : 'Liberar Acesso'}
+          </button>
+
+          <div style={{
+            textAlign: 'center', marginTop: 16,
+            fontFamily: 'var(--font-mono, monospace)', fontSize: '0.55rem', color: '#333',
+          }}>
+            Seus dados estão seguros e não serão compartilhados.
+          </div>
+        </form>
+      </div>
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CONTAINER — controla revelação da oferta baseada no tempo
+   da VSL + gate de nome/telefone antes do conteúdo.
+═══════════════════════════════════════════════════════════ */
+
 function SecretPageContent({ refCode, referral, config, msRemaining }) {
   const revealAtSeconds = config?.offerRevealAt ?? 210;
   const [offerRevealed, setOfferRevealed] = useState(false);
 
-  // Quando o VSLSection avisar que bateu no tempo de revelação,
-  // mostramos a oferta com animação e damos scroll suave até ela.
+  // Gate: checa se já preencheu (localStorage ou referral.referred_name)
+  const alreadyFilled = !!(referral?.referred_name || referral?.referredName);
+  const [gateCleared, setGateCleared] = useState(() => {
+    if (alreadyFilled) return true;
+    try { return localStorage.getItem(`ref_gate_${refCode}`) === '1'; } catch { return false; }
+  });
+
+  // Se ainda não preencheu nome/telefone, mostra o gate
+  if (!gateCleared) {
+    return <NameGate refCode={refCode} onComplete={() => setGateCleared(true)} />;
+  }
+
   function handleReveal() {
     if (offerRevealed) return;
     setOfferRevealed(true);

@@ -67,6 +67,7 @@ import {
 
 const { sendText } = require('../../../infra/api/zapi');
 const { query, queryOne } = require('../../../infra/db');
+const { getSetting } = require('../../../models/settings.model');
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -114,9 +115,25 @@ export default async function handler(req, res) {
           const already = await wasNotificationSent(ob.client_id, TOTAL_DAYS, 'completion');
           if (already) { results.skipped++; continue; }
 
-          const message = buildCompletionMessage({ name: ob.company_name });
+          const customCompMsg = await getSetting(ob.tenant_id, 'onboarding_msg_completion');
+          let message;
+          if (customCompMsg) {
+            const firstName = (ob.company_name || '').split(' ')[0];
+            message = customCompMsg.replace(/\{NOME\}/gi, firstName);
+          } else {
+            message = buildCompletionMessage({ name: ob.company_name });
+          }
           await sendText(ob.phone, message, { delayTyping: 3 });
           await logNotificationSent(ob.client_id, TOTAL_DAYS, 'completion', message);
+
+          try {
+            const { createNotification } = require('../../../models/clientForm');
+            await createNotification(
+              ob.tenant_id, 'onboarding_completed', 'Onboarding concluído',
+              `${ob.company_name} completou todas as 12 etapas do onboarding.`,
+              ob.client_id, { action: 'onboarding_completed' }
+            );
+          } catch {}
 
           // Marca o cliente como completed (caso ainda não esteja)
           await query(
@@ -146,7 +163,8 @@ export default async function handler(req, res) {
              WHERE tenant_id = $1 AND day_number = $2`,
             [ob.tenant_id, currentDay]
           );
-          const message = restRow?.message || REST_MESSAGES[currentDay];
+          const customRestMsg = await getSetting(ob.tenant_id, `onboarding_msg_rest_${currentDay}`);
+          const message = customRestMsg || restRow?.message || REST_MESSAGES[currentDay];
 
           await sendText(ob.phone, message, { delayTyping: 3 });
           await logNotificationSent(ob.client_id, currentDay, 'rest_message', message);
@@ -167,15 +185,36 @@ export default async function handler(req, res) {
         if (already) { results.skipped++; continue; }
 
         const link = `${baseUrl}/onboarding/${ob.token}`;
-        const message = buildStageLinkMessage({
-          name: ob.company_name,
-          stageNumber: stage.stage,
-          stageTitle: stage.title,
-          link,
-        });
+        const customStageMsg = await getSetting(ob.tenant_id, 'onboarding_msg_stage_link');
+        let message;
+        if (customStageMsg) {
+          const firstName = (ob.company_name || '').split(' ')[0];
+          message = customStageMsg
+            .replace(/\{NOME\}/gi, firstName)
+            .replace(/\{ETAPA\}/gi, String(stage.stage))
+            .replace(/\{TITULO\}/gi, stage.title)
+            .replace(/\{LINK\}/gi, link);
+        } else {
+          message = buildStageLinkMessage({
+            name: ob.company_name,
+            stageNumber: stage.stage,
+            stageTitle: stage.title,
+            link,
+          });
+        }
 
         await sendText(ob.phone, message, { delayTyping: 3 });
         await logNotificationSent(ob.client_id, currentDay, 'stage_link', message);
+
+        try {
+          const { createNotification } = require('../../../models/clientForm');
+          await createNotification(
+            ob.tenant_id, 'onboarding_link_sent', 'Etapa enviada',
+            `Etapa ${stage.stage} enviada para ${ob.company_name} via WhatsApp.`,
+            ob.client_id, { day: currentDay, stage: stage.stage }
+          );
+        } catch {}
+
         results.stageLinks++;
 
         console.log('[SUCESSO][Cron:OnboardingDaily] link da etapa enviado', {

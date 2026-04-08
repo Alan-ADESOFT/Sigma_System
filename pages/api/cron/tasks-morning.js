@@ -2,7 +2,10 @@
  * CRON: tasks-morning (8h BRT = 11h UTC)
  * Envia resumo matinal via WhatsApp para usuários com bot ativo.
  * Inclui tasks do dia + reuniões.
- * Protegido por x-internal-token.
+ *
+ * @route POST /api/cron/tasks-morning
+ * @protection Header x-internal-token (INTERNAL_API_TOKEN)
+ * @schedule Todo dia às 8h BRT → cron: 0 11 * * * (UTC)
  */
 const { query } = require('../../../infra/db');
 const { sendText } = require('../../../infra/api/zapi');

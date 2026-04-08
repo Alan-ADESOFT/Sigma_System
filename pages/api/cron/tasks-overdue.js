@@ -5,8 +5,9 @@
  * 3. Envia WhatsApp para cada usuario com bot ativo usando o template overdue
  *    (per-user > tenant global > hardcoded)
  *
- * Pode rodar junto ao cron das 8h.
- * Protegido por x-internal-token.
+ * @route POST /api/cron/tasks-overdue
+ * @protection Header x-internal-token (INTERNAL_API_TOKEN)
+ * @schedule Todo dia às 8h BRT → cron: 0 11 * * * (UTC)
  */
 const { query, queryOne } = require('../../../infra/db');
 const taskModel = require('../../../models/task.model');

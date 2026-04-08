@@ -57,6 +57,8 @@ const DEFAULTS = {
   jarvis_daily_limit_admin: '40',
   jarvis_daily_limit_user:  '10',
   jarvis_language:          'pt',
+  jarvis_msg_form_send:     '',
+  jarvis_msg_form_reminder: '',
 };
 
 function fnKey(id) { return `jarvis_fn_${id}`; }

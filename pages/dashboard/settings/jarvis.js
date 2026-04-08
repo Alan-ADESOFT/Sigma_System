@@ -401,6 +401,158 @@ export default function JarvisSettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* ═══ SEÇÃO: MENSAGENS DO JARVIS ═══ */}
+      <div className="set-section-card">
+        <div className="set-section-header">
+          <div className="set-section-header-left">
+            <div className="set-section-title-row">
+              <span className="set-section-dot" />
+              <span className="set-section-title-text">Mensagens do Jarvis</span>
+              <span className="set-section-line" />
+            </div>
+            <div className="set-section-description">
+              Edite as mensagens que o Jarvis envia via WhatsApp. Use {'{LINK}'} para o link e {'{CLIENTE}'} para o nome do cliente.
+            </div>
+          </div>
+        </div>
+
+        <JarvisMessageEditor
+          configKey="jarvis_msg_form_send"
+          label="Envio de Formulário"
+          description="Enviada quando o Jarvis manda o link do formulário para o cliente."
+          defaultValue={`Olá! Segue o link do formulário de briefing da SIGMA Marketing:\n\n{LINK}\n\nPreencha com atenção — suas respostas serão usadas para gerar toda a estratégia de marketing.\n\nO link expira em 7 dias.`}
+          currentValue={config?.jarvis_msg_form_send}
+          onSave={saveKey}
+          notify={notify}
+        />
+
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.04)', margin: '16px 0' }} />
+
+        <JarvisMessageEditor
+          configKey="jarvis_msg_form_reminder"
+          label="Lembrete de Formulário"
+          description="Enviada automaticamente após 5 dias se o cliente não preencheu o formulário."
+          defaultValue={`Oi, *{CLIENTE}*! 👋\n\nVimos que o seu formulário ainda está esperando por você.\nLeva apenas 25 minutos e faz toda a diferença na estratégia que vamos construir juntos.\n\nSeu link ainda está válido:\n👉 {LINK}\n\nSe tiver qualquer dificuldade, é só me chamar. 😊`}
+          currentValue={config?.jarvis_msg_form_reminder}
+          onSave={saveKey}
+          notify={notify}
+        />
+      </div>
     </DashboardLayout>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EDITOR DE MENSAGEM — card reutilizável para cada template
+═══════════════════════════════════════════════════════════ */
+function JarvisMessageEditor({ configKey, label, description, defaultValue, currentValue, onSave, notify }) {
+  const [text, setText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setText(currentValue || defaultValue || '');
+  }, [currentValue, defaultValue]);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await onSave(configKey, text);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      notify('Mensagem salva.', 'success');
+    } catch {
+      notify('Erro ao salvar.', 'error');
+    }
+    setSaving(false);
+  }
+
+  function handleReset() {
+    setText(defaultValue || '');
+    setSaved(false);
+  }
+
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 600,
+            color: 'var(--text-primary)',
+          }}>
+            {label}
+          </div>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: '0.58rem',
+            color: 'var(--text-muted)', marginTop: 2,
+          }}>
+            {description}
+          </div>
+        </div>
+      </div>
+
+      <textarea
+        value={text}
+        onChange={e => { setText(e.target.value); setSaved(false); }}
+        rows={6}
+        style={{
+          width: '100%', padding: '12px 14px', resize: 'vertical',
+          background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 8, color: '#f0f0f0',
+          fontFamily: 'var(--font-mono)', fontSize: '0.72rem', lineHeight: 1.7,
+          outline: 'none', transition: 'border-color 0.15s',
+        }}
+        onFocus={e => { e.target.style.borderColor = 'rgba(255,0,51,0.3)'; }}
+        onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+      />
+
+      {/* Placeholders disponíveis */}
+      <div style={{
+        display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap',
+      }}>
+        {['{LINK}', '{CLIENTE}'].map(ph => (
+          <span key={ph} style={{
+            fontFamily: 'var(--font-mono)', fontSize: '0.55rem',
+            padding: '2px 8px', borderRadius: 4,
+            background: 'rgba(255,0,51,0.06)', border: '1px solid rgba(255,0,51,0.15)',
+            color: '#ff6680', cursor: 'pointer',
+          }}
+            title={`Clique para inserir ${ph}`}
+            onClick={() => setText(t => t + ph)}
+          >
+            {ph}
+          </span>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          style={{
+            padding: '7px 18px', borderRadius: 6,
+            cursor: saving ? 'not-allowed' : 'pointer',
+            background: saved ? 'rgba(34,197,94,0.12)' : 'rgba(255,0,51,0.1)',
+            border: saved ? '1px solid rgba(34,197,94,0.3)' : '1px solid rgba(255,0,51,0.25)',
+            color: saved ? '#22c55e' : '#ff6680',
+            fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600,
+            letterSpacing: '0.04em',
+          }}
+        >
+          {saving ? 'Salvando...' : saved ? 'Salvo' : 'Salvar'}
+        </button>
+        <button
+          onClick={handleReset}
+          style={{
+            padding: '7px 14px', borderRadius: 6, cursor: 'pointer',
+            background: 'transparent', border: '1px solid rgba(255,255,255,0.08)',
+            color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+          }}
+        >
+          Restaurar padrão
+        </button>
+      </div>
+    </div>
   );
 }

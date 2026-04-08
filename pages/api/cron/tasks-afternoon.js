@@ -1,7 +1,10 @@
 /**
  * CRON: tasks-afternoon (16h BRT = 19h UTC)
  * Envia lembrete de tasks não finalizadas do dia.
- * Protegido por x-internal-token.
+ *
+ * @route POST /api/cron/tasks-afternoon
+ * @protection Header x-internal-token (INTERNAL_API_TOKEN)
+ * @schedule Todo dia às 16h BRT → cron: 0 19 * * * (UTC)
  */
 const { query } = require('../../../infra/db');
 const { sendText } = require('../../../infra/api/zapi');

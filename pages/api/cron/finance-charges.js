@@ -9,8 +9,9 @@
  *   - Atraso prolongado (> 1 dia)
  *   - Resumo diário de inadimplentes para admin
  *
- * Protegido por x-internal-token.
- * Recomendado: "0 11 * * *" (8h BRT)
+ * @route POST /api/cron/finance-charges
+ * @protection Header x-internal-token (INTERNAL_API_TOKEN)
+ * @schedule Todo dia às 8h BRT → cron: 0 11 * * * (UTC)
  */
 
 import { query } from '../../../infra/db';

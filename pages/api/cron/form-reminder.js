@@ -11,6 +11,7 @@
 
 import { query, queryOne } from '../../../infra/db';
 const { sendText } = require('../../../infra/api/zapi');
+const { getSetting } = require('../../../models/settings.model');
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -51,13 +52,11 @@ export default async function handler(req, res) {
       try {
         const formLink = `${baseUrl}/form/${row.token}`;
 
-        const message = `Oi, *${row.company_name}*! \u{1F44B}\n\n` +
-          `Vimos que o seu formulário ainda está esperando por você.\n` +
-          `Leva apenas 25 minutos e faz toda a diferença na estratégia ` +
-          `que vamos construir juntos.\n\n` +
-          `Seu link ainda está válido:\n` +
-          `\u{1F449} ${formLink}\n\n` +
-          `Se tiver qualquer dificuldade, é só me chamar. \u{1F60A}`;
+        const DEFAULT_REMINDER = `Oi, *{CLIENTE}*! 👋\n\nVimos que o seu formulário ainda está esperando por você.\nLeva apenas 25 minutos e faz toda a diferença na estratégia que vamos construir juntos.\n\nSeu link ainda está válido:\n👉 {LINK}\n\nSe tiver qualquer dificuldade, é só me chamar. 😊`;
+        const template = (await getSetting(row.tenant_id, 'jarvis_msg_form_reminder')) || DEFAULT_REMINDER;
+        const message = template
+          .replace(/\{LINK\}/gi, formLink)
+          .replace(/\{CLIENTE\}/gi, row.company_name || 'cliente');
 
         await sendText(row.phone, message, { delayTyping: 3 });
 

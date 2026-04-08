@@ -3,8 +3,9 @@
  * Itera todas as recorrencias ativas e cria tasks reais para hoje quando aplicavel.
  * Idempotente: usa task_recurrences.last_run_at = hoje para evitar duplicar no mesmo dia.
  *
- * Frequencia recomendada: 1x por dia, junto ao morning (8h BRT = "0 11 * * *")
- * Protegido por x-internal-token.
+ * @route POST /api/cron/task-recurrences
+ * @protection Header x-internal-token (INTERNAL_API_TOKEN)
+ * @schedule Todo dia às 7h BRT → cron: 0 10 * * * (UTC)
  */
 const { query } = require('../../../infra/db');
 const recurrenceModel = require('../../../models/taskRecurrence.model');

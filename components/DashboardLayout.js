@@ -643,6 +643,29 @@ function NotificationBell() {
     if (type === 'instagram_post_failed')        return '✕';
     if (type === 'instagram_token_expiring')     return '⏱';
     if (type === 'instagram_token_refresh_failed') return '⚠';
+    // Onboarding
+    if (type === 'onboarding_started')           return '▶';
+    if (type === 'onboarding_stage_completed')   return '✓';
+    if (type === 'onboarding_completed')         return '★';
+    if (type === 'onboarding_link_sent')         return '→';
+    if (type === 'onboarding_abandoned')         return '⚠';
+    // Indicações
+    if (type === 'referral_visited')             return '◎';
+    if (type === 'referral_purchased')           return '$';
+    // Usuários
+    if (type === 'user_created')                 return '+';
+    if (type === 'user_deactivated')             return '⊘';
+    // Financeiro
+    if (type === 'contract_created')             return '□';
+    // Cliente
+    if (type === 'client_deleted')               return '✕';
+    // Pipeline
+    if (type === 'pipeline_started')             return '▶';
+    // Jarvis
+    if (type === 'jarvis_action')                return '⚡';
+    // Sistema
+    if (type === 'system')                       return '●';
+    if (type === 'task_assigned')                return '→';
     return '●';
   }
 
@@ -653,7 +676,9 @@ function NotificationBell() {
     if (type === 'token_expired')                return 'var(--error)';
     if (type === 'pipeline_done')                return 'var(--success)';
     if (type === 'pipeline_failed')              return 'var(--error)';
+    if (type === 'pipeline_started')             return 'var(--info)';
     if (type === 'client_created')               return 'var(--info)';
+    if (type === 'client_deleted')               return 'var(--error)';
     if (type === 'stage_done')                   return 'var(--success)';
     if (type === 'database_reset')               return 'var(--warning)';
     if (type === 'export_generated')             return 'var(--info)';
@@ -664,6 +689,24 @@ function NotificationBell() {
     if (type === 'instagram_post_failed')        return 'var(--error)';
     if (type === 'instagram_token_expiring')     return 'var(--warning)';
     if (type === 'instagram_token_refresh_failed') return 'var(--error)';
+    // Onboarding
+    if (type === 'onboarding_started')           return 'var(--info)';
+    if (type === 'onboarding_stage_completed')   return 'var(--success)';
+    if (type === 'onboarding_completed')         return 'var(--success)';
+    if (type === 'onboarding_link_sent')         return 'var(--info)';
+    if (type === 'onboarding_abandoned')         return 'var(--warning)';
+    // Indicações
+    if (type === 'referral_visited')             return 'var(--info)';
+    if (type === 'referral_purchased')           return 'var(--success)';
+    // Usuários
+    if (type === 'user_created')                 return 'var(--info)';
+    if (type === 'user_deactivated')             return 'var(--warning)';
+    // Financeiro
+    if (type === 'contract_created')             return 'var(--info)';
+    // Jarvis
+    if (type === 'jarvis_action')                return 'var(--info)';
+    if (type === 'system')                       return 'var(--info)';
+    if (type === 'task_assigned')                return 'var(--info)';
     return 'var(--info)';
   }
 

@@ -164,12 +164,24 @@ export default function IndicacoesPage() {
             <span className={styles.adminTabIcon}>{ICONS.message}</span>
             Mensagens
           </button>
+          <button
+            className={`${styles.adminTab} ${tab === 'test' ? styles.active : ''}`}
+            onClick={() => setTab('test')}
+          >
+            <span className={styles.adminTabIcon}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+              </svg>
+            </span>
+            Teste
+          </button>
         </div>
 
         {/* ── CONTEÚDO DA TAB ── */}
         {tab === 'list'     && <ReferralListTab notify={notify} onLoaded={setAllReferrals} />}
         {tab === 'config'   && <ReferralConfigTab notify={notify} />}
         {tab === 'messages' && <ReferralMessagesTab notify={notify} />}
+        {tab === 'test'     && <ReferralTestTab notify={notify} />}
       </div>
     </DashboardLayout>
   );
@@ -732,6 +744,200 @@ function ReferralMessagesTab({ notify }) {
       >
         {saving ? 'Salvando...' : 'Salvar Mensagens'}
       </button>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TAB: TESTE — gera links temporários para validar o funil
+═══════════════════════════════════════════════════════════ */
+function ReferralTestTab({ notify }) {
+  const [label, setLabel] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [testLinks, setTestLinks] = useState([]);
+  const [expiring, setExpiring] = useState(null); // refCode being expired
+
+  async function handleGenerate() {
+    setGenerating(true);
+    try {
+      const r = await fetch('/api/referral/generate-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: label || 'Teste' }),
+      });
+      const d = await r.json();
+      if (!d.success) { notify(d.error || 'Erro ao gerar link.', 'error'); return; }
+      setTestLinks(prev => [d.referral, ...prev]);
+      setLabel('');
+      notify('Link de teste gerado.', 'success');
+    } catch {
+      notify('Erro de conexão.', 'error');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function copyLink(link) {
+    navigator.clipboard?.writeText(link);
+    notify('Link copiado.', 'success');
+  }
+
+  async function handleExpire(refCode) {
+    setExpiring(refCode);
+    try {
+      const r = await fetch('/api/referral/simulate-expire', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refCode }),
+      });
+      const d = await r.json();
+      if (d.success) {
+        notify('Link expirado. Abra o link para ver a animação.', 'success');
+        setTestLinks(prev => prev.map(tl => tl.refCode === refCode ? { ...tl, expired: true } : tl));
+      } else {
+        notify(d.error || 'Erro.', 'error');
+      }
+    } catch { notify('Erro de conexão.', 'error'); }
+    setExpiring(null);
+  }
+
+  const inputStyle = {
+    flex: 1, padding: '10px 12px',
+    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 6, color: '#f0f0f0',
+    fontFamily: 'var(--font-mono)', fontSize: '0.75rem', outline: 'none',
+  };
+
+  return (
+    <div>
+      {/* Aviso */}
+      <div style={{
+        padding: '14px 18px', borderRadius: 8, marginBottom: 20,
+        background: 'rgba(255,170,0,0.06)', border: '1px solid rgba(255,170,0,0.2)',
+      }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.63rem', color: 'rgba(255,200,100,0.85)', lineHeight: 1.75 }}>
+          <strong style={{ color: '#ffaa00', display: 'block', marginBottom: 4 }}>Modo de Teste</strong>
+          Links gerados aqui funcionam exatamente como links reais — o indicado vai ver a página de venda,
+          o timer de 72h, o VSL e a oferta. Use para validar o funil antes de ativar para clientes.
+          Links de teste ficam marcados com "[TESTE]" na aba Indicações.
+        </div>
+      </div>
+
+      {/* Gerador */}
+      <div className="glass-card" style={{ padding: '20px 24px', marginBottom: 20 }}>
+        <div style={{
+          fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 700,
+          letterSpacing: '0.12em', textTransform: 'uppercase',
+          color: 'var(--brand-500, #ff0033)', marginBottom: 14,
+        }}>
+          Gerar Link de Teste
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <input
+            style={inputStyle}
+            value={label}
+            onChange={e => setLabel(e.target.value)}
+            placeholder="Nome do teste (ex: Teste VSL, Teste Mobile...)"
+            onKeyDown={e => { if (e.key === 'Enter') handleGenerate(); }}
+          />
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            style={{
+              padding: '10px 20px', borderRadius: 6, flexShrink: 0,
+              cursor: generating ? 'not-allowed' : 'pointer',
+              background: generating ? 'rgba(255,0,51,0.3)' : 'rgba(255,0,51,0.9)',
+              border: 'none', color: '#fff',
+              fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 600,
+              letterSpacing: '0.06em', opacity: generating ? 0.6 : 1,
+            }}
+          >
+            {generating ? 'Gerando...' : 'Gerar Link'}
+          </button>
+        </div>
+      </div>
+
+      {/* Lista de links gerados */}
+      {testLinks.length > 0 && (
+        <div className="glass-card" style={{ padding: '20px 24px' }}>
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 700,
+            letterSpacing: '0.12em', textTransform: 'uppercase',
+            color: 'var(--text-muted)', marginBottom: 14,
+          }}>
+            Links Gerados ({testLinks.length})
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {testLinks.map(tl => (
+              <div key={tl.id} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '12px 14px', borderRadius: 8,
+                background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)',
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#f0f0f0', fontWeight: 600 }}>
+                    {tl.label}
+                  </div>
+                  <div style={{
+                    fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)',
+                    marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {tl.refLink}
+                  </div>
+                </div>
+                <button
+                  onClick={() => copyLink(tl.refLink)}
+                  title="Copiar link"
+                  style={{
+                    padding: '6px 14px', borderRadius: 5, flexShrink: 0,
+                    cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(255,255,255,0.03)', color: 'var(--text-muted)',
+                    fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#f0f0f0'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+                >
+                  Copiar
+                </button>
+                <a
+                  href={tl.refLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    padding: '6px 14px', borderRadius: 5, flexShrink: 0,
+                    textDecoration: 'none', border: '1px solid rgba(255,0,51,0.2)',
+                    background: 'rgba(255,0,51,0.05)', color: '#ff6680',
+                    fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  Abrir
+                </a>
+                <button
+                  onClick={() => handleExpire(tl.refCode)}
+                  disabled={expiring === tl.refCode || tl.expired}
+                  title="Simula expiração de 72h para testar a tela"
+                  style={{
+                    padding: '6px 14px', borderRadius: 5, flexShrink: 0,
+                    cursor: (expiring === tl.refCode || tl.expired) ? 'not-allowed' : 'pointer',
+                    border: tl.expired ? '1px solid rgba(255,170,0,0.15)' : '1px solid rgba(255,170,0,0.25)',
+                    background: tl.expired ? 'rgba(255,170,0,0.03)' : 'rgba(255,170,0,0.06)',
+                    color: tl.expired ? '#665520' : '#ffaa00',
+                    fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+                    transition: 'all 0.15s',
+                    opacity: tl.expired ? 0.5 : 1,
+                  }}
+                >
+                  {tl.expired ? 'Expirado' : expiring === tl.refCode ? '...' : 'Simular 72h'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

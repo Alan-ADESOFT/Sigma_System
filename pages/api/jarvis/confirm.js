@@ -263,8 +263,13 @@ export default async function handler(req, res) {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001';
       const link = `${baseUrl}/form/${tokenRow.token}`;
 
-      // Monta mensagem e envia via WhatsApp
-      const message = `Olá! Segue o link do formulário de briefing da SIGMA Marketing:\n\n${link}\n\nPreencha com atenção — suas respostas serão usadas para gerar toda a estratégia de marketing.\n\nO link expira em 7 dias.`;
+      // Monta mensagem via template configurável (settings)
+      const { getSetting } = require('../../../models/settings.model');
+      const DEFAULT_FORM_MSG = `Olá! Segue o link do formulário de briefing da SIGMA Marketing:\n\n{LINK}\n\nPreencha com atenção — suas respostas serão usadas para gerar toda a estratégia de marketing.\n\nO link expira em 7 dias.`;
+      const template = (await getSetting(tenantId, 'jarvis_msg_form_send')) || DEFAULT_FORM_MSG;
+      const message = template
+        .replace(/\{LINK\}/gi, link)
+        .replace(/\{CLIENTE\}/gi, data.client_name || 'cliente');
 
       try {
         const { sendText } = require('../../../infra/api/zapi');
