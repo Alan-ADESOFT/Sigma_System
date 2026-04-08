@@ -27,9 +27,20 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const { title, description, client_id, assigned_to, priority, due_date, status, category_id, estimated_hours, subtasks, dependsOn } = req.body;
+      const { title, description, client_id, assigned_to, priority, due_date, status, category_id, estimated_hours, subtasks, subtasks_required, dependsOn } = req.body;
       if (!title) {
         return res.status(400).json({ success: false, error: 'Título obrigatório' });
+      }
+
+      // Bloqueia datas anteriores a hoje
+      if (due_date) {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (String(due_date) < todayStr) {
+          return res.status(400).json({
+            success: false,
+            error: 'A data da tarefa não pode ser anterior a hoje',
+          });
+        }
       }
 
       const task = await taskModel.createTask({
@@ -42,6 +53,8 @@ export default async function handler(req, res) {
         status: status || 'pending',
         category_id,
         estimated_hours,
+        subtasks,
+        subtasks_required,
         created_by: userId,
       }, tenantId);
 

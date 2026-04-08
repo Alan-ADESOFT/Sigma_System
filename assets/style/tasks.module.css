@@ -1,15 +1,31 @@
 /* ============================================================
-   Tasks (Kanban Board) — tasks.module.css
-   CSS Module for the Tasks / Kanban page.
-   Uses design tokens from globals.css — no hardcoded hex.
+   Tasks (Kanban por dia da semana) — tasks.module.css
+   CSS Module para a pagina de Tarefas.
+   - Coluna ATRASADAS (vermelha) fixa a esquerda
+   - 7 colunas de dia da semana (SEG-DOM)
+   - Navegacao semanal
+   - Lista agrupada por dia
    ============================================================ */
 
 /* ── Page Layout ── */
 .pageContainer {
   padding: 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
-/* ── Header ── */
+/* Wrapper que limita a largura do kanban ao container da pagina,
+   permitindo scroll horizontal apenas dentro deste wrapper */
+.kanbanScroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 12px;
+}
+
+/* ── Header Row ── */
 .headerRow {
   display: flex;
   justify-content: space-between;
@@ -19,35 +35,7 @@
   gap: 12px;
 }
 
-/* ── View Toggle ── */
-.viewToggle {
-  display: flex;
-  gap: 0;
-  border-radius: 6px;
-  overflow: hidden;
-  border: 1px solid var(--border-default);
-}
-
-.viewBtn {
-  padding: 6px 16px;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  border: none;
-  cursor: pointer;
-  background: transparent;
-  color: var(--text-muted);
-  transition: all 0.2s;
-}
-
-.viewBtnActive {
-  background: rgba(255, 0, 51, 0.1);
-  color: var(--brand-500);
-  border-color: var(--brand-500);
-}
-
-/* ── Filters ── */
+/* ── Filtros ── */
 .filtersRow {
   display: flex;
   gap: 12px;
@@ -67,108 +55,216 @@
   min-width: 150px;
 }
 
-/* ── KPI Grid ── */
-.kpiGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+/* ── Week Navigation ── */
+.weekNav {
+  display: flex;
+  align-items: center;
   gap: 12px;
-  margin-bottom: 24px;
-}
-
-.kpiCard {
-  background: linear-gradient(145deg, rgba(17, 17, 17, 0.95), rgba(10, 10, 10, 0.98));
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  background: rgba(10, 10, 10, 0.5);
   border: 1px solid var(--border-default);
   border-radius: 8px;
-  padding: 16px;
-  position: relative;
-  overflow: hidden;
 }
 
-.kpiCard::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 0, 51, 0.2), transparent);
+.weekNavBtn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
 }
 
-.kpiLabel {
+.weekNavBtn:hover {
+  border-color: rgba(255, 0, 51, 0.4);
+  color: var(--brand-500);
+}
+
+.weekNavLabel {
   font-family: var(--font-mono);
-  font-size: 0.6rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-}
-
-.kpiValue {
-  font-family: var(--font-mono);
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 0.72rem;
   color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  flex: 1;
+  text-align: center;
+}
+
+.weekNavToday {
+  padding: 5px 14px;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.weekNavToday:hover {
+  border-color: rgba(255, 0, 51, 0.4);
+  color: var(--brand-500);
 }
 
 /* ── Kanban Board ── */
 .kanbanContainer {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  min-height: 400px;
+  grid-template-columns: 280px repeat(7, 260px);
+  gap: 14px;
+  min-height: 480px;
+  width: max-content;
 }
 
 .kanbanColumn {
   background: rgba(10, 10, 10, 0.5);
   border: 1px solid var(--border-default);
   border-radius: 12px;
-  padding: 16px;
-  min-height: 300px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  min-height: 460px;
+}
+
+/* coluna ATRASADAS (sempre primeira, fundo vermelho sutil) */
+.kanbanColumnOverdue {
+  background: linear-gradient(180deg, rgba(255, 0, 51, 0.06), rgba(255, 0, 51, 0.02));
+  border-color: rgba(255, 0, 51, 0.3);
+}
+
+.kanbanColumnOverdue::before {
+  content: '';
+  display: block;
+  height: 2px;
+  margin: -14px -14px 8px;
+  background: linear-gradient(90deg, var(--brand-500), transparent);
+  border-radius: 12px 12px 0 0;
+}
+
+/* coluna do dia HOJE */
+.kanbanColumnToday {
+  border-top: 2px solid var(--brand-500);
 }
 
 .columnHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
+  gap: 8px;
 }
 
-.columnTitle {
+.columnHeaderInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.columnDayLabel {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.columnDayNumber {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.columnDayLabelToday,
+.columnDayNumberToday {
+  color: var(--brand-500);
+}
+
+.columnTitleOverdue {
   font-family: var(--font-mono);
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--brand-500);
 }
 
 .columnCount {
   font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   color: var(--text-muted);
   background: rgba(255, 255, 255, 0.04);
   padding: 2px 8px;
   border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.columnCountOverdue {
+  background: rgba(255, 0, 51, 0.12);
+  color: var(--brand-500);
+}
+
+.columnTodayBadge {
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  background: var(--brand-500);
+  color: #fff;
+  border-radius: 4px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(255, 0, 51, 0.4);
+}
+
+.columnEmpty {
+  text-align: center;
+  padding: 20px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.55;
 }
 
 /* ── Task Card ── */
 .taskCard {
   background: linear-gradient(145deg, rgba(17, 17, 17, 0.95), rgba(10, 10, 10, 0.98));
   border: 1px solid var(--border-default);
-  border-radius: 8px;
-  padding: 14px;
+  border-radius: 10px;
+  padding: 14px 14px 12px;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+  min-height: 130px;
+  display: flex;
+  flex-direction: column;
 }
 
 .taskCard:hover {
-  border-color: rgba(255, 0, 51, 0.18);
-  box-shadow: 0 0 20px rgba(255, 0, 51, 0.06);
+  border-color: rgba(255, 0, 51, 0.22);
+  box-shadow: 0 0 22px rgba(255, 0, 51, 0.1);
   transform: translateY(-2px);
+}
+
+.taskCard:hover .cardActions {
+  opacity: 1;
 }
 
 .taskCard::before {
@@ -178,7 +274,7 @@
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 0, 51, 0.15), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 0, 51, 0.2), transparent);
 }
 
 .taskCardBlocked {
@@ -192,16 +288,34 @@
   box-shadow: none;
 }
 
+.taskCardOverdue {
+  border-color: rgba(255, 0, 51, 0.25);
+}
+
+.taskCardDone {
+  opacity: 0.65;
+}
+
+.taskCardDone .taskTitle {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
 .taskTitle {
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 6px;
-  line-height: 1.4;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  padding-right: 32px;
 }
 
 .taskDescription {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -212,96 +326,93 @@
 .taskMeta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .taskDate {
   font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   color: var(--text-muted);
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.taskDateOverdue {
+  color: var(--error);
 }
 
 /* ── Badges ── */
 .taskBadge {
   display: inline-flex;
   align-items: center;
+  gap: 3px;
   padding: 2px 6px;
   border-radius: 4px;
   font-family: var(--font-mono);
-  font-size: 0.55rem;
+  font-size: 0.52rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
-.badgePending {
-  background: rgba(115, 115, 115, 0.1);
-  border: 1px solid rgba(115, 115, 115, 0.25);
-  color: #737373;
-}
-
-.badgeInProgress {
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  color: var(--info);
-}
-
-.badgeDone {
-  background: rgba(34, 197, 94, 0.1);
-  border: 1px solid rgba(34, 197, 94, 0.25);
-  color: var(--success);
-}
-
-.badgeOverdue {
-  background: rgba(255, 0, 51, 0.1);
-  border: 1px solid rgba(255, 0, 51, 0.25);
-  color: var(--error);
-  animation: glowPulse 3s infinite;
-}
-
-/* ── Priority ── */
+/* Priority */
 .priorityUrgente {
   color: var(--error);
+  background: rgba(255, 0, 51, 0.1);
+  border: 1px solid rgba(255, 0, 51, 0.25);
   animation: pulse 2s infinite;
 }
 
 .priorityAlta {
   color: var(--warning);
+  background: rgba(249, 115, 22, 0.1);
+  border: 1px solid rgba(249, 115, 22, 0.25);
 }
 
 .priorityNormal {
   color: var(--info);
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.25);
 }
 
 .priorityBaixa {
   color: #737373;
+  background: rgba(115, 115, 115, 0.1);
+  border: 1px solid rgba(115, 115, 115, 0.25);
 }
 
-/* ── Category Badge ── */
+/* Category Badge */
 .categoryBadge {
   display: inline-flex;
   padding: 2px 6px;
   border-radius: 4px;
   font-family: var(--font-mono);
-  font-size: 0.55rem;
+  font-size: 0.52rem;
   font-weight: 600;
   letter-spacing: 0.04em;
 }
 
-/* ── Misc Card Elements ── */
-.lockIcon {
+/* ── Card extras ── */
+.taskClient {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
   color: var(--text-muted);
-  display: flex;
+  margin-top: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lockIcon {
+  color: var(--warning);
+  display: inline-flex;
   align-items: center;
-  font-size: 12px;
 }
 
 .commentCount {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 3px;
   font-family: var(--font-mono);
@@ -325,111 +436,104 @@
   flex-shrink: 0;
 }
 
-/* ── Add Task Button ── */
-.addTaskBtn {
-  width: 100%;
-  padding: 8px;
-  background: transparent;
-  border: 1px dashed var(--border-default);
-  border-radius: 6px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.addTaskBtn:hover {
-  border-color: rgba(255, 0, 51, 0.3);
-  color: var(--brand-500);
-}
-
-/* ── Lista View (table) ── */
-.listContainer {
-  overflow-x: auto;
-}
-
-.listTable {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.listTable thead {
-  background: rgba(10, 10, 10, 0.8);
-}
-
-.listTable th {
-  padding: 10px 14px;
-  text-align: left;
-  font-family: var(--font-mono);
-  font-size: 0.57rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border-default);
-  white-space: nowrap;
-}
-
-.listTable td {
-  padding: 10px 14px;
-  font-size: 13px;
-  color: var(--text-primary);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.025);
-}
-
-.listTable tr {
-  cursor: pointer;
-  transition: background 0.12s;
-}
-
-.listTable tbody tr:hover {
-  background: rgba(255, 255, 255, 0.015);
-}
-
-.listTable tr:last-child td {
-  border-bottom: none;
-}
-
-/* ── Semana View ── */
-.weekContainer {
+.cardFooter {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 10px;
+  gap: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
 }
 
-.weekDaySection {
-  position: relative;
-  overflow: hidden;
+/* Acoes do card (delete + complete) */
+.cardActions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
 }
 
-.weekDayHeader {
+.actionBtn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 0;
+}
+
+.actionBtn:hover {
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.actionBtnDone:hover {
+  color: var(--success);
+  border-color: rgba(34, 197, 94, 0.4);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.actionBtnDelete:hover {
+  color: var(--error);
+  border-color: rgba(255, 0, 51, 0.4);
+  background: rgba(255, 0, 51, 0.08);
+}
+
+/* ── Lista View ── */
+.listSection {
+  margin-bottom: 20px;
+}
+
+.listSectionHeader {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border-default);
+  background: rgba(10, 10, 10, 0.5);
+  border: 1px solid var(--border-default);
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  transition: background 0.15s;
 }
 
-.weekDayName {
+.listSectionHeader:hover {
+  background: rgba(255, 0, 51, 0.04);
+}
+
+.listSectionHeaderOverdue {
+  background: linear-gradient(90deg, rgba(255, 0, 51, 0.08), rgba(255, 0, 51, 0.02));
+  border-color: rgba(255, 0, 51, 0.3);
+}
+
+.listSectionLabel {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 700;
+  font-size: 0.7rem;
   color: var(--text-primary);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  min-width: 80px;
+  font-weight: 700;
 }
 
-.weekDayDate {
+.listSectionLabelOverdue { color: var(--brand-500); }
+
+.listSectionDate {
   font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   color: var(--text-muted);
 }
 
-.weekDayCount {
+.listSectionCount {
+  margin-left: auto;
   font-family: var(--font-mono);
   font-size: 0.55rem;
   color: var(--text-muted);
@@ -438,76 +542,112 @@
   border-radius: 10px;
 }
 
-.weekDayTasks {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 16px;
+.listSectionBody {
+  border: 1px solid var(--border-default);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  background: rgba(5, 5, 5, 0.4);
 }
 
-.weekTaskCard {
+.listRow {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 10px 14px;
-  background: rgba(10, 10, 10, 0.5);
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.12s;
 }
 
-.weekTaskCard:hover {
-  border-color: rgba(255, 0, 51, 0.18);
+.listRow:last-child { border-bottom: none; }
+
+.listRow:hover { background: rgba(255, 0, 51, 0.03); }
+
+.listRowBlocked {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
-.weekTaskInfo {
+.listRowTitle {
   flex: 1;
+  font-size: 13px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 
-.weekTaskTitle {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-  margin-bottom: 2px;
+.listRowTitleText {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.weekTaskSub {
-  font-size: 12px;
-  color: var(--text-muted);
+.listRowMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
-.weekDayEmpty {
-  padding: 16px;
-  text-align: center;
+.listRowClient {
   font-family: var(--font-mono);
   font-size: 0.6rem;
   color: var(--text-muted);
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Add Task Button ── */
+.addTaskBtn {
+  width: 100%;
+  padding: 7px;
+  background: transparent;
+  border: 1px dashed var(--border-default);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  cursor: pointer;
+  transition: all 0.2s;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
+  margin-top: auto;
+}
+
+.addTaskBtn:hover {
+  border-color: rgba(255, 0, 51, 0.3);
+  color: var(--brand-500);
+}
+
+/* ── Empty state ── */
+.emptyBlock {
+  padding: 60px 20px;
+  text-align: center;
+  background: rgba(10, 10, 10, 0.4);
+  border: 1px dashed var(--border-default);
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
 }
 
 /* ── Keyframes ── */
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50% { opacity: 0.55; }
 }
 
 @keyframes glowPulse {
   0%, 100% { box-shadow: 0 0 0 rgba(255, 0, 51, 0); }
-  50% { box-shadow: 0 0 8px rgba(255, 0, 51, 0.15); }
+  50% { box-shadow: 0 0 12px rgba(255, 0, 51, 0.18); }
 }
 
-/* ── Responsive ── */
-@media (max-width: 1200px) {
-  .kanbanContainer {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
+/* ── Responsive ──
+   Kanban tem largura fixa e rola horizontalmente dentro do .kanbanScroll
+   para nao impactar a largura da pagina. */
 
-@media (max-width: 768px) {
-  .kanbanContainer {
-    grid-template-columns: 1fr;
-  }
-}

@@ -19,15 +19,49 @@ export default async function handler(req, res) {
     if (req.method === 'PUT') {
       const data = req.body;
 
+      // Bloqueia datas anteriores a hoje
+      if (data.due_date) {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (String(data.due_date) < todayStr) {
+          return res.status(400).json({
+            success: false,
+            error: 'A data da tarefa não pode ser anterior a hoje',
+          });
+        }
+      }
+
       // Check dependencies before marking done
       if (data.status === 'done') {
         const check = await taskModel.canCompleteTask(id, tenantId);
         if (!check.canComplete) {
           return res.status(400).json({
             success: false,
-            error: 'Task possui dependências pendentes',
+            error: 'Tarefa possui dependências pendentes',
             pendingDeps: check.pendingDeps,
           });
+        }
+
+        // Verifica subtarefas obrigatorias
+        const { queryOne } = require('../../../infra/db');
+        const current = await queryOne(
+          `SELECT subtasks, subtasks_required FROM client_tasks WHERE id = $1 AND tenant_id = $2`,
+          [id, tenantId]
+        );
+        if (current && current.subtasks_required) {
+          const subs = Array.isArray(current.subtasks)
+            ? current.subtasks
+            : (current.subtasks ? JSON.parse(current.subtasks) : []);
+          const allDone = subs.length > 0 && subs.every((s) => s.done);
+          if (!allDone) {
+            const total = subs.length;
+            const done = subs.filter((s) => s.done).length;
+            return res.status(400).json({
+              success: false,
+              error: total === 0
+                ? 'Tarefa exige subtarefas — adicione e conclua todas antes de finalizar.'
+                : `Conclua todas as subtarefas antes de finalizar (${done}/${total}).`,
+            });
+          }
         }
       }
 

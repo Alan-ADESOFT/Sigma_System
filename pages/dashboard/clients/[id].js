@@ -17,6 +17,8 @@ import rs from '../../../assets/style/clientRespostas.module.css';
 
 const StageModal = dynamic(() => import('../../../components/StageModal'), { loading: () => null, ssr: false });
 const PipelineModal = dynamic(() => import('../../../components/PipelineModal'), { loading: () => null, ssr: false });
+const CreateTaskModal = dynamic(() => import('../../../components/CreateTaskModal'), { loading: () => null, ssr: false });
+const TaskDetailModal = dynamic(() => import('../../../components/TaskDetailModal'), { loading: () => null, ssr: false });
 
 /* ═══════════════════════════════════════════════════════════
    CONSTANTS
@@ -262,6 +264,12 @@ function TabTarefas({ clientId }) {
   const { notify } = useNotification();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [me, setMe] = useState(null);
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -272,7 +280,21 @@ function TabTarefas({ clientId }) {
     finally { setLoading(false); }
   }, [clientId]);
 
-  useEffect(() => { fetchTasks(); }, [fetchTasks]);
+  useEffect(() => {
+    fetchTasks();
+    // carrega dados auxiliares para o modal de criacao
+    Promise.all([
+      fetch('/api/task-categories').then((r) => r.json()).catch(() => null),
+      fetch('/api/tasks/users-search').then((r) => r.json()).catch(() => null),
+      fetch('/api/clients').then((r) => r.json()).catch(() => null),
+      fetch('/api/auth/me').then((r) => r.json()).catch(() => null),
+    ]).then(([cats, usrs, cls, meRes]) => {
+      if (cats?.success) setCategories(cats.categories || []);
+      if (usrs?.success) setUsers(usrs.users || []);
+      if (cls?.success) setClients(cls.clients || []);
+      if (meRes?.user) setMe(meRes.user);
+    });
+  }, [fetchTasks]);
 
   const total = tasks.length;
   const done = tasks.filter(t => t.status === 'done').length;
@@ -307,21 +329,29 @@ function TabTarefas({ clientId }) {
       {/* Lista de tasks */}
       {tasks.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}>
-          Nenhuma task para este cliente
+          Nenhuma tarefa cadastrada para este cliente
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {tasks.map(t => {
             const sc = STATUS_COLORS[t.status] || STATUS_COLORS.pending;
             return (
-              <div key={t.id} style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '10px 14px',
-                background: 'rgba(10,10,10,0.5)',
-                border: '1px solid var(--border-default)',
-                borderRadius: 8,
-                borderLeft: `3px solid ${sc.color}`,
-              }}>
+              <div
+                key={t.id}
+                onClick={() => setSelectedTaskId(t.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '10px 14px',
+                  background: 'rgba(10,10,10,0.5)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 8,
+                  borderLeft: `3px solid ${sc.color}`,
+                  cursor: 'pointer',
+                  transition: 'border-color 0.15s',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,0,51,0.3)'; e.currentTarget.style.borderLeftColor = sc.color; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.borderLeftColor = sc.color; }}
+              >
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 2 }}>{t.title}</div>
                   {t.due_date && (
@@ -354,9 +384,9 @@ function TabTarefas({ clientId }) {
         </div>
       )}
 
-      {/* Nova task */}
+      {/* Nova tarefa */}
       <button
-        onClick={() => window.location.href = `/dashboard/tasks?clientId=${clientId}`}
+        onClick={() => setShowCreate(true)}
         style={{
           marginTop: 16, width: '100%', padding: 10,
           background: 'transparent', border: '1px dashed var(--border-default)',
@@ -368,8 +398,33 @@ function TabTarefas({ clientId }) {
         onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,0,51,0.3)'; e.currentTarget.style.color = '#ff0033'; }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
       >
-        + Nova Task
+        + Nova Tarefa
       </button>
+
+      {/* Modal de criacao com cliente pre-selecionado */}
+      {showCreate && (
+        <CreateTaskModal
+          onClose={() => setShowCreate(false)}
+          onCreated={() => fetchTasks()}
+          clients={clients}
+          categories={categories}
+          users={users}
+          currentUserId={me?.id}
+          prefilledClientId={clientId}
+        />
+      )}
+
+      {/* Modal de detalhes */}
+      {selectedTaskId && (
+        <TaskDetailModal
+          taskId={selectedTaskId}
+          onClose={() => setSelectedTaskId(null)}
+          onRefresh={() => fetchTasks()}
+          tenantCategories={categories}
+          tenantClients={clients}
+          tenantUsers={users}
+        />
+      )}
     </div>
   );
 }

@@ -70,29 +70,33 @@ async function applyTemplate(templateId, clientId, tenantId, createdBy) {
   const created = [];
 
   for (const task of tasks) {
+    const subsJson = JSON.stringify(Array.isArray(task.subtasks) ? task.subtasks : []);
     const row = await queryOne(
       `INSERT INTO client_tasks
-         (tenant_id, client_id, title, description, priority, due_date, assigned_to, created_by, status)
+         (tenant_id, client_id, title, description, priority, due_date, assigned_to, created_by, status, subtasks)
        VALUES
-         ($1, $2, $3, $4, $5, CURRENT_DATE + $6::integer, $7, $8, 'pending')
+         ($1, $2, $3, $4, $5, CURRENT_DATE + $6::integer, $7, $8, 'pending', $9::jsonb)
        RETURNING *`,
       [
         tenantId,
         clientId,
         task.title,
         task.description || null,
-        task.priority || 'medium',
+        task.priority || 'normal',
         task.due_days_offset || 0,
         task.assigned_to || null,
         createdBy,
+        subsJson,
       ]
     );
 
-    await query(
-      `INSERT INTO task_activity_log (tenant_id, task_id, user_id, action)
-       VALUES ($1, $2, $3, 'created')`,
-      [tenantId, row.id, createdBy]
-    );
+    if (createdBy) {
+      await query(
+        `INSERT INTO task_activity_log (task_id, tenant_id, actor_id, action)
+         VALUES ($1, $2, $3, 'created')`,
+        [row.id, tenantId, createdBy]
+      );
+    }
 
     created.push(row);
   }

@@ -8,10 +8,14 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import DashboardLayout from '../../../components/DashboardLayout';
 import styles from '../../../assets/style/meetings.module.css';
 import { useNotification } from '../../../context/NotificationContext';
 import { useAuth } from '../../../hooks/useAuth';
+
+// react-datepicker (carregado client-side)
+const DatePicker = dynamic(() => import('react-datepicker'), { ssr: false });
 
 /* ── Helpers de data ── */
 
@@ -192,17 +196,14 @@ export default function MeetingsPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // Form fields
+  // Form fields — datetime e um Date object combinando data + horario
   const [form, setForm] = useState({
     title: '',
-    date: '',
-    time_start: '',
-    time_end: '',
+    datetime: null,         // Date object (combina meeting_date + start_time)
     client_id: '',
     participants: [],
-    call_link: '',
-    notes: '',
-    status: 'scheduled',
+    meet_link: '',
+    obs: '',
   });
 
   // Lookups
@@ -324,16 +325,17 @@ export default function MeetingsPage() {
   /* ── Open modal ── */
   function openNewMeeting() {
     setEditingMeeting(null);
+    // Sugestao: proxima hora cheia
+    const suggested = new Date();
+    suggested.setMinutes(0, 0, 0);
+    suggested.setHours(suggested.getHours() + 1);
     setForm({
       title: '',
-      date: toYMD(today),
-      time_start: '',
-      time_end: '',
+      datetime: suggested,
       client_id: '',
       participants: [],
-      call_link: '',
-      notes: '',
-      status: 'scheduled',
+      meet_link: '',
+      obs: '',
     });
     setMinutesFile(null);
     setModalOpen(true);
@@ -343,18 +345,20 @@ export default function MeetingsPage() {
 
   function openEditMeeting(meeting) {
     setEditingMeeting(meeting);
-    const dtStart = meeting.date_start ? new Date(meeting.date_start) : null;
-    const dtEnd = meeting.date_end ? new Date(meeting.date_end) : null;
+    // Combinar meeting_date (YYYY-MM-DD) + start_time (HH:MM:SS) em um Date
+    let dt = null;
+    if (meeting.meeting_date && meeting.start_time) {
+      const dateStr = String(meeting.meeting_date).slice(0, 10);
+      const timeStr = String(meeting.start_time).slice(0, 5);
+      dt = new Date(`${dateStr}T${timeStr}:00`);
+    }
     setForm({
       title: meeting.title || '',
-      date: dtStart ? toYMD(dtStart) : '',
-      time_start: dtStart ? fmtTime(dtStart) : '',
-      time_end: dtEnd ? fmtTime(dtEnd) : '',
+      datetime: dt,
       client_id: meeting.client_id || '',
       participants: Array.isArray(meeting.participants) ? meeting.participants.map(p => p.id || p) : [],
-      call_link: meeting.call_link || '',
-      notes: meeting.notes || '',
-      status: meeting.status || 'scheduled',
+      meet_link: meeting.meet_link || '',
+      obs: meeting.obs || '',
     });
     setMinutesFile(null);
     setModalOpen(true);
@@ -370,24 +374,32 @@ export default function MeetingsPage() {
   /* ── Save meeting ── */
   async function handleSave(e) {
     e.preventDefault();
-    if (!form.title.trim()) { notify('Titulo obrigatorio', 'warning'); return; }
-    if (!form.date) { notify('Data obrigatoria', 'warning'); return; }
-    if (!form.time_start) { notify('Horario de inicio obrigatorio', 'warning'); return; }
+    if (!form.title.trim()) { notify('Título obrigatório', 'warning'); return; }
+    if (!form.datetime) { notify('Data e horário obrigatórios', 'warning'); return; }
+
+    // Bloqueia data/horário no passado (apenas na criação)
+    if (!editingMeeting) {
+      const now = new Date();
+      if (form.datetime.getTime() < now.getTime()) {
+        notify('A data e horário não podem estar no passado', 'error');
+        return;
+      }
+    }
 
     setSaving(true);
     try {
-      const dateStart = `${form.date}T${form.time_start}:00`;
-      const dateEnd = form.time_end ? `${form.date}T${form.time_end}:00` : null;
+      const dt = form.datetime;
+      const meeting_date = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+      const start_time = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
 
       const body = {
         title: form.title.trim(),
-        date_start: dateStart,
-        date_end: dateEnd,
+        meeting_date,
+        start_time,
         client_id: form.client_id || null,
         participants: form.participants,
-        call_link: form.call_link || null,
-        notes: form.notes || null,
-        status: form.status,
+        meet_link: form.meet_link || null,
+        obs: form.obs || null,
       };
 
       const isEdit = !!editingMeeting;
@@ -400,12 +412,12 @@ export default function MeetingsPage() {
         body: JSON.stringify(body),
       });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Erro ao salvar reuniao');
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.success === false) {
+        throw new Error(json.error || 'Erro ao salvar reunião');
       }
 
-      const savedMeeting = await res.json();
+      const savedMeeting = json.meeting || json;
 
       // Upload ata se selecionada
       if (minutesFile && (isEdit || savedMeeting?.id)) {
@@ -413,7 +425,7 @@ export default function MeetingsPage() {
         await uploadMinutes(meetingId);
       }
 
-      notify(isEdit ? 'Reuniao atualizada' : 'Reuniao criada', 'success');
+      notify(isEdit ? 'Reunião atualizada' : 'Reunião criada', 'success');
       closeModal();
       fetchMeetings();
     } catch (err) {
@@ -483,9 +495,18 @@ export default function MeetingsPage() {
   function getMeetingsForDay(date) {
     const dateStr = toYMD(date);
     return meetings.filter(m => {
-      const mDate = m.date_start ? m.date_start.split('T')[0] : '';
+      const mDate = m.meeting_date ? String(m.meeting_date).slice(0, 10) : '';
       return mDate === dateStr;
     });
+  }
+
+  /* ── Combina meeting_date + start_time em Date ── */
+  function meetingDateTime(m) {
+    if (!m.meeting_date || !m.start_time) return null;
+    const dateStr = String(m.meeting_date).slice(0, 10);
+    const timeStr = String(m.start_time).slice(0, 5);
+    const dt = new Date(`${dateStr}T${timeStr}:00`);
+    return isNaN(dt) ? null : dt;
   }
 
   /* ── Status badge ── */
@@ -620,7 +641,7 @@ export default function MeetingsPage() {
                       {day.getDate()}
                     </span>
                     {dayMeetings.map(m => {
-                      const dt = m.date_start ? new Date(m.date_start) : null;
+                      const dt = meetingDateTime(m);
                       return (
                         <span
                           key={m.id}
@@ -661,8 +682,7 @@ export default function MeetingsPage() {
                       <div className={styles.emptyDay}>Sem reunioes</div>
                     )}
                     {dayMeetings.map(m => {
-                      const dtStart = m.date_start ? new Date(m.date_start) : null;
-                      const dtEnd = m.date_end ? new Date(m.date_end) : null;
+                      const dtStart = meetingDateTime(m);
                       const cName = m.client_name || clientName(m.client_id);
                       const participants = Array.isArray(m.participants) ? m.participants : [];
 
@@ -674,7 +694,6 @@ export default function MeetingsPage() {
                         >
                           <div className={styles.meetingTime}>
                             {dtStart ? fmtTime(dtStart) : '--:--'}
-                            {dtEnd ? ` - ${fmtTime(dtEnd)}` : ''}
                           </div>
                           <div className={styles.meetingInfo}>
                             <div className={styles.meetingTitle}>{m.title}</div>
@@ -714,21 +733,31 @@ export default function MeetingsPage() {
             >
               {/* Modal header */}
               <div className={styles.modalHeader}>
-                <div>
-                  <h2 className={styles.modalTitle}>
-                    // {editingMeeting ? 'Editar Reuniao' : 'Nova Reuniao'}
-                  </h2>
-                  <div className={styles.modalSubtitle}>
-                    {editingMeeting
-                      ? `ID ${editingMeeting.id?.slice(0, 8) || '---'}`
-                      : 'Preencha os dados abaixo'
-                    }
+                <div className={styles.headerTitleBox}>
+                  <div className={styles.headerBadge}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
                   </div>
-                  {editingMeeting && (
-                    <div style={{ marginTop: 8 }}>
-                      <StatusBadge status={editingMeeting.status} />
+                  <div>
+                    <h2 className={styles.modalTitle}>
+                      {editingMeeting ? 'Editar Reunião' : 'Nova Reunião'}
+                    </h2>
+                    <div className={styles.modalSubtitle}>
+                      {editingMeeting
+                        ? 'Atualize os dados da reunião selecionada.'
+                        : 'Preencha as informações para agendar uma reunião.'
+                      }
                     </div>
-                  )}
+                    {editingMeeting && (
+                      <div style={{ marginTop: 8 }}>
+                        <StatusBadge status={editingMeeting.status} />
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <button className={styles.modalCloseBtn} onClick={closeModal}>
                   <IconClose />
@@ -740,64 +769,49 @@ export default function MeetingsPage() {
 
                   {/* Titulo */}
                   <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
-                    <label className={styles.formLabel}>Titulo *</label>
+                    <label className={styles.formLabel}>
+                      Título <span className={styles.required}>*</span>
+                    </label>
                     <input
                       className="sigma-input"
                       type="text"
                       value={form.title}
                       onChange={e => updateField('title', e.target.value)}
-                      placeholder="Ex: Reuniao de briefing"
+                      placeholder="Ex: Reunião de briefing"
                       required
                     />
                   </div>
 
-                  {/* Data */}
-                  <div className={styles.formGroup}>
-                    <label className={styles.formLabel}>Data *</label>
-                    <input
-                      className="sigma-input"
-                      type="date"
-                      value={form.date}
-                      onChange={e => updateField('date', e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  {/* Status */}
-                  <div className={styles.formGroup}>
-                    <label className={styles.formLabel}>Status</label>
-                    <select
-                      className="sigma-input"
-                      value={form.status}
-                      onChange={e => updateField('status', e.target.value)}
-                    >
-                      <option value="scheduled">Agendada</option>
-                      <option value="done">Realizada</option>
-                      <option value="cancelled">Cancelada</option>
-                    </select>
-                  </div>
-
-                  {/* Horario Inicio */}
-                  <div className={styles.formGroup}>
-                    <label className={styles.formLabel}>Horario Inicio *</label>
-                    <input
-                      className="sigma-input"
-                      type="time"
-                      value={form.time_start}
-                      onChange={e => updateField('time_start', e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  {/* Horario Fim */}
-                  <div className={styles.formGroup}>
-                    <label className={styles.formLabel}>Horario Fim</label>
-                    <input
-                      className="sigma-input"
-                      type="time"
-                      value={form.time_end}
-                      onChange={e => updateField('time_end', e.target.value)}
-                    />
+                  {/* Data e Horario combinados (react-datepicker) */}
+                  <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
+                    <label className={styles.formLabel}>
+                      Data e Horário <span className={styles.required}>*</span>
+                    </label>
+                    <div className={styles.datePickerWrap}>
+                      <DatePicker
+                        selected={form.datetime}
+                        onChange={(d) => updateField('datetime', d)}
+                        showTimeSelect
+                        timeIntervals={15}
+                        timeCaption="Horário"
+                        dateFormat="dd/MM/yyyy 'às' HH:mm"
+                        minDate={new Date()}
+                        minTime={
+                          form.datetime &&
+                          form.datetime.toDateString() === new Date().toDateString()
+                            ? new Date()
+                            : new Date(new Date().setHours(0, 0, 0, 0))
+                        }
+                        maxTime={new Date(new Date().setHours(23, 59, 59, 999))}
+                        placeholderText="Selecione data e horário"
+                        className={styles.datePickerInput}
+                        popperPlacement="bottom-start"
+                        required
+                      />
+                    </div>
+                    <span className={styles.formHint}>
+                      Datas e horários no passado não são permitidos
+                    </span>
                   </div>
 
                   {/* Cliente */}
@@ -808,10 +822,10 @@ export default function MeetingsPage() {
                       value={form.client_id}
                       onChange={e => updateField('client_id', e.target.value)}
                     >
-                      <option value="">-- Sem cliente --</option>
+                      <option value="">-- Sem cliente (interna) --</option>
                       {clients.map(c => (
                         <option key={c.id} value={c.id}>
-                          {c.name || c.company_name || c.brand_name || 'Cliente'}
+                          {c.company_name || c.name || c.brand_name || 'Cliente'}
                         </option>
                       ))}
                     </select>
@@ -822,30 +836,45 @@ export default function MeetingsPage() {
 
                   {/* Participantes */}
                   <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
-                    <label className={styles.formLabel}>Participantes</label>
+                    <label className={styles.formLabel}>
+                      Participantes
+                      {form.participants.length > 0 && (
+                        <span style={{ marginLeft: 8, color: 'var(--brand-500)', fontWeight: 700 }}>
+                          {form.participants.length} selecionado{form.participants.length !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </label>
                     <div className={styles.participantsBox}>
                       {loadingUsers && (
-                        <span className={styles.formHint}>Carregando...</span>
+                        <span className={styles.participantsEmpty}>Carregando usuários...</span>
                       )}
                       {!loadingUsers && users.length === 0 && (
-                        <span className={styles.formHint}>Nenhum usuario encontrado</span>
+                        <span className={styles.participantsEmpty}>Nenhum usuário encontrado</span>
                       )}
                       {users.map(u => {
                         const uid = u.id || u.user_id;
-                        const checked = form.participants.includes(uid);
+                        const active = form.participants.includes(uid);
                         return (
-                          <label
+                          <button
                             key={uid}
-                            className={`${styles.participantLabel} ${checked ? styles.participantLabelActive : ''}`}
+                            type="button"
+                            className={`${styles.participantPick} ${active ? styles.participantPickActive : ''}`}
+                            onClick={() => toggleParticipant(uid)}
                           >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleParticipant(uid)}
-                              className={styles.participantCheckbox}
-                            />
-                            {u.name || u.email || uid}
-                          </label>
+                            <span className={styles.participantPickAvatar}>
+                              {getInitials(u.name || u.email || uid)}
+                            </span>
+                            <span className={styles.participantPickName}>
+                              {u.name || u.email || uid}
+                            </span>
+                            {active && (
+                              <span className={styles.participantPickCheck}>
+                                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              </span>
+                            )}
+                          </button>
                         );
                       })}
                     </div>
@@ -857,20 +886,20 @@ export default function MeetingsPage() {
                     <input
                       className="sigma-input"
                       type="url"
-                      value={form.call_link}
-                      onChange={e => updateField('call_link', e.target.value)}
+                      value={form.meet_link}
+                      onChange={e => updateField('meet_link', e.target.value)}
                       placeholder="https://meet.google.com/..."
                     />
                   </div>
 
                   {/* Observacoes */}
                   <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
-                    <label className={styles.formLabel}>Observacoes</label>
+                    <label className={styles.formLabel}>Observações</label>
                     <textarea
                       className="sigma-input"
-                      value={form.notes}
-                      onChange={e => updateField('notes', e.target.value)}
-                      placeholder="Notas sobre a reuniao..."
+                      value={form.obs}
+                      onChange={e => updateField('obs', e.target.value)}
+                      placeholder="Notas sobre a reunião..."
                       rows={3}
                       style={{ resize: 'vertical', minHeight: 60 }}
                     />

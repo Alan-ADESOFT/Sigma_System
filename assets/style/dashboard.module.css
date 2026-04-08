@@ -101,6 +101,12 @@
   padding: 24px;
   min-height: 100vh;
 
+  /* min-width: 0 é essencial em flex items que contém elementos com
+     overflow horizontal (ex.: kanban com largura fixa). Sem isso, o
+     min-width: auto padrão faz o flex item crescer junto com o conteúdo
+     interno em vez de respeitar overflow-x: auto dos filhos. */
+  min-width: 0;
+
   /* Transição suave acompanhando o colapso da sidebar */
   transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }

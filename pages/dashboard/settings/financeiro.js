@@ -1,32 +1,27 @@
 /**
  * pages/dashboard/settings/financeiro.js
  * Configurações financeiras (admin only):
- *   1. Categorias de gastos
- *   2. Mensagens de cobrança
- *   3. Configuração do bot
+ *   1. Categorias de gastos (popup modal)
+ *   2. Mensagens de cobrança (tabs com preview)
+ *   3. Configuração do bot (numeros, dias, horario, cobranças)
+ *
+ * Padronizado com settings/tasks (sectionCard + modal popup pattern).
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import DashboardLayout from '../../../components/DashboardLayout';
 import { useAuth } from '../../../hooks/useAuth';
 import { useNotification } from '../../../context/NotificationContext';
 import styles from '../../../assets/style/settingsFinanceiro.module.css';
 
-/* ── Helpers ── */
-const SEL = {
-  padding: '7px 10px', background: 'rgba(10,10,10,0.8)',
-  border: '1px solid rgba(255,255,255,0.06)', borderRadius: 7,
-  color: 'var(--text-primary)', fontSize: '0.72rem',
-  fontFamily: 'var(--font-mono)', outline: 'none', cursor: 'pointer',
-};
+/* ── Constantes ── */
 
-const INP = {
-  width: '100%', padding: '8px 11px', boxSizing: 'border-box',
-  background: 'rgba(10,10,10,0.8)', border: '1px solid rgba(255,255,255,0.06)',
-  borderRadius: 7, color: 'var(--text-primary)', fontSize: '0.75rem',
-  fontFamily: 'var(--font-mono)', outline: 'none',
-};
+const COLOR_PALETTE = [
+  '#ff0033', '#f97316', '#facc15', '#22c55e',
+  '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899',
+  '#a3a3a3', '#737373',
+];
 
 const MSG_TABS = [
   { key: 'msgOneDayBefore', label: '1 dia antes' },
@@ -61,21 +56,80 @@ const DAYS = [
   { iso: 3, label: 'Qua' },
   { iso: 4, label: 'Qui' },
   { iso: 5, label: 'Sex' },
-  { iso: 6, label: 'Sab' },
+  { iso: 6, label: 'Sáb' },
   { iso: 7, label: 'Dom' },
 ];
 
 function previewMessage(template) {
-  let msg = template;
+  let msg = template || '';
   for (const [k, v] of Object.entries(PREVIEW_VARS)) {
     msg = msg.replace(new RegExp(k.replace(/[{}]/g, '\\$&'), 'g'), v);
   }
   return msg;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   PAGE
-═══════════════════════════════════════════════════════════ */
+/* ── SVG icons inline ── */
+
+function IconEdit({ size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+    </svg>
+  );
+}
+function IconTrash({ size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </svg>
+  );
+}
+function IconX({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+function IconPlus({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
+}
+function IconTag({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+      <line x1="7" y1="7" x2="7.01" y2="7" />
+    </svg>
+  );
+}
+function IconBot({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="10" rx="2" />
+      <circle cx="12" cy="5" r="2" />
+      <path d="M12 7v4" />
+      <line x1="8" y1="16" x2="8" y2="16" />
+      <line x1="16" y1="16" x2="16" y2="16" />
+    </svg>
+  );
+}
+function IconCheck({ size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════ */
+
 export default function SettingsFinanceiro() {
   const router = useRouter();
   const { user } = useAuth();
@@ -89,9 +143,9 @@ export default function SettingsFinanceiro() {
   /* ── Categories state ── */
   const [categories, setCategories] = useState([]);
   const [loadingCats, setLoadingCats] = useState(true);
-  const [showCatForm, setShowCatForm] = useState(false);
+  const [showCatModal, setShowCatModal] = useState(false);
   const [editingCat, setEditingCat] = useState(null);
-  const [catForm, setCatForm] = useState({ name: '', type: 'variable', color: '#6366F1' });
+  const [catForm, setCatForm] = useState({ name: '', type: 'variable', color: COLOR_PALETTE[0] });
   const [savingCat, setSavingCat] = useState(false);
 
   /* ── Messages state ── */
@@ -128,54 +182,61 @@ export default function SettingsFinanceiro() {
   useEffect(() => { loadCategories(); loadBotConfig(); }, []);
 
   /* ── Category CRUD ── */
-  function openNewCat() {
-    setCatForm({ name: '', type: 'variable', color: '#6366F1' });
-    setEditingCat(null);
-    setShowCatForm(true);
+  function openCatModal(cat = null) {
+    if (cat) {
+      setEditingCat(cat.id);
+      setCatForm({ name: cat.name, type: cat.type, color: cat.color });
+    } else {
+      setEditingCat(null);
+      setCatForm({ name: '', type: 'variable', color: COLOR_PALETTE[0] });
+    }
+    setShowCatModal(true);
   }
 
-  function openEditCat(cat) {
-    setCatForm({ name: cat.name, type: cat.type, color: cat.color });
-    setEditingCat(cat.id);
-    setShowCatForm(true);
-  }
-
-  async function handleSaveCat(e) {
-    e.preventDefault();
-    if (!catForm.name.trim()) { notify('Nome da categoria e obrigatorio', 'error'); return; }
+  async function handleSaveCat() {
+    if (!catForm.name.trim()) {
+      notify('Informe o nome da categoria', 'warning');
+      return;
+    }
     setSavingCat(true);
     try {
-      const payload = { ...catForm };
+      const payload = { ...catForm, name: catForm.name.trim() };
       if (editingCat) payload.id = editingCat;
       const method = editingCat ? 'PUT' : 'POST';
       const j = await fetch('/api/finance-categories', {
-        method, headers: { 'Content-Type': 'application/json' },
+        method,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       }).then(r => r.json());
       if (!j.success) throw new Error(j.error);
       notify(editingCat ? 'Categoria atualizada' : 'Categoria criada', 'success');
-      setShowCatForm(false);
+      setShowCatModal(false);
       setEditingCat(null);
       loadCategories();
     } catch (err) {
       notify(err.message || 'Erro ao salvar categoria', 'error');
-    } finally { setSavingCat(false); }
+    } finally {
+      setSavingCat(false);
+    }
   }
 
   async function handleDeleteCat(id) {
     if (!confirm('Excluir esta categoria?')) return;
     try {
       const j = await fetch('/api/finance-categories', {
-        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
       }).then(r => r.json());
       if (!j.success) throw new Error(j.error);
-      notify('Categoria excluida', 'success');
+      notify('Categoria excluída', 'success');
       loadCategories();
-    } catch (err) { notify(err.message || 'Erro ao excluir', 'error'); }
+    } catch (err) {
+      notify(err.message || 'Erro ao excluir', 'error');
+    }
   }
 
-  /* ── Insert variable at cursor ── */
+  /* ── Insert variable at cursor in textarea ── */
   function insertVariable(v) {
     const ta = textareaRef.current;
     if (!ta) return;
@@ -183,7 +244,7 @@ export default function SettingsFinanceiro() {
     const end = ta.selectionEnd;
     const current = botConfig[activeMsg] || '';
     const updated = current.slice(0, start) + v + current.slice(end);
-    setBotConfig(prev => ({ ...prev, [activeMsg]: updated }));
+    setBotConfig((prev) => ({ ...prev, [activeMsg]: updated }));
     setTimeout(() => {
       ta.focus();
       ta.setSelectionRange(start + v.length, start + v.length);
@@ -195,32 +256,42 @@ export default function SettingsFinanceiro() {
     setSavingBot(true);
     try {
       const j = await fetch('/api/finance-bot-config', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(botConfig),
       }).then(r => r.json());
       if (!j.success) throw new Error(j.error);
       setBotConfig(j.config);
-      notify('Configuracoes salvas', 'success');
-    } catch (err) { notify(err.message || 'Erro ao salvar', 'error'); }
-    finally { setSavingBot(false); }
+      notify('Configurações salvas', 'success');
+    } catch (err) {
+      notify(err.message || 'Erro ao salvar', 'error');
+    } finally {
+      setSavingBot(false);
+    }
   }
 
   function addNumber() {
     const clean = newNumber.replace(/\D/g, '');
-    if (clean.length < 10) { notify('Numero invalido. Use formato com DDD.', 'error'); return; }
-    if (botConfig.numbers.includes(clean)) { notify('Numero ja adicionado', 'error'); return; }
-    setBotConfig(prev => ({ ...prev, numbers: [...prev.numbers, clean] }));
+    if (clean.length < 10) {
+      notify('Número inválido. Use formato com DDD.', 'error');
+      return;
+    }
+    if (botConfig.numbers.includes(clean)) {
+      notify('Número já adicionado', 'warning');
+      return;
+    }
+    setBotConfig((prev) => ({ ...prev, numbers: [...prev.numbers, clean] }));
     setNewNumber('');
   }
 
   function removeNumber(num) {
-    setBotConfig(prev => ({ ...prev, numbers: prev.numbers.filter(n => n !== num) }));
+    setBotConfig((prev) => ({ ...prev, numbers: prev.numbers.filter((n) => n !== num) }));
   }
 
   function toggleDay(iso) {
-    setBotConfig(prev => {
+    setBotConfig((prev) => {
       const days = prev.activeDays.includes(iso)
-        ? prev.activeDays.filter(d => d !== iso)
+        ? prev.activeDays.filter((d) => d !== iso)
         : [...prev.activeDays, iso].sort();
       return { ...prev, activeDays: days };
     });
@@ -228,8 +299,8 @@ export default function SettingsFinanceiro() {
 
   function restoreDefault(key) {
     if (defaults[key]) {
-      setBotConfig(prev => ({ ...prev, [key]: defaults[key] }));
-      notify('Mensagem restaurada para o padrao', 'success');
+      setBotConfig((prev) => ({ ...prev, [key]: defaults[key] }));
+      notify('Mensagem restaurada para o padrão', 'info');
     }
   }
 
@@ -237,124 +308,76 @@ export default function SettingsFinanceiro() {
 
   return (
     <DashboardLayout activeTab="settings-financeiro">
-      <div className={styles.page}>
+      <div className={styles.pageContainer}>
+
         {/* Header */}
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0, marginBottom: 4 }}>
-            Config. Financeiro
-          </h1>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)', margin: 0 }}>
-            Categorias, mensagens de cobranca e configuracao do bot.
-          </p>
+        <div className={styles.headerRow}>
+          <div>
+            <h1 className="page-title">Config. Financeiro</h1>
+            <p className="page-subtitle">Categorias, mensagens de cobrança e bot WhatsApp</p>
+          </div>
         </div>
 
-        {/* ═══════════════════════════════════════════════════
-            SECAO 1: CATEGORIAS
-        ═══════════════════════════════════════════════════ */}
-        <div className={styles.section}>
+        {/* ════════════════════════════════════════════════
+            CATEGORIAS DE GASTOS
+        ════════════════════════════════════════════════ */}
+        <div className={styles.sectionCard}>
           <div className={styles.sectionHeader}>
-            <div className={styles.sectionTitle}>Categorias de Gastos</div>
-            <button onClick={openNewCat} style={{
-              padding: '6px 14px', borderRadius: 6, cursor: 'pointer',
-              border: '1px solid rgba(255,0,51,0.35)', background: 'rgba(255,0,51,0.09)',
-              color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600,
-            }}>
-              + Nova Categoria
+            <div className={styles.sectionHeaderLeft}>
+              <div className={styles.sectionTitleRow}>
+                <span className={styles.sectionDot} />
+                <span className={styles.sectionTitleText}>Categorias de gastos</span>
+                <span className={styles.sectionLine} />
+              </div>
+              <div className={styles.sectionDescription}>
+                Organize gastos por tipo (fixos ou variáveis). Cada categoria recebe uma cor de identificação.
+              </div>
+            </div>
+            <button className="sigma-btn-primary" onClick={() => openCatModal(null)}>
+              <IconPlus size={12} /> Nova Categoria
             </button>
           </div>
 
-          {/* Category form */}
-          {showCatForm && (
-            <div className={`glass-card ${styles.catForm}`}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 14 }}>
-                {editingCat ? 'Editar Categoria' : 'Nova Categoria'}
-              </div>
-              <form onSubmit={handleSaveCat}>
-                <div className={styles.catFormGrid}>
-                  <div>
-                    <div className="label">Nome</div>
-                    <input value={catForm.name} onChange={e => setCatForm(f => ({ ...f, name: e.target.value }))}
-                      placeholder="ex: Aluguel, Software..." style={INP} />
-                  </div>
-                  <div>
-                    <div className="label">Tipo</div>
-                    <select value={catForm.type} onChange={e => setCatForm(f => ({ ...f, type: e.target.value }))} style={SEL}>
-                      <option value="fixed">Fixo</option>
-                      <option value="variable">Variavel</option>
-                    </select>
-                  </div>
-                </div>
-                <div style={{ marginBottom: 14 }}>
-                  <div className="label">Cor</div>
-                  <div className={styles.colorPickerWrap}>
-                    <div className={styles.colorSwatch} style={{ background: catForm.color }}>
-                      <input type="color" value={catForm.color} onChange={e => setCatForm(f => ({ ...f, color: e.target.value }))} />
-                    </div>
-                    <span className={styles.colorHex}>{catForm.color}</span>
-                  </div>
-                </div>
-                {/* Preview */}
-                <div className={styles.catFormPreview}>
-                  <span className={styles.catDot} style={{ background: catForm.color }} />
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-primary)', fontWeight: 600 }}>
-                    {catForm.name || 'Nome da categoria'}
-                  </span>
-                  <span className={styles.catBadge} style={{
-                    background: catForm.type === 'fixed' ? 'rgba(59,130,246,0.1)' : 'rgba(249,115,22,0.1)',
-                    border: `1px solid ${catForm.type === 'fixed' ? 'rgba(59,130,246,0.3)' : 'rgba(249,115,22,0.3)'}`,
-                    color: catForm.type === 'fixed' ? '#3b82f6' : '#f97316',
-                  }}>
-                    {catForm.type === 'fixed' ? 'FIXO' : 'VARIAVEL'}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="submit" disabled={savingCat} className="sigma-btn-primary" style={{ fontSize: '0.68rem' }}>
-                    {savingCat ? 'Salvando...' : editingCat ? 'Atualizar' : 'Salvar'}
-                  </button>
-                  <button type="button" onClick={() => { setShowCatForm(false); setEditingCat(null); }}
-                    className="btn-secondary" style={{ padding: '8px 14px', borderRadius: 6, fontSize: '0.68rem', fontFamily: 'var(--font-mono)', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.06)', background: 'transparent', color: 'var(--text-muted)' }}>
-                    Cancelar
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-
-          {/* Category grid */}
           {loadingCats ? (
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)', padding: 20 }}>Carregando...</div>
+            <div className={styles.catEmpty}>carregando...</div>
           ) : categories.length === 0 ? (
-            <div className="glass-card" style={{ padding: '32px 20px', textAlign: 'center' }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                Nenhuma categoria cadastrada. Clique em "+ Nova Categoria" para comecar.
-              </div>
-            </div>
+            <div className={styles.catEmpty}>nenhuma categoria cadastrada</div>
           ) : (
             <div className={styles.catGrid}>
-              {categories.map(cat => (
-                <div key={cat.id} className={`glass-card ${styles.catCard}`}>
-                  <span className={styles.catDot} style={{ background: cat.color }} />
+              {categories.map((cat) => (
+                <div
+                  key={cat.id}
+                  className={styles.catCard}
+                  style={{ '--cat-color': cat.color }}
+                >
+                  <div className={styles.catDot} style={{ background: cat.color, color: cat.color }} />
                   <div className={styles.catInfo}>
                     <div className={styles.catName}>{cat.name}</div>
-                    <span className={styles.catBadge} style={{
-                      background: cat.type === 'fixed' ? 'rgba(59,130,246,0.1)' : 'rgba(249,115,22,0.1)',
-                      border: `1px solid ${cat.type === 'fixed' ? 'rgba(59,130,246,0.3)' : 'rgba(249,115,22,0.3)'}`,
-                      color: cat.type === 'fixed' ? '#3b82f6' : '#f97316',
-                    }}>
-                      {cat.type === 'fixed' ? 'FIXO' : 'VARIAVEL'}
+                    <span
+                      className={styles.catBadge}
+                      style={{
+                        background: cat.type === 'fixed' ? 'rgba(59,130,246,0.1)' : 'rgba(249,115,22,0.1)',
+                        border: `1px solid ${cat.type === 'fixed' ? 'rgba(59,130,246,0.3)' : 'rgba(249,115,22,0.3)'}`,
+                        color: cat.type === 'fixed' ? '#3b82f6' : '#f97316',
+                      }}
+                    >
+                      {cat.type === 'fixed' ? 'FIXO' : 'VARIÁVEL'}
                     </span>
                   </div>
                   <div className={styles.catActions}>
-                    <button className={styles.iconBtn} onClick={() => openEditCat(cat)} title="Editar">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-                      </svg>
+                    <button
+                      className={styles.iconBtn}
+                      onClick={() => openCatModal(cat)}
+                      title="Editar"
+                    >
+                      <IconEdit size={12} />
                     </button>
-                    <button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => handleDeleteCat(cat.id)} title="Excluir">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                        <path d="M10 11v6" /><path d="M14 11v6" />
-                      </svg>
+                    <button
+                      className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                      onClick={() => handleDeleteCat(cat.id)}
+                      title="Excluir"
+                    >
+                      <IconTrash size={12} />
                     </button>
                   </div>
                 </div>
@@ -363,194 +386,390 @@ export default function SettingsFinanceiro() {
           )}
         </div>
 
-        <div className="divider-sweep" style={{ marginBottom: 32 }} />
-
-        {/* ═══════════════════════════════════════════════════
-            SECAO 2: MENSAGENS DE COBRANCA
-        ═══════════════════════════════════════════════════ */}
-        <div className={styles.section}>
-          <div className={styles.sectionTitle} style={{ marginBottom: 16 }}>Mensagens de Cobranca</div>
+        {/* ════════════════════════════════════════════════
+            MENSAGENS DE COBRANCA
+        ════════════════════════════════════════════════ */}
+        <div className={styles.sectionCard}>
+          <div className={styles.sectionHeader}>
+            <div className={styles.sectionHeaderLeft}>
+              <div className={styles.sectionTitleRow}>
+                <span className={styles.sectionDot} />
+                <span className={styles.sectionTitleText}>Mensagens de cobrança</span>
+                <span className={styles.sectionLine} />
+              </div>
+              <div className={styles.sectionDescription}>
+                Personalize as mensagens enviadas em cada etapa da cobrança. Use as variáveis para inserir dados dinâmicos do cliente.
+              </div>
+            </div>
+          </div>
 
           {botConfig && (
-            <div className="glass-card" style={{ padding: '20px' }}>
+            <>
               {/* Tabs */}
               <div className={styles.msgTabs}>
-                {MSG_TABS.map(t => (
-                  <button key={t.key} onClick={() => setActiveMsg(t.key)}
-                    className={`${styles.msgTab} ${activeMsg === t.key ? styles.msgTabActive : ''}`}>
+                {MSG_TABS.map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setActiveMsg(t.key)}
+                    className={`${styles.msgTab} ${activeMsg === t.key ? styles.msgTabActive : ''}`}
+                  >
                     {t.label}
                   </button>
                 ))}
               </div>
 
-              {/* Variables */}
-              <div className="label" style={{ marginBottom: 6 }}>Variaveis disponiveis:</div>
-              <div className={styles.varBadges}>
-                {(VARIABLES[activeMsg] || []).map(v => (
-                  <button key={v} type="button" className={styles.varBadge} onClick={() => insertVariable(v)}>
-                    {v}
-                  </button>
-                ))}
-              </div>
-
               {/* Textarea */}
-              <textarea
-                ref={textareaRef}
-                value={botConfig[activeMsg] || ''}
-                onChange={e => setBotConfig(prev => ({ ...prev, [activeMsg]: e.target.value }))}
-                style={{
-                  ...INP, minHeight: 120, resize: 'vertical', lineHeight: 1.6, width: '100%',
-                  fontFamily: 'var(--font-sans)', fontSize: '0.78rem',
-                }}
-              />
+              <div className={styles.messageBox}>
+                <textarea
+                  ref={textareaRef}
+                  className={styles.messageTextarea}
+                  value={botConfig[activeMsg] || ''}
+                  onChange={(e) => setBotConfig((prev) => ({ ...prev, [activeMsg]: e.target.value }))}
+                  placeholder="Mensagem desta etapa..."
+                />
+                <div className={styles.messageTagsRow}>
+                  {(VARIABLES[activeMsg] || []).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      className={styles.messageTag}
+                      onClick={() => insertVariable(v)}
+                      title={`Inserir ${v}`}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className={styles.messageHint}>
+                Clique nas variáveis acima para inserir no cursor. Elas serão substituídas pelos dados reais ao enviar.
+              </div>
 
               {/* Preview */}
-              <div className="label" style={{ marginTop: 14, marginBottom: 4 }}>Preview:</div>
+              <div className={styles.previewLabel}>Pré-visualização</div>
               <div className={styles.msgPreview}>
-                {previewMessage(botConfig[activeMsg] || '')}
+                {previewMessage(botConfig[activeMsg] || '') || '(mensagem vazia)'}
               </div>
 
-              {/* Restore default */}
-              <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                <button type="button" onClick={() => restoreDefault(activeMsg)} style={{
-                  padding: '6px 12px', borderRadius: 6, cursor: 'pointer',
-                  border: '1px solid rgba(255,255,255,0.06)', background: 'transparent',
-                  color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
-                }}>
-                  Restaurar padrao
+              {/* Footer */}
+              <div className={styles.msgFooter}>
+                <button
+                  type="button"
+                  className={styles.restoreBtn}
+                  onClick={() => restoreDefault(activeMsg)}
+                >
+                  Restaurar padrão
+                </button>
+                <button
+                  className="sigma-btn-primary"
+                  onClick={handleSaveBot}
+                  disabled={savingBot}
+                  style={{ marginLeft: 'auto' }}
+                >
+                  <IconCheck size={12} /> {savingBot ? 'Salvando...' : 'Salvar Mensagens'}
                 </button>
               </div>
-            </div>
+            </>
           )}
         </div>
 
-        <div className="divider-sweep" style={{ marginBottom: 32 }} />
-
-        {/* ═══════════════════════════════════════════════════
-            SECAO 3: CONFIGURACAO DO BOT
-        ═══════════════════════════════════════════════════ */}
-        <div className={styles.section}>
-          <div className={styles.sectionTitle} style={{ marginBottom: 16 }}>Configuracao do Bot</div>
+        {/* ════════════════════════════════════════════════
+            CONFIGURACAO DO BOT
+        ════════════════════════════════════════════════ */}
+        <div className={styles.sectionCard}>
+          <div className={styles.sectionHeader}>
+            <div className={styles.sectionHeaderLeft}>
+              <div className={styles.sectionTitleRow}>
+                <span className={styles.sectionDot} />
+                <span className={styles.sectionTitleText}>Configuração do bot</span>
+                <span className={styles.sectionLine} />
+              </div>
+              <div className={styles.sectionDescription}>
+                Defina números, dias e horário do bot de cobrança. As mensagens acima são disparadas automaticamente.
+              </div>
+            </div>
+          </div>
 
           {loadingBot ? (
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)', padding: 20 }}>Carregando...</div>
+            <div className={styles.catEmpty}>carregando configurações...</div>
           ) : botConfig && (
-            <div className="glass-card" style={{ overflow: 'hidden' }}>
-              {/* Header with toggle */}
-              <div className={styles.botHeader}>
-                <div className={styles.botStatus}>
-                  <span className={styles.botStatusDot} style={{
-                    background: botConfig.active ? 'var(--success)' : 'var(--text-muted)',
-                    boxShadow: botConfig.active ? '0 0 8px rgba(34,197,94,0.4)' : 'none',
-                  }} />
-                  <span style={{ color: botConfig.active ? 'var(--success)' : 'var(--text-muted)' }}>
-                    {botConfig.active ? 'ATIVO' : 'INATIVO'}
-                  </span>
+            <>
+              {/* Status row */}
+              <div className={styles.botStatusRow}>
+                <div className={styles.botStatusLeft}>
+                  <div className={styles.botStatusIcon}>
+                    <IconBot size={18} />
+                  </div>
+                  <div className={styles.botStatusInfo}>
+                    <div className={styles.botStatusTitle}>Bot de cobrança</div>
+                    <div className={`${styles.botStatusSub} ${botConfig.active ? styles.botStatusActive : ''}`}>
+                      {botConfig.active ? '● Ativo' : '○ Inativo'}
+                    </div>
+                  </div>
                 </div>
-                <label className={styles.toggle}>
-                  <input type="checkbox" checked={botConfig.active}
-                    onChange={e => setBotConfig(prev => ({ ...prev, active: e.target.checked }))} />
-                  <span className={styles.toggleTrack} />
-                </label>
+                <button
+                  type="button"
+                  className={`${styles.toggleSwitch} ${botConfig.active ? styles.toggleSwitchActive : ''}`}
+                  onClick={() => setBotConfig((prev) => ({ ...prev, active: !prev.active }))}
+                >
+                  <div className={`${styles.toggleKnob} ${botConfig.active ? styles.toggleKnobActive : ''}`} />
+                </button>
               </div>
 
               {botConfig.active && (
-                <div className={styles.botBody}>
-                  {/* Numbers */}
-                  <div className={styles.botFieldGroup}>
-                    <div className={styles.botFieldLabel}>Numeros que receberao o resumo de inadimplentes</div>
-                    {botConfig.numbers.length > 0 && (
-                      <div className={styles.chipList}>
-                        {botConfig.numbers.map(num => (
-                          <div key={num} className={styles.chip}>
-                            {num}
-                            <button className={styles.chipRemove} onClick={() => removeNumber(num)}>x</button>
-                          </div>
-                        ))}
+                <>
+                  {/* Numbers + Time + Days */}
+                  <div className={styles.botFieldsGrid}>
+                    {/* Numeros */}
+                    <div className={styles.botField}>
+                      <div className={styles.botFieldLabel}>
+                        Números do resumo de inadimplentes
                       </div>
-                    )}
-                    <div className={styles.addNumberRow}>
-                      <input value={newNumber} onChange={e => setNewNumber(e.target.value)}
-                        placeholder="5511999999999" style={{ ...INP, flex: 1 }}
-                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addNumber(); } }} />
-                      <button type="button" onClick={addNumber} style={{
-                        padding: '8px 14px', borderRadius: 7, cursor: 'pointer',
-                        border: '1px solid rgba(255,0,51,0.35)', background: 'rgba(255,0,51,0.09)',
-                        color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 600,
-                        flexShrink: 0,
+                      {botConfig.numbers && botConfig.numbers.length > 0 && (
+                        <div className={styles.chipList}>
+                          {botConfig.numbers.map((num) => (
+                            <div key={num} className={styles.chip}>
+                              {num}
+                              <button className={styles.chipRemove} onClick={() => removeNumber(num)}>
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className={styles.addNumberRow}>
+                        <input
+                          className={styles.modalInput}
+                          value={newNumber}
+                          onChange={(e) => setNewNumber(e.target.value)}
+                          placeholder="5511999999999"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              addNumber();
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={addNumber}
+                          style={{
+                            padding: '8px 16px',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            border: '1px solid rgba(255,0,51,0.4)',
+                            background: 'rgba(255,0,51,0.1)',
+                            color: '#ff6680',
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            flexShrink: 0,
+                          }}
+                        >
+                          <IconPlus size={12} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Horario */}
+                    <div className={styles.botField}>
+                      <div className={styles.botFieldLabel}>Horário de disparo</div>
+                      <input
+                        type="time"
+                        className={styles.modalInput}
+                        value={botConfig.dispatchTime || '09:00'}
+                        onChange={(e) => setBotConfig((prev) => ({ ...prev, dispatchTime: e.target.value }))}
+                      />
+                      <div style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '0.55rem',
+                        color: 'var(--text-muted)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
                       }}>
-                        +
-                      </button>
+                        Horário de Brasília (BRT)
+                      </div>
                     </div>
                   </div>
 
-                  {/* Active days */}
-                  <div className={styles.botFieldGroup}>
-                    <div className={styles.botFieldLabel}>Dias de disparo</div>
-                    <div className={styles.daysGrid}>
-                      {DAYS.map(d => (
-                        <label key={d.iso} className={styles.dayCheck}>
-                          <input type="checkbox" checked={botConfig.activeDays.includes(d.iso)}
-                            onChange={() => toggleDay(d.iso)} />
+                  {/* Dias ativos */}
+                  <div className={styles.botField} style={{ marginBottom: 18 }}>
+                    <div className={styles.botFieldLabel}>Dias ativos</div>
+                    <div className={styles.daysRow}>
+                      {DAYS.map((d) => (
+                        <button
+                          key={d.iso}
+                          type="button"
+                          className={`${styles.dayChip} ${(botConfig.activeDays || []).includes(d.iso) ? styles.dayChipActive : ''}`}
+                          onClick={() => toggleDay(d.iso)}
+                        >
                           {d.label}
-                        </label>
+                        </button>
                       ))}
                     </div>
                   </div>
 
-                  {/* Dispatch time */}
-                  <div className={styles.botFieldGroup}>
-                    <div className={styles.botFieldLabel}>Horario de disparo</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <input type="time" value={botConfig.dispatchTime}
-                        onChange={e => setBotConfig(prev => ({ ...prev, dispatchTime: e.target.value }))}
-                        style={{ ...INP, width: 130 }} />
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
-                        Horario de Brasilia (BRT)
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Charge toggles */}
-                  <div className={styles.botFieldGroup}>
-                    <div className={styles.botFieldLabel}>Cobranca no cliente</div>
+                  {/* Cobrança no cliente */}
+                  <div className={styles.botField}>
+                    <div className={styles.botFieldLabel}>Canais de cobrança</div>
                     <div className={styles.toggleRow}>
-                      <div>
-                        <div className={styles.toggleLabel}>Numero pessoal do cliente</div>
+                      <div className={styles.toggleRowLeft}>
+                        <div className={styles.toggleRowTitle}>Número pessoal do cliente</div>
+                        <div className={styles.toggleRowNote}>
+                          Envia mensagem no WhatsApp pessoal cadastrado na ficha do cliente
+                        </div>
                       </div>
-                      <label className={styles.toggle}>
-                        <input type="checkbox" checked={botConfig.chargePersonal}
-                          onChange={e => setBotConfig(prev => ({ ...prev, chargePersonal: e.target.checked }))} />
-                        <span className={styles.toggleTrack} />
-                      </label>
+                      <button
+                        type="button"
+                        className={`${styles.toggleSwitch} ${botConfig.chargePersonal ? styles.toggleSwitchActive : ''}`}
+                        onClick={() => setBotConfig((prev) => ({ ...prev, chargePersonal: !prev.chargePersonal }))}
+                      >
+                        <div className={`${styles.toggleKnob} ${botConfig.chargePersonal ? styles.toggleKnobActive : ''}`} />
+                      </button>
                     </div>
                     <div className={styles.toggleRow}>
-                      <div>
-                        <div className={styles.toggleLabel}>Grupo WhatsApp do cliente</div>
-                        <div className={styles.toggleNote}>Requer grupo vinculado na ficha do cliente</div>
+                      <div className={styles.toggleRowLeft}>
+                        <div className={styles.toggleRowTitle}>Grupo WhatsApp do cliente</div>
+                        <div className={styles.toggleRowNote}>
+                          Requer grupo vinculado na ficha do cliente
+                        </div>
                       </div>
-                      <label className={styles.toggle}>
-                        <input type="checkbox" checked={botConfig.chargeGroup}
-                          onChange={e => setBotConfig(prev => ({ ...prev, chargeGroup: e.target.checked }))} />
-                        <span className={styles.toggleTrack} />
-                      </label>
+                      <button
+                        type="button"
+                        className={`${styles.toggleSwitch} ${botConfig.chargeGroup ? styles.toggleSwitchActive : ''}`}
+                        onClick={() => setBotConfig((prev) => ({ ...prev, chargeGroup: !prev.chargeGroup }))}
+                      >
+                        <div className={`${styles.toggleKnob} ${botConfig.chargeGroup ? styles.toggleKnobActive : ''}`} />
+                      </button>
                     </div>
                   </div>
-                </div>
+                </>
               )}
-            </div>
-          )}
 
-          {/* Save button */}
-          {botConfig && (
-            <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-              <button onClick={handleSaveBot} disabled={savingBot} className="sigma-btn-primary" style={{ fontSize: '0.7rem' }}>
-                {savingBot ? 'Salvando...' : 'Salvar configuracoes'}
+              <button
+                className={`sigma-btn-primary ${styles.botSaveBtn}`}
+                onClick={handleSaveBot}
+                disabled={savingBot}
+              >
+                <IconCheck size={12} /> {savingBot ? 'Salvando...' : 'Salvar Configurações'}
               </button>
-            </div>
+            </>
           )}
         </div>
       </div>
+
+      {/* ════════════════════════════════════════════════
+          MODAL — CATEGORIA
+      ════════════════════════════════════════════════ */}
+      {showCatModal && (
+        <div className={styles.modalOverlay} onClick={() => setShowCatModal(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <div className={styles.modalHeaderTitleBox}>
+                <div className={styles.modalHeaderBadge}>
+                  <IconTag />
+                </div>
+                <div>
+                  <h2 className={styles.modalTitle}>
+                    {editingCat ? 'Editar Categoria' : 'Nova Categoria'}
+                  </h2>
+                  <div className={styles.modalSubtitle}>
+                    Defina o nome, tipo e cor da categoria de gasto.
+                  </div>
+                </div>
+              </div>
+              <button className={styles.modalCloseBtn} onClick={() => setShowCatModal(false)}>
+                <IconX />
+              </button>
+            </div>
+
+            <div className={styles.modalBody}>
+              <div>
+                <label className={styles.modalLabel}>
+                  Nome <span className={styles.required}>*</span>
+                </label>
+                <input
+                  className={styles.modalInput}
+                  value={catForm.name}
+                  onChange={(e) => setCatForm((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="Ex: Aluguel, Software, Marketing..."
+                  autoFocus
+                  onKeyDown={(e) => e.key === 'Enter' && handleSaveCat()}
+                />
+              </div>
+
+              <div>
+                <label className={styles.modalLabel}>
+                  Tipo <span className={styles.required}>*</span>
+                </label>
+                <select
+                  className={styles.modalSelect}
+                  value={catForm.type}
+                  onChange={(e) => setCatForm((p) => ({ ...p, type: e.target.value }))}
+                >
+                  <option value="variable">Variável — valor muda mês a mês</option>
+                  <option value="fixed">Fixo — valor recorrente fixo</option>
+                </select>
+              </div>
+
+              <div>
+                <label className={styles.modalLabel}>
+                  Cor <span className={styles.required}>*</span>
+                </label>
+                <div className={styles.colorPickerRow}>
+                  {COLOR_PALETTE.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className={`${styles.colorSwatch} ${catForm.color === color ? styles.colorSwatchActive : ''}`}
+                      style={{ background: color, color }}
+                      onClick={() => setCatForm((p) => ({ ...p, color }))}
+                      title={color}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Preview */}
+              <div>
+                <label className={styles.modalLabel}>Pré-visualização</label>
+                <div
+                  className={styles.catCard}
+                  style={{ '--cat-color': catForm.color, marginTop: 4 }}
+                >
+                  <div className={styles.catDot} style={{ background: catForm.color, color: catForm.color }} />
+                  <div className={styles.catInfo}>
+                    <div className={styles.catName}>{catForm.name || 'Nome da categoria'}</div>
+                    <span
+                      className={styles.catBadge}
+                      style={{
+                        background: catForm.type === 'fixed' ? 'rgba(59,130,246,0.1)' : 'rgba(249,115,22,0.1)',
+                        border: `1px solid ${catForm.type === 'fixed' ? 'rgba(59,130,246,0.3)' : 'rgba(249,115,22,0.3)'}`,
+                        color: catForm.type === 'fixed' ? '#3b82f6' : '#f97316',
+                      }}
+                    >
+                      {catForm.type === 'fixed' ? 'FIXO' : 'VARIÁVEL'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.modalFooter}>
+              <button className="btn btn-secondary" onClick={() => setShowCatModal(false)}>
+                Cancelar
+              </button>
+              <button
+                className="sigma-btn-primary"
+                onClick={handleSaveCat}
+                disabled={savingCat}
+              >
+                {savingCat ? 'Salvando...' : editingCat ? 'Salvar' : 'Criar Categoria'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

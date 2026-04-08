@@ -112,12 +112,13 @@ const S = {
     justifyContent: 'center',
   },
   modal: {
-    width: 'min(800px, 95%)',
-    maxHeight: '92vh',
+    width: 'min(1200px, 96%)',
+    height: 'min(820px, 92vh)',
     background: 'linear-gradient(145deg, rgba(17,17,17,0.99), rgba(10,10,10,1))',
-    border: '1px solid rgba(255,0,51,0.15)',
-    borderRadius: 12,
-    boxShadow: '0 30px 80px rgba(0,0,0,0.7)',
+    border: '1px solid rgba(255,255,255,0.05)',
+    borderTop: '2px solid #ff0033',
+    borderRadius: 16,
+    boxShadow: '0 30px 90px rgba(0,0,0,0.75), 0 0 30px rgba(255,0,51,0.08)',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
@@ -126,20 +127,36 @@ const S = {
   header: {
     display: 'flex',
     alignItems: 'center',
-    gap: 12,
-    padding: '18px 24px',
+    gap: 14,
+    padding: '20px 28px',
     borderBottom: '1px solid rgba(255,255,255,0.05)',
+    flexShrink: 0,
+  },
+  headerBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    background: 'rgba(255,0,51,0.12)',
+    border: '1px solid rgba(255,0,51,0.3)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'var(--brand-500)',
+    flexShrink: 0,
   },
   titleInput: {
     flex: 1,
     background: 'none',
     border: 'none',
     outline: 'none',
-    fontSize: '0.95rem',
+    fontSize: '1.05rem',
     fontFamily: 'var(--font-mono)',
     fontWeight: 700,
-    letterSpacing: '0.04em',
+    letterSpacing: '0.02em',
     color: 'var(--text-primary)',
+    padding: '4px 8px',
+    borderRadius: 6,
+    transition: 'background 0.15s',
   },
   closeBtn: {
     width: 30,
@@ -157,8 +174,48 @@ const S = {
   },
   body: {
     flex: 1,
+    display: 'flex',
+    overflow: 'hidden',
+    minHeight: 0,
+  },
+  leftCol: {
+    flex: '1 1 60%',
+    minWidth: 0,
     overflowY: 'auto',
-    padding: 24,
+    padding: '24px 28px',
+    borderRight: '1px solid rgba(255,255,255,0.04)',
+  },
+  rightCol: {
+    flex: '0 0 38%',
+    minWidth: 320,
+    maxWidth: 460,
+    display: 'flex',
+    flexDirection: 'column',
+    background: 'rgba(5,5,5,0.4)',
+    minHeight: 0,
+  },
+  rightHeader: {
+    padding: '16px 20px 12px',
+    borderBottom: '1px solid rgba(255,255,255,0.04)',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '0.62rem',
+    fontWeight: 700,
+    letterSpacing: '0.08em',
+    color: 'var(--text-primary)',
+    textTransform: 'uppercase',
+    flexShrink: 0,
+  },
+  rightScroll: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '14px 20px 4px',
+    minHeight: 0,
+  },
+  rightCommentBox: {
+    flexShrink: 0,
+    padding: '12px 16px 16px',
+    borderTop: '1px solid rgba(255,255,255,0.05)',
+    background: 'rgba(0,0,0,0.4)',
   },
   footer: {
     display: 'flex',
@@ -170,12 +227,28 @@ const S = {
   },
   sectionTitle: {
     fontFamily: 'var(--font-mono)',
-    fontSize: '0.7rem',
+    fontSize: '0.66rem',
     fontWeight: 700,
     color: 'var(--text-primary)',
     marginBottom: 14,
-    letterSpacing: '0.06em',
+    letterSpacing: '0.08em',
     textTransform: 'uppercase',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sectionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    background: 'var(--brand-500)',
+    boxShadow: '0 0 6px rgba(255,0,51,0.6)',
+    flexShrink: 0,
+  },
+  sectionLine: {
+    flex: 1,
+    height: 1,
+    background: 'linear-gradient(90deg, rgba(255,0,51,0.18), transparent)',
   },
   label: {
     fontFamily: 'var(--font-mono)',
@@ -257,6 +330,7 @@ export default function TaskDetailModal({
   onRefresh,
   tenantCategories = [],
   tenantClients = [],
+  tenantUsers = [],
 }) {
   const { notify } = useNotification();
   const isEditMode = !!taskId;
@@ -281,6 +355,8 @@ export default function TaskDetailModal({
   const [comments, setComments] = useState([]);
   const [activity, setActivity] = useState([]);
   const [dependencies, setDependencies] = useState([]);
+  const [subtasks, setSubtasks] = useState([]);
+  const [subtasksRequired, setSubtasksRequired] = useState(false);
 
   // UI toggles
   const [showDepSearch, setShowDepSearch] = useState(false);
@@ -336,6 +412,8 @@ export default function TaskDetailModal({
       setComments(t.comments || []);
       setActivity(t.activity || []);
       setDependencies(t.dependencies || []);
+      setSubtasks(Array.isArray(t.subtasks) ? t.subtasks : (t.subtasks ? JSON.parse(t.subtasks) : []));
+      setSubtasksRequired(Boolean(t.subtasks_required));
     } catch (err) {
       notify('Erro ao carregar task: ' + err.message, 'error');
     } finally {
@@ -610,6 +688,43 @@ export default function TaskDetailModal({
     }, 0);
   }
 
+  /* ── Subtasks ──────────────────────────────────────────────────────── */
+
+  function uidSub() {
+    return `sub_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  function addSubtask() {
+    setSubtasks((prev) => {
+      const next = [...prev, { id: uidSub(), title: '', done: false }];
+      return next;
+    });
+  }
+
+  function updateSubtask(id, key, value) {
+    setSubtasks((prev) => {
+      const next = prev.map((s) => (s.id === id ? { ...s, [key]: value } : s));
+      if (isEditMode && key === 'done') {
+        // Persistir mudanca de done imediatamente
+        saveField({ subtasks: next });
+      }
+      return next;
+    });
+  }
+
+  function commitSubtaskTitle(id) {
+    if (!isEditMode) return;
+    saveField({ subtasks });
+  }
+
+  function removeSubtask(id) {
+    setSubtasks((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      if (isEditMode) saveField({ subtasks: next });
+      return next;
+    });
+  }
+
   /* ── Dependencies ──────────────────────────────────────────────────── */
 
   async function loadAllTeamTasks() {
@@ -730,12 +845,20 @@ export default function TaskDetailModal({
 
           {/* ─── Header ─── */}
           <div style={S.header}>
+            <div style={S.headerBadge}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 11 12 14 22 4" />
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+              </svg>
+            </div>
             <input
               style={S.titleInput}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onBlur={() => isEditMode && title.trim() && saveField({ title: title.trim() })}
-              placeholder="Titulo da task"
+              onFocus={(e) => { e.target.style.background = 'rgba(255,255,255,0.03)'; }}
+              onBlurCapture={(e) => { e.target.style.background = 'transparent'; }}
+              placeholder="Título da tarefa"
             />
 
             {/* Status select (styled as badge) */}
@@ -795,12 +918,20 @@ export default function TaskDetailModal({
           {/* ─── Body ─── */}
           <div style={S.body}>
             {loading ? (
-              <div className={styles.spinner} />
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className={styles.spinner} />
+              </div>
             ) : (
               <>
+              {/* ═══ COLUNA ESQUERDA ═══ */}
+              <div style={S.leftCol}>
                 {/* ═══ INFORMACOES ═══ */}
                 <div style={{ marginBottom: 28 }}>
-                  <div style={S.sectionTitle}>// informacoes</div>
+                  <div style={S.sectionTitle}>
+                    <span style={S.sectionDot} />
+                    Informações
+                    <span style={S.sectionLine} />
+                  </div>
 
                   {/* Row 1: Cliente + Responsavel */}
                   <div style={S.grid2}>
@@ -818,82 +949,31 @@ export default function TaskDetailModal({
                       >
                         <option value="">Nenhum</option>
                         {tenantClients.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
+                          <option key={c.id} value={c.id}>{c.company_name || c.name}</option>
                         ))}
                       </select>
                     </div>
 
                     <div style={S.fieldCol}>
-                      <label style={S.label}>Responsavel</label>
-                      <div ref={userDropdownRef} style={{ position: 'relative' }}>
-                        <input
-                          style={S.input}
-                          value={userQuery}
-                          onChange={(e) => handleUserInputChange(e.target.value)}
-                          onFocus={(e) => {
-                            e.target.style.borderColor = 'rgba(255,0,51,0.5)';
-                            setShowUserDropdown(true);
-                            searchUsers(userQuery);
-                          }}
-                          onBlur={(e) => { e.target.style.borderColor = 'var(--border-default)'; }}
-                          onKeyDown={handleUserKeyDown}
-                          placeholder="Buscar usuario"
-                        />
-                        {showUserDropdown && userResults.length > 0 && (
-                          <div style={{
-                            position: 'absolute',
-                            top: '100%',
-                            left: 0,
-                            right: 0,
-                            marginTop: 4,
-                            background: 'linear-gradient(145deg, rgba(17,17,17,0.99), rgba(10,10,10,0.99))',
-                            border: '1px solid var(--border-default)',
-                            borderRadius: 8,
-                            boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
-                            zIndex: 50,
-                            maxHeight: 180,
-                            overflowY: 'auto',
-                          }}>
-                            {userResults.map((user, idx) => (
-                              <div
-                                key={user.id}
-                                onClick={() => handleSelectUser(user)}
-                                onMouseEnter={() => setUserDropdownIndex(idx)}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 8,
-                                  padding: '8px 12px',
-                                  cursor: 'pointer',
-                                  fontSize: 13,
-                                  color: idx === userDropdownIndex ? 'var(--text-primary)' : 'var(--text-secondary)',
-                                  background: idx === userDropdownIndex ? 'rgba(255,0,51,0.06)' : 'transparent',
-                                  transition: 'background 0.12s',
-                                }}
-                              >
-                                <span style={{
-                                  width: 22,
-                                  height: 22,
-                                  borderRadius: '50%',
-                                  background: 'rgba(255,0,51,0.1)',
-                                  border: '1px solid rgba(255,0,51,0.25)',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  fontFamily: 'var(--font-mono)',
-                                  fontSize: '0.48rem',
-                                  color: 'var(--brand-500)',
-                                  fontWeight: 700,
-                                  flexShrink: 0,
-                                }}>
-                                  {initials(user.name)}
-                                </span>
-                                {user.name}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                      <label style={S.label}>Responsável</label>
+                      <select
+                        style={S.select}
+                        value={assignedTo}
+                        onChange={(e) => {
+                          const newId = e.target.value;
+                          setAssignedTo(newId);
+                          const u = tenantUsers.find((x) => x.id === newId);
+                          setAssignedToName(u?.name || '');
+                          if (isEditMode) saveField({ assigned_to: newId || null });
+                        }}
+                        onFocus={(e) => { e.target.style.borderColor = 'rgba(255,0,51,0.5)'; }}
+                        onBlur={(e) => { e.target.style.borderColor = 'var(--border-default)'; }}
+                      >
+                        <option value="">Sem responsável</option>
+                        {tenantUsers.map((u) => (
+                          <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
@@ -977,7 +1057,7 @@ export default function TaskDetailModal({
 
                   {/* Descricao */}
                   <div style={S.fieldCol}>
-                    <label style={S.label}>Descricao</label>
+                    <label style={S.label}>Descrição</label>
                     <textarea
                       style={S.textarea}
                       value={description}
@@ -993,9 +1073,167 @@ export default function TaskDetailModal({
                   </div>
                 </div>
 
+                {/* ═══ SUBTAREFAS ═══ */}
+                <div style={{ marginBottom: 28 }}>
+                  <div style={S.sectionTitle}>
+                    <span style={S.sectionDot} />
+                    Subtarefas
+                    <span style={S.sectionLine} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '0.5rem',
+                        color: 'var(--text-muted)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        fontWeight: 600,
+                      }}>
+                        Obrigatórias
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !subtasksRequired;
+                          setSubtasksRequired(next);
+                          if (isEditMode) saveField({ subtasks_required: next });
+                        }}
+                        title="Se ativo, todas as subtarefas precisam estar concluídas para finalizar a tarefa"
+                        style={{
+                          position: 'relative',
+                          width: 32,
+                          height: 18,
+                          background: subtasksRequired ? 'rgba(255,0,51,0.35)' : 'rgba(115,115,115,0.25)',
+                          borderRadius: 9,
+                          cursor: 'pointer',
+                          border: 'none',
+                          transition: 'background 0.2s',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <span style={{
+                          position: 'absolute',
+                          top: 2,
+                          left: subtasksRequired ? 16 : 2,
+                          width: 14,
+                          height: 14,
+                          borderRadius: '50%',
+                          background: subtasksRequired ? 'var(--brand-500)' : 'var(--text-muted)',
+                          transition: 'all 0.2s',
+                        }} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {subtasks.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                      {subtasks.map((s) => (
+                        <div
+                          key={s.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            padding: '8px 12px',
+                            background: 'rgba(10,10,10,0.5)',
+                            border: '1px solid var(--border-default)',
+                            borderRadius: 6,
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!!s.done}
+                            onChange={(e) => updateSubtask(s.id, 'done', e.target.checked)}
+                            style={{
+                              width: 14,
+                              height: 14,
+                              accentColor: '#ff0033',
+                              cursor: 'pointer',
+                              flexShrink: 0,
+                            }}
+                          />
+                          <input
+                            value={s.title}
+                            onChange={(e) => updateSubtask(s.id, 'title', e.target.value)}
+                            onBlur={() => commitSubtaskTitle(s.id)}
+                            placeholder="Descreva a subtarefa..."
+                            style={{
+                              flex: 1,
+                              background: 'transparent',
+                              border: 'none',
+                              outline: 'none',
+                              color: s.done ? 'var(--text-muted)' : 'var(--text-primary)',
+                              fontSize: 13,
+                              fontFamily: 'var(--font-sans)',
+                              textDecoration: s.done ? 'line-through' : 'none',
+                            }}
+                          />
+                          <button
+                            onClick={() => removeSubtask(s.id)}
+                            title="Remover subtarefa"
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              color: 'var(--text-muted)',
+                              padding: 2,
+                              flexShrink: 0,
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--error)'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className={styles.emptyState} style={{ marginBottom: 10 }}>Nenhuma subtarefa</div>
+                  )}
+
+                  <button
+                    onClick={addSubtask}
+                    style={{
+                      padding: '6px 12px',
+                      background: 'transparent',
+                      border: '1px dashed var(--border-default)',
+                      borderRadius: 6,
+                      color: 'var(--text-muted)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.58rem',
+                      cursor: 'pointer',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'rgba(255,0,51,0.3)';
+                      e.currentTarget.style.color = 'var(--brand-500)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--border-default)';
+                      e.currentTarget.style.color = 'var(--text-muted)';
+                    }}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    Adicionar subtarefa
+                  </button>
+                </div>
+
                 {/* ═══ DEPENDENCIAS ═══ */}
                 <div style={{ marginBottom: 28 }}>
-                  <div style={S.sectionTitle}>// dependencias</div>
+                  <div style={S.sectionTitle}>
+                    <span style={S.sectionDot} />
+                    Dependências
+                    <span style={S.sectionLine} />
+                  </div>
 
                   {dependencies.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1185,11 +1423,18 @@ export default function TaskDetailModal({
                     </button>
                   )}
                 </div>
+              </div>
 
-                {/* ═══ HISTORICO (edit mode only) ═══ */}
-                {isEditMode && (
-                  <div style={{ marginBottom: 28 }}>
-                    <div style={S.sectionTitle}>// historico</div>
+              {isEditMode && (
+              <div style={S.rightCol}>
+                <div style={S.rightHeader}>Atividade</div>
+                <div style={S.rightScroll}>
+                  <div style={{ marginBottom: 22 }}>
+                    <div style={{ ...S.sectionTitle, fontSize: '0.6rem' }}>
+                      <span style={S.sectionDot} />
+                      Histórico
+                      <span style={S.sectionLine} />
+                    </div>
 
                     {activity.length > 0 ? (
                       <div style={{ position: 'relative', paddingLeft: 20 }}>
@@ -1253,12 +1498,13 @@ export default function TaskDetailModal({
                       <div className={styles.emptyState}>Nenhum registro</div>
                     )}
                   </div>
-                )}
 
-                {/* ═══ COMENTARIOS (edit mode only) ═══ */}
-                {isEditMode && (
                   <div style={{ marginBottom: 0 }}>
-                    <div style={S.sectionTitle}>// comentarios</div>
+                    <div style={{ ...S.sectionTitle, fontSize: '0.6rem' }}>
+                      <span style={S.sectionDot} />
+                      Comentários
+                      <span style={S.sectionLine} />
+                    </div>
 
                     {comments.length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 14 }}>
@@ -1318,16 +1564,16 @@ export default function TaskDetailModal({
                     ) : (
                       <div className={styles.emptyState} style={{ marginBottom: 14 }}>Nenhum comentario</div>
                     )}
+                  </div>
+                </div>
 
-                    {/* Comment input */}
-                    <div style={{
-                      display: 'flex',
-                      gap: 10,
-                      alignItems: 'flex-end',
-                      paddingTop: 14,
-                      borderTop: '1px solid rgba(255,255,255,0.04)',
-                    }}>
-                      <div style={{ flex: 1, position: 'relative' }}>
+                <div style={S.rightCommentBox}>
+                  <div style={{
+                    display: 'flex',
+                    gap: 10,
+                    alignItems: 'flex-end',
+                  }}>
+                    <div style={{ flex: 1, position: 'relative' }}>
                         <textarea
                           ref={commentTextareaRef}
                           value={commentText}
@@ -1431,7 +1677,8 @@ export default function TaskDetailModal({
                       </button>
                     </div>
                   </div>
-                )}
+                </div>
+              )}
               </>
             )}
           </div>

@@ -4,7 +4,7 @@ import { useNotification } from '../../../context/NotificationContext';
 import { useAuth } from '../../../hooks/useAuth';
 import { useState, useEffect, useCallback } from 'react';
 
-const EMPTY_TASK = { title: '', priority: 'normal', due_days_offset: 1, assigned_to: '' };
+const EMPTY_TASK = { title: '', priority: 'normal', assigned_to: '', subtasks: [] };
 
 const TRIGGER_LABELS = {
   new_client: 'Novo Cliente',
@@ -60,6 +60,29 @@ function IconPlay({ size = 14 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="5 3 19 12 5 21 5 3" />
+    </svg>
+  );
+}
+
+function IconLayers({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 2 7 12 12 22 7 12 2" />
+      <polyline points="2 17 12 22 22 17" />
+      <polyline points="2 12 12 17 22 12" />
+    </svg>
+  );
+}
+
+function IconList({ size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
     </svg>
   );
 }
@@ -251,6 +274,36 @@ export default function TaskAutomationPage() {
     }));
   }
 
+  /* ── Subtask helpers (within template task) ── */
+  function addSubtaskToTemplate(taskIdx) {
+    setForm(prev => {
+      const tasks = [...prev.tasks_json];
+      const subs = Array.isArray(tasks[taskIdx].subtasks) ? [...tasks[taskIdx].subtasks] : [];
+      subs.push({ id: `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, title: '', done: false });
+      tasks[taskIdx] = { ...tasks[taskIdx], subtasks: subs };
+      return { ...prev, tasks_json: tasks };
+    });
+  }
+
+  function updateSubtaskInTemplate(taskIdx, subIdx, value) {
+    setForm(prev => {
+      const tasks = [...prev.tasks_json];
+      const subs = [...(tasks[taskIdx].subtasks || [])];
+      subs[subIdx] = { ...subs[subIdx], title: value };
+      tasks[taskIdx] = { ...tasks[taskIdx], subtasks: subs };
+      return { ...prev, tasks_json: tasks };
+    });
+  }
+
+  function removeSubtaskFromTemplate(taskIdx, subIdx) {
+    setForm(prev => {
+      const tasks = [...prev.tasks_json];
+      const subs = (tasks[taskIdx].subtasks || []).filter((_, i) => i !== subIdx);
+      tasks[taskIdx] = { ...tasks[taskIdx], subtasks: subs };
+      return { ...prev, tasks_json: tasks };
+    });
+  }
+
   /* ── Loading ── */
   if (authLoading || loading) {
     return (
@@ -269,8 +322,8 @@ export default function TaskAutomationPage() {
         {/* ── Header ── */}
         <div className={styles.headerRow}>
           <div>
-            <h1 className="page-title">Automacao</h1>
-            <p className="page-subtitle">Templates de tasks por servico ou novo cliente</p>
+            <h1 className="page-title">Automação</h1>
+            <p className="page-subtitle">Templates de tarefas por serviço ou novo cliente</p>
           </div>
           <button className="sigma-btn-primary" onClick={openCreate}>
             <IconPlus size={14} />
@@ -279,15 +332,19 @@ export default function TaskAutomationPage() {
         </div>
 
         {/* ══════════════════════════════════════════════════════
-            // TEMPLATES POR SERVICO
+            TEMPLATES POR SERVIÇO
         ══════════════════════════════════════════════════════ */}
-        <div className="glass-card" style={{ padding: '20px 24px', marginBottom: 24 }}>
-          <div style={SECTION_TITLE}>// templates por servico</div>
+        <div className="glass-card" style={{ padding: '22px 24px', marginBottom: 24 }}>
+          <div className={styles.sectionTitleRow}>
+            <span className={styles.sectionDot} />
+            <span className={styles.sectionTitleText}>Templates por serviço</span>
+            <span className={styles.sectionLine} />
+          </div>
 
           {templates.length === 0 ? (
             <div className={styles.emptyState}>
               <div className={styles.emptyIcon}><IconTemplate size={36} /></div>
-              <div className={styles.emptyText}>nenhum template criado ainda</div>
+              <div className={styles.emptyText}>Nenhum template criado ainda</div>
             </div>
           ) : (
             <div className={styles.templateGrid}>
@@ -296,22 +353,30 @@ export default function TaskAutomationPage() {
                 return (
                   <div
                     key={t.id}
-                    className={`glass-card glass-card-hover ${styles.templateCard}`}
+                    className={styles.templateCard}
                     onClick={() => openEdit(t)}
                   >
                     <div className={styles.templateCardInner}>
-                      <div className={styles.templateName}>{t.name}</div>
+                      <div className={styles.templateNameBox}>
+                        <div className={styles.templateIcon}>
+                          <IconLayers size={16} />
+                        </div>
+                        <div className={styles.templateName}>{t.name}</div>
+                      </div>
                       <span className={`${styles.activeBadge} ${t.is_active ? styles.activeBadgeOn : styles.activeBadgeOff}`}>
-                        {t.is_active ? 'ativo' : 'inativo'}
+                        {t.is_active ? 'Ativo' : 'Inativo'}
                       </span>
                     </div>
 
                     <div className={styles.triggerBadge}>
-                      <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
                       {TRIGGER_LABELS[t.trigger] || t.trigger}
                     </div>
 
-                    <div className={styles.taskCount}>{tasks.length} task{tasks.length !== 1 ? 's' : ''} no template</div>
+                    <div className={styles.taskCount}>
+                      <span className={styles.taskCountIcon}><IconList size={12} /></span>
+                      {tasks.length} tarefa{tasks.length !== 1 ? 's' : ''} configurada{tasks.length !== 1 ? 's' : ''}
+                    </div>
 
                     <div className={styles.templateActions}>
                       <button
@@ -335,33 +400,45 @@ export default function TaskAutomationPage() {
         </div>
 
         {/* ══════════════════════════════════════════════════════
-            // APLICAR TEMPLATE
+            APLICAR TEMPLATE
         ══════════════════════════════════════════════════════ */}
-        <div className="glass-card" style={{ padding: '20px 24px', marginBottom: 24 }}>
-          <div style={SECTION_TITLE}>// aplicar template</div>
+        <div className="glass-card" style={{ padding: '22px 24px', marginBottom: 24 }}>
+          <div className={styles.sectionTitleRow}>
+            <span className={styles.sectionDot} />
+            <span className={styles.sectionTitleText}>Aplicar template</span>
+            <span className={styles.sectionLine} />
+          </div>
+
+          <div className={styles.applyHint}>
+            Selecione um template e o cliente — todas as tarefas serão criadas instantaneamente.
+          </div>
 
           <div className={styles.applyRow}>
             <div className={styles.applyGroup}>
-              <label style={LABEL}>Template</label>
+              <label className={styles.applyLabel}>
+                Template <span className={styles.required}>*</span>
+              </label>
               <select
-                className="sigma-input"
+                className={styles.modalSelect}
                 value={applyTemplateId}
                 onChange={e => setApplyTemplateId(e.target.value)}
               >
-                <option value="">Selecione...</option>
+                <option value="">Selecione um template...</option>
                 {templates.filter(t => t.is_active).map(t => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
               </select>
             </div>
             <div className={styles.applyGroup}>
-              <label style={LABEL}>Cliente</label>
+              <label className={styles.applyLabel}>
+                Cliente <span className={styles.required}>*</span>
+              </label>
               <select
-                className="sigma-input"
+                className={styles.modalSelect}
                 value={applyClientId}
                 onChange={e => setApplyClientId(e.target.value)}
               >
-                <option value="">Selecione...</option>
+                <option value="">Selecione um cliente...</option>
                 {clients.map(c => (
                   <option key={c.id} value={c.id}>{c.company_name}</option>
                 ))}
@@ -370,8 +447,8 @@ export default function TaskAutomationPage() {
             <button
               className="sigma-btn-primary"
               onClick={handleApply}
-              disabled={applying}
-              style={{ alignSelf: 'flex-end', whiteSpace: 'nowrap' }}
+              disabled={applying || !applyTemplateId || !applyClientId}
+              style={{ whiteSpace: 'nowrap', minHeight: 41 }}
             >
               {applying ? (
                 <div className="spinner" style={{ width: 14, height: 14 }} />
@@ -390,44 +467,68 @@ export default function TaskAutomationPage() {
           <div className={styles.modalOverlay} onClick={() => setShowModal(false)}>
             <div className={styles.modal} onClick={e => e.stopPropagation()}>
 
-              <div className={styles.modalTitle}>
-                {editingId ? '// editar template' : '// novo template'}
+              <div className={styles.modalHeader}>
+                <div className={styles.headerTitleBox}>
+                  <div className={styles.headerBadge}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="9" y1="13" x2="15" y2="13" />
+                      <line x1="9" y1="17" x2="13" y2="17" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className={styles.modalTitle}>
+                      {editingId ? 'Editar Template' : 'Novo Template'}
+                    </h2>
+                    <div className={styles.modalSubtitle}>
+                      {editingId
+                        ? 'Atualize as tarefas e configurações deste template.'
+                        : 'Crie um conjunto de tarefas reutilizável para clientes.'}
+                    </div>
+                  </div>
+                </div>
+                <button className={styles.modalCloseBtn} onClick={() => setShowModal(false)}>
+                  <IconX size={14} />
+                </button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
 
                 {/* Nome + Trigger */}
                 <div className={styles.formRow}>
                   <div className={styles.formGroup}>
-                    <label style={LABEL}>Nome do Template</label>
+                    <label style={LABEL}>
+                      Nome do template <span className={styles.required}>*</span>
+                    </label>
                     <input
-                      className="sigma-input"
+                      className={styles.modalInput}
                       value={form.name}
                       onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
                       placeholder="Ex: Onboarding Completo"
-                      style={{ padding: '10px 14px', background: 'rgba(10,10,10,0.8)', border: '1px solid var(--border-default)', borderRadius: 6 }}
                     />
                   </div>
                   <div className={styles.formGroup}>
-                    <label style={LABEL}>Trigger</label>
+                    <label style={LABEL}>
+                      Trigger <span className={styles.required}>*</span>
+                    </label>
                     <select
-                      className="sigma-input"
+                      className={styles.modalSelect}
                       value={form.trigger}
                       onChange={e => setForm(p => ({ ...p, trigger: e.target.value }))}
-                      style={{ padding: '10px 14px', background: 'rgba(10,10,10,0.8)', border: '1px solid var(--border-default)', borderRadius: 6 }}
                     >
                       <option value="new_client">Novo Cliente</option>
-                      <option value="service:social_media">Servico: Social Media</option>
-                      <option value="service:trafego">Servico: Trafego</option>
-                      <option value="service:branding">Servico: Branding</option>
-                      <option value="service:site">Servico: Site</option>
+                      <option value="service:social_media">Serviço: Social Media</option>
+                      <option value="service:trafego">Serviço: Tráfego</option>
+                      <option value="service:branding">Serviço: Branding</option>
+                      <option value="service:site">Serviço: Site</option>
                     </select>
                   </div>
                 </div>
 
                 {/* Toggle Ativo */}
                 <div className={styles.toggleRow}>
-                  <label style={{ ...LABEL, margin: 0 }}>Ativo</label>
+                  <label style={{ ...LABEL, margin: 0 }}>Status</label>
                   <button
                     type="button"
                     className={`${styles.toggleSwitch} ${form.is_active ? styles.toggleSwitchActive : ''}`}
@@ -435,52 +536,87 @@ export default function TaskAutomationPage() {
                   >
                     <div className={`${styles.toggleKnob} ${form.is_active ? styles.toggleKnobActive : ''}`} />
                   </button>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: form.is_active ? 'var(--success)' : 'var(--text-muted)', textTransform: 'uppercase' }}>
-                    {form.is_active ? 'ativo' : 'inativo'}
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: form.is_active ? 'var(--success)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+                    {form.is_active ? 'Ativo' : 'Inativo'}
                   </span>
                 </div>
 
-                {/* Tasks */}
+                {/* Tasks do template */}
                 <div>
-                  <label style={LABEL}>Tasks do Template</label>
+                  <label style={LABEL}>
+                    Tarefas do template <span className={styles.required}>*</span>
+                  </label>
                   <div className={styles.taskList}>
                     {form.tasks_json.map((item, idx) => (
-                      <div key={idx} className={styles.taskItem}>
-                        <input
-                          className="sigma-input"
-                          placeholder="Titulo da task"
-                          value={item.title}
-                          onChange={e => updateTaskItem(idx, 'title', e.target.value)}
-                          style={{ padding: '10px 14px', background: 'rgba(10,10,10,0.8)', border: '1px solid var(--border-default)', borderRadius: 6 }}
-                        />
-                        <select
-                          className="sigma-input"
-                          value={item.priority}
-                          onChange={e => updateTaskItem(idx, 'priority', e.target.value)}
-                          style={{ padding: '10px 14px', background: 'rgba(10,10,10,0.8)', border: '1px solid var(--border-default)', borderRadius: 6 }}
-                        >
-                          <option value="baixa">Baixa</option>
-                          <option value="normal">Normal</option>
-                          <option value="alta">Alta</option>
-                          <option value="urgente">Urgente</option>
-                        </select>
-                        <input
-                          className="sigma-input"
-                          type="number"
-                          placeholder="Dias"
-                          value={item.due_days_offset}
-                          onChange={e => updateTaskItem(idx, 'due_days_offset', parseInt(e.target.value) || 1)}
-                          min={1}
-                          title="Prazo em dias apos aplicacao"
-                          style={{ padding: '10px 14px', background: 'rgba(10,10,10,0.8)', border: '1px solid var(--border-default)', borderRadius: 6 }}
-                        />
-                        <button className={styles.removeBtn} onClick={() => removeTaskItem(idx)} title="Remover">
-                          <IconX size={12} />
-                        </button>
+                      <div key={idx} className={styles.taskBlock}>
+                        <div className={styles.taskBlockHeader}>
+                          <span className={styles.taskNumber}>{String(idx + 1).padStart(2, '0')}</span>
+                          <input
+                            className={styles.taskInputTitle}
+                            placeholder="Título da tarefa"
+                            value={item.title}
+                            onChange={e => updateTaskItem(idx, 'title', e.target.value)}
+                          />
+                          <select
+                            className={styles.priorityChip}
+                            value={item.priority}
+                            onChange={e => updateTaskItem(idx, 'priority', e.target.value)}
+                            title="Prioridade"
+                          >
+                            <option value="baixa">Baixa</option>
+                            <option value="normal">Normal</option>
+                            <option value="alta">Alta</option>
+                            <option value="urgente">Urgente</option>
+                          </select>
+                          <button
+                            type="button"
+                            className={styles.removeBtn}
+                            onClick={() => removeTaskItem(idx)}
+                            title="Remover tarefa"
+                          >
+                            <IconX size={13} />
+                          </button>
+                        </div>
+
+                        {/* Subtarefas */}
+                        <div className={styles.subSection}>
+                          <div className={styles.subSectionLabel}>
+                            <span className={styles.subSectionLabelDot} />
+                            Subtarefas
+                          </div>
+
+                          {(item.subtasks || []).map((sub, sIdx) => (
+                            <div key={sIdx} className={styles.subRow}>
+                              <span className={styles.subDot} />
+                              <input
+                                className={styles.subInput}
+                                value={sub.title}
+                                onChange={e => updateSubtaskInTemplate(idx, sIdx, e.target.value)}
+                                placeholder="Descreva a subtarefa..."
+                              />
+                              <button
+                                type="button"
+                                className={styles.subRemoveBtn}
+                                onClick={() => removeSubtaskFromTemplate(idx, sIdx)}
+                                title="Remover"
+                              >
+                                <IconX size={10} />
+                              </button>
+                            </div>
+                          ))}
+
+                          <button
+                            type="button"
+                            className={styles.subAddBtn}
+                            onClick={() => addSubtaskToTemplate(idx)}
+                          >
+                            <IconPlus size={9} /> Subtarefa
+                          </button>
+                        </div>
                       </div>
                     ))}
-                    <button className={styles.addTaskBtn} onClick={addTaskItem}>
-                      + Adicionar Task
+                    <button type="button" className={styles.addTaskBtn} onClick={addTaskItem}>
+                      <IconPlus size={11} /> Adicionar Tarefa
                     </button>
                   </div>
                 </div>

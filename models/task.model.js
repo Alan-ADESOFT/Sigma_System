@@ -53,10 +53,18 @@ async function getTasksByTenant(tenantId, filters = {}) {
     SELECT t.*,
            tc.name  AS category_name,
            tc.color AS category_color,
-           tn.name  AS assigned_to_name
+           tn.name  AS assigned_to_name,
+           mc.company_name AS client_name,
+           (SELECT COUNT(*)::int FROM task_comments c WHERE c.task_id = t.id) AS comment_count,
+           EXISTS(
+             SELECT 1 FROM task_dependencies td
+              JOIN client_tasks dep ON dep.id = td.depends_on_id
+             WHERE td.task_id = t.id AND dep.status != 'done'
+           ) AS has_pending_deps
       FROM client_tasks t
-      LEFT JOIN task_categories tc ON tc.id = t.category_id
-      LEFT JOIN tenants tn         ON tn.id = t.assigned_to
+      LEFT JOIN task_categories tc  ON tc.id = t.category_id
+      LEFT JOIN tenants tn          ON tn.id = t.assigned_to
+      LEFT JOIN marketing_clients mc ON mc.id = t.client_id
      WHERE ${conditions.join(' AND ')}
      ORDER BY t.due_date ASC NULLS LAST, t.created_at DESC`;
 
@@ -70,7 +78,13 @@ async function getTasksByClient(clientId, tenantId) {
     `SELECT t.*,
             tc.name  AS category_name,
             tc.color AS category_color,
-            tn.name  AS assigned_to_name
+            tn.name  AS assigned_to_name,
+            (SELECT COUNT(*)::int FROM task_comments c WHERE c.task_id = t.id) AS comment_count,
+            EXISTS(
+              SELECT 1 FROM task_dependencies td
+               JOIN client_tasks dep ON dep.id = td.depends_on_id
+              WHERE td.task_id = t.id AND dep.status != 'done'
+            ) AS has_pending_deps
        FROM client_tasks t
        LEFT JOIN task_categories tc ON tc.id = t.category_id
        LEFT JOIN tenants tn         ON tn.id = t.assigned_to
@@ -82,24 +96,38 @@ async function getTasksByClient(clientId, tenantId) {
 
 // ─── Create task ───────────────────────────────────────────────────────────
 
+function normalizeSubtasks(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .filter((s) => s && (s.title || s.text))
+    .map((s, i) => ({
+      id: s.id || `sub_${Date.now()}_${i}`,
+      title: String(s.title || s.text || '').trim(),
+      done: Boolean(s.done),
+    }));
+}
+
 async function createTask(data, tenantId) {
   const {
     title, description, client_id, assigned_to,
     priority, due_date, status, category_id,
-    estimated_hours, created_by,
+    estimated_hours, created_by, subtasks, subtasks_required,
   } = data;
+
+  const subtasksJson = JSON.stringify(normalizeSubtasks(subtasks));
 
   const task = await queryOne(
     `INSERT INTO client_tasks
        (tenant_id, title, description, client_id, assigned_to,
-        priority, due_date, status, category_id, estimated_hours, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        priority, due_date, status, category_id, estimated_hours, created_by, subtasks, subtasks_required)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13)
      RETURNING *`,
     [
       tenantId, title, description || null, client_id || null,
       assigned_to || null, priority || 'normal', due_date || null,
       status || 'pending', category_id || null,
-      estimated_hours || null, created_by || null,
+      estimated_hours || null, created_by || null, subtasksJson,
+      Boolean(subtasks_required),
     ]
   );
 
@@ -130,18 +158,25 @@ async function updateTask(id, data, actorId, tenantId) {
     else if (existing.status === 'done') done = false;
   }
 
+  // Subtasks update — only if explicitly provided
+  const subtasksProvided = data.subtasks !== undefined;
+  const subtasksJson = subtasksProvided ? JSON.stringify(normalizeSubtasks(data.subtasks)) : null;
+  const subtasksReqProvided = data.subtasks_required !== undefined;
+
   const updated = await queryOne(
     `UPDATE client_tasks
-        SET title           = COALESCE($3, title),
-            description     = COALESCE($4, description),
-            client_id       = COALESCE($5, client_id),
-            assigned_to     = COALESCE($6, assigned_to),
-            priority        = COALESCE($7, priority),
-            due_date        = COALESCE($8, due_date),
-            status          = COALESCE($9, status),
-            category_id     = COALESCE($10, category_id),
-            estimated_hours = COALESCE($11, estimated_hours),
-            done            = $12
+        SET title             = COALESCE($3, title),
+            description       = COALESCE($4, description),
+            client_id         = COALESCE($5, client_id),
+            assigned_to       = COALESCE($6, assigned_to),
+            priority          = COALESCE($7, priority),
+            due_date          = COALESCE($8, due_date),
+            status            = COALESCE($9, status),
+            category_id       = COALESCE($10, category_id),
+            estimated_hours   = COALESCE($11, estimated_hours),
+            done              = $12,
+            subtasks          = COALESCE($13::jsonb, subtasks),
+            subtasks_required = COALESCE($14, subtasks_required)
       WHERE id = $1 AND tenant_id = $2
       RETURNING *`,
     [
@@ -150,7 +185,8 @@ async function updateTask(id, data, actorId, tenantId) {
       data.client_id || null, data.assigned_to || null,
       data.priority || null, data.due_date || null,
       data.status || null, data.category_id || null,
-      data.estimated_hours || null, done,
+      data.estimated_hours || null, done, subtasksJson,
+      subtasksReqProvided ? Boolean(data.subtasks_required) : null,
     ]
   );
 

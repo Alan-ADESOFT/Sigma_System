@@ -897,6 +897,8 @@ CREATE INDEX IF NOT EXISTS idx_task_categories_tenant ON task_categories(tenant_
 ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS status          TEXT NOT NULL DEFAULT 'pending';
 ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS category_id     TEXT;
 ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS estimated_hours NUMERIC(5,2);
+ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS subtasks        JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS subtasks_required BOOLEAN NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS idx_client_tasks_status   ON client_tasks(tenant_id, status);
 CREATE INDEX IF NOT EXISTS idx_client_tasks_category ON client_tasks(category_id);
 
@@ -1008,6 +1010,32 @@ ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS whatsapp_group_id   TEXT;
 ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS whatsapp_group_name TEXT;
 
 -- ============================================================
+-- 42. TASK_RECURRENCES (tasks recorrentes — geram tasks reais por cron)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS task_recurrences (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    title           TEXT NOT NULL,
+    description     TEXT,
+    priority        TEXT NOT NULL DEFAULT 'normal',
+    category_id     TEXT REFERENCES task_categories(id) ON DELETE SET NULL,
+    assigned_to     TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    client_id       TEXT REFERENCES marketing_clients(id) ON DELETE SET NULL,
+    frequency       TEXT NOT NULL DEFAULT 'weekly', -- daily | weekly | monthly
+    weekday         INTEGER, -- 0..6 (apenas se frequency=weekly)
+    day_of_month    INTEGER, -- 1..31 (apenas se frequency=monthly)
+    is_active       BOOLEAN NOT NULL DEFAULT true,
+    last_run_at     DATE,
+    created_by      TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE task_recurrences ADD COLUMN IF NOT EXISTS subtasks          JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE task_recurrences ADD COLUMN IF NOT EXISTS subtasks_required BOOLEAN NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS idx_task_recurrences_tenant ON task_recurrences(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_task_recurrences_active ON task_recurrences(is_active);
+
+-- ============================================================
 -- CLEANUP (tabelas descontinuadas)
 -- ============================================================
 DROP TABLE IF EXISTS stage_quality_scores;
@@ -1037,6 +1065,7 @@ BEGIN
         'client_form_summaries',
         'instagram_accounts','instagram_scheduled_posts',
         'task_comments','meetings','task_templates','task_bot_config',
+        'task_recurrences',
         'finance_categories'
     ])
     LOOP
