@@ -49,7 +49,7 @@ const NAV_SECTIONS = [
   {
     category: 'PAINEL',
     items: [
-      { href: '/dashboard',                  label: 'Visão Geral',              tag: '01', icon: 'home'      },
+      { href: '/dashboard/overview',         label: 'Visão Geral',            tag: '01', icon: 'eye'       },
     ],
   },
   {
@@ -61,50 +61,52 @@ const NAV_SECTIONS = [
   {
     category: 'ORGANIZAÇÃO',
     items: [
-      { href: '/dashboard/tasks',               label: 'Tarefas',               tag: '03', icon: 'clipboard' },
-      { href: '/dashboard/meetings',             label: 'Calendário',            tag: '04', icon: 'calendar'  },
-      { href: '/dashboard/task-automation',      label: 'Automação',             tag: '05', icon: 'zap'       },
+      { href: '/dashboard/productivity',         label: 'Produtividade',         tag: '03', icon: 'barChart'  },
+      { href: '/dashboard/tasks',                label: 'Tarefas',               tag: '04', icon: 'clipboard' },
+      { href: '/dashboard/meetings',             label: 'Calendário',            tag: '05', icon: 'calendar'  },
+      { href: '/dashboard/task-automation',      label: 'Automação',             tag: '06', icon: 'zap'       },
     ],
   },
   {
     category: 'DADOS',
     items: [
-      { href: '/dashboard/clients',          label: 'Clientes',               tag: '06', icon: 'users'     },
-      { href: '/dashboard/database',         label: 'Base de Dados',          tag: '07', icon: 'database'  },
+      { href: '/dashboard/clients',          label: 'Clientes',               tag: '07', icon: 'users'     },
+      { href: '/dashboard/database',         label: 'Base de Dados',          tag: '08', icon: 'database'  },
+      { href: '/dashboard/indicacoes',       label: 'Indicações',             tag: '09', icon: 'share'    },
     ],
   },
   {
     category: 'AGENTES DE IA',
     items: [
-      { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '08', icon: 'zap'       },
-      { href: '/dashboard/jarvis',           label: 'J.A.R.V.I.S',           tag: '09', icon: 'bot'       },
-      { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '10', icon: 'edit'      },
+      { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '10', icon: 'zap'       },
+      { href: '/dashboard/jarvis',           label: 'J.A.R.V.I.S',           tag: '11', icon: 'bot'       },
+      { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '12', icon: 'edit'      },
     ],
   },
   {
     category: 'SOCIAL MEDIA',
     items: [
-      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '11', icon: 'barChart'  },
-      { href: '/dashboard/content-plan',     label: 'Planejamento',           tag: '12', icon: 'list'      },
-      { href: '/dashboard/publish',          label: 'Publicar Agora',         tag: '13', icon: 'send'      },
+      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '13', icon: 'barChart'  },
+      { href: '/dashboard/content-plan',     label: 'Planejamento',           tag: '14', icon: 'list'      },
+      { href: '/dashboard/publish',          label: 'Publicar Agora',         tag: '15', icon: 'send'      },
     ],
   },
   {
     category: 'TRÁFEGO',
     items: [
-      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '14', icon: 'megaphone' },
+      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '16', icon: 'megaphone' },
     ],
   },
   {
     category: 'SISTEMA',
     items: [
-      { href: '/dashboard/onboarding-config',    label: 'Config. Onboarding',    tag: '15', icon: 'calendar'  },
-      { href: '/dashboard/settings/pipeline',     label: 'Config. Pipeline',      tag: '16', icon: 'cpu'       },
-      { href: '/dashboard/settings/copy',         label: 'Config. Copy',          tag: '17', icon: 'edit2'     },
-      { href: '/dashboard/settings/prompt-library',  label: 'Biblioteca de Prompts', tag: '18', icon: 'book'      },
-      { href: '/dashboard/settings/jarvis',          label: 'Config. Jarvis',        tag: '19', icon: 'bot'       },
-      { href: '/dashboard/settings/tasks',            label: 'Config. Tarefas',       tag: '20', icon: 'settings'  },
-      { href: '/dashboard/settings/financeiro',       label: 'Config. Financeiro',    tag: '21', icon: 'chart',     adminOnly: true },
+      { href: '/dashboard/onboarding-config',    label: 'Config. Onboarding',    tag: '17', icon: 'calendar'  },
+      { href: '/dashboard/settings/pipeline',     label: 'Config. Pipeline',      tag: '18', icon: 'cpu'       },
+      { href: '/dashboard/settings/copy',         label: 'Config. Copy',          tag: '19', icon: 'edit2'     },
+      { href: '/dashboard/settings/prompt-library',  label: 'Biblioteca de Prompts', tag: '20', icon: 'book'      },
+      { href: '/dashboard/settings/jarvis',          label: 'Config. Jarvis',        tag: '21', icon: 'bot'       },
+      { href: '/dashboard/settings/tasks',            label: 'Config. Tarefas',       tag: '22', icon: 'settings'  },
+      { href: '/dashboard/settings/financeiro',       label: 'Config. Financeiro',    tag: '23', icon: 'chart',     adminOnly: true },
     ],
   },
 ];
@@ -117,6 +119,12 @@ const ICONS = {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
       <polyline points="9,22 9,12 15,12 15,22" />
+    </svg>
+  ),
+  eye: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
     </svg>
   ),
   calendar: (
@@ -194,6 +202,15 @@ const ICONS = {
       <circle cx="9" cy="7" r="4" />
       <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
+  share: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
     </svg>
   ),
   brain: (

@@ -1,0 +1,581 @@
+/* ============================================================
+   overview.module.css — Página Visão Geral (Painel pessoal)
+   Estilo SIGMA terminal/HUD. Tokens em globals.css.
+   ============================================================ */
+
+.pageContainer {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* ── Cabeçalho de seção ─────────────────────────────────────── */
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.sectionLine {
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 0, 51, 0.18);
+}
+
+.sectionLineMuted {
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ── KPIs ───────────────────────────────────────────────────── */
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+
+@media (min-width: 640px) {
+  .kpiGrid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (min-width: 1024px) {
+  .kpiGrid { grid-template-columns: repeat(5, 1fr); }
+}
+
+.kpiCard {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+  overflow: hidden;
+}
+
+.kpiLabel {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.kpiValue {
+  font-family: var(--font-mono);
+  font-size: 1.45rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.kpiSub {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  letter-spacing: 0.04em;
+}
+
+.kpiSuccess { color: var(--success); }
+.kpiInfo    { color: var(--info); }
+.kpiWarning { color: var(--warning); }
+.kpiError   { color: var(--error); }
+
+@keyframes kpiPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 26, 77, 0); }
+  50%      { box-shadow: 0 0 18px rgba(255, 26, 77, 0.18); }
+}
+
+.kpiPulse { animation: kpiPulse 2.4s ease-in-out infinite; }
+
+/* ── Ações rápidas ──────────────────────────────────────────── */
+
+.quickActions {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+
+@media (min-width: 768px) {
+  .quickActions { grid-template-columns: repeat(3, 1fr); }
+}
+
+.quickActionCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  cursor: pointer;
+  text-align: left;
+  background: linear-gradient(145deg, rgba(17, 17, 17, 0.95), rgba(10, 10, 10, 0.98));
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.quickActionCard:hover {
+  border-color: rgba(255, 0, 51, 0.22);
+  color: var(--text-primary);
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 24px rgba(255, 0, 51, 0.07),
+    0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.quickActionIcon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: rgba(255, 0, 51, 0.08);
+  border: 1px solid rgba(255, 0, 51, 0.2);
+  color: #ff1a4d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.quickActionContent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.quickActionTitle {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+
+.quickActionSub {
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* ── Layout em duas colunas ─────────────────────────────────── */
+
+.columnsRow {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+@media (min-width: 1024px) {
+  .columnsRow { flex-direction: row; }
+  .columnLeft  { flex: 3; min-width: 0; }
+  .columnRight { flex: 2; min-width: 0; }
+}
+
+.columnHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 0 2px;
+}
+
+.columnHeaderTitle {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.columnHeaderCount {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+}
+
+.columnList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── Card de tarefa ─────────────────────────────────────────── */
+
+.taskCard {
+  padding: 13px 15px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.taskCard:hover {
+  border-color: rgba(255, 0, 51, 0.16);
+  transform: translateY(-1px);
+  box-shadow: 0 0 18px rgba(255, 0, 51, 0.05), 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.taskCardOverdue {
+  border-color: rgba(255, 26, 77, 0.22) !important;
+}
+
+.taskCardDone .taskTitle {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.taskCardDone {
+  opacity: 0.55;
+}
+
+.taskCardBlocked {
+  opacity: 0.5;
+  filter: grayscale(0.3);
+  cursor: not-allowed;
+}
+
+.taskHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.taskTitle {
+  font-family: var(--font-sans);
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.35;
+  flex: 1;
+  min-width: 0;
+}
+
+.taskMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.priorityBadge {
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.priorityUrgente {
+  background: rgba(255, 26, 77, 0.12);
+  border: 1px solid rgba(255, 26, 77, 0.3);
+  color: #ff3355;
+}
+.priorityAlta {
+  background: rgba(249, 115, 22, 0.12);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  color: #fb923c;
+}
+.priorityNormal {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: #60a5fa;
+}
+.priorityBaixa {
+  background: rgba(82, 82, 82, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+}
+
+.categoryChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.categoryDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.subtasksInfo {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.blockedBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(82, 82, 82, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* ── Card de reunião ────────────────────────────────────────── */
+
+.meetingCard {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.meetingCard:hover {
+  border-color: rgba(59, 130, 246, 0.18);
+  transform: translateY(-1px);
+}
+
+.meetingHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.meetingTime {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--info);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.meetingTitle {
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+.meetingClient {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+.meetingFooter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.meetingLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--info);
+  text-decoration: none;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  transition: all 0.15s;
+}
+
+.meetingLink:hover {
+  background: rgba(59, 130, 246, 0.16);
+}
+
+/* ── Empty state ────────────────────────────────────────────── */
+
+.emptyState {
+  text-align: center;
+  padding: 36px 24px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+}
+
+.emptyStateIcon {
+  display: block;
+  margin: 0 auto 12px;
+  opacity: 0.4;
+}
+
+/* ── Tabela de últimas tasks ────────────────────────────────── */
+
+.recentSection {
+  margin-top: 14px;
+}
+
+.recentTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+}
+
+.recentTable thead th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(10, 10, 10, 0.45);
+}
+
+.recentTable tbody td {
+  padding: 11px 14px;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  vertical-align: middle;
+}
+
+.recentRow {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.recentRow:hover {
+  background: rgba(255, 0, 51, 0.03);
+}
+
+.recentRow:hover td {
+  color: var(--text-primary);
+}
+
+.recentTitle {
+  font-weight: 600;
+  color: var(--text-primary);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recentClient {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+}
+
+.recentDate {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.statusPending {
+  background: rgba(115, 115, 115, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+}
+.statusInProgress {
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: #60a5fa;
+}
+.statusDone {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  color: #4ade80;
+}
+.statusOverdue {
+  background: rgba(255, 26, 77, 0.12);
+  border: 1px solid rgba(255, 26, 77, 0.28);
+  color: #ff3355;
+}
+
+/* ── Section block (glass-card wrapper) ─────────────────────── */
+
+.sectionBlock {
+  padding: 18px 20px;
+}
+
+/* ── Stagger entry ──────────────────────────────────────────── */
+
+.stagger > * {
+  animation: fadeInUp 0.45s ease-out both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger > *:nth-child(2) { animation-delay: 0.10s; }
+.stagger > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger > *:nth-child(4) { animation-delay: 0.20s; }
+.stagger > *:nth-child(5) { animation-delay: 0.25s; }
+.stagger > *:nth-child(6) { animation-delay: 0.30s; }
+.stagger > *:nth-child(7) { animation-delay: 0.35s; }
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+/* ── Skeleton ───────────────────────────────────────────────── */
+
+.skel {
+  background: linear-gradient(
+    90deg,
+    rgba(17, 17, 17, 0.9) 0%,
+    rgba(26, 26, 26, 0.9) 40%,
+    rgba(255, 0, 51, 0.06) 50%,
+    rgba(26, 26, 26, 0.9) 60%,
+    rgba(17, 17, 17, 0.9) 100%
+  );
+  background-size: 200% 100%;
+  animation: skelShimmer 1.6s linear infinite;
+  border-radius: 4px;
+}
+
+@keyframes skelShimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0;  }
+}
