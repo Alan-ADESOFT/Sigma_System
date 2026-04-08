@@ -94,20 +94,32 @@ function AIStructureModal({ onClose, onGenerated }) {
   const inputS = { width: '100%', boxSizing: 'border-box', padding: '8px 12px', background: 'rgba(10,10,10,0.6)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, color: 'var(--text-primary)', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', outline: 'none' };
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 560, padding: '28px 32px', borderRadius: 16, background: 'linear-gradient(145deg, rgba(14,14,14,0.99), rgba(8,8,8,0.99))', border: '1px solid rgba(255,255,255,0.06)', borderTop: '2px solid var(--action-primary)' }}>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(255,0,51,0.08)', border: '1px solid rgba(255,0,51,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-300)" strokeWidth="1.5" strokeLinecap="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+    <div className="set-modal-overlay" onClick={onClose}>
+      <div className="set-modal" onClick={e => e.stopPropagation()} style={{ width: 'min(580px, 100%)' }}>
+        <div className="set-modal-header">
+          <div className="set-modal-header-title-box">
+            <div className="set-modal-header-badge">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+              </svg>
+            </div>
+            <div>
+              <h2 className="set-modal-title">Criar Estrutura com IA</h2>
+              <div className="set-modal-subtitle">
+                Descreva o tipo de copy e a IA gera o prompt base + perguntas-chave automaticamente.
+              </div>
+            </div>
           </div>
-          <div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>Criar Estrutura com IA</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', color: 'var(--text-muted)' }}>Descreva o tipo de copy e a IA gera o prompt + perguntas-chave</div>
-          </div>
+          <button className="set-modal-close-btn" onClick={onClose}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
 
-        <div style={{ marginBottom: 12 }}>
+        <div className="set-modal-body">
+
+        <div style={{ marginBottom: 0 }}>
           <label style={{ fontFamily: 'var(--font-mono)', fontSize: '0.5rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, display: 'block' }}>O que voce precisa gerar?</label>
           <textarea
             value={description} onChange={e => setDescription(e.target.value)}
@@ -154,9 +166,12 @@ function AIStructureModal({ onClose, onGenerated }) {
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={onClose} style={{ flex: 1, padding: '10px 0', borderRadius: 8, cursor: 'pointer', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 600 }}>Cancelar</button>
-          <button onClick={handleGenerate} disabled={generating || !description.trim()} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: 'none', cursor: generating || !description.trim() ? 'not-allowed' : 'pointer', background: generating || !description.trim() ? 'rgba(255,0,51,0.15)' : 'linear-gradient(135deg, var(--action-primary), var(--brand-600))', color: '#fff', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: 700, opacity: generating || !description.trim() ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+        </div>
+        {/* fim set-modal-body */}
+
+        <div className="set-modal-footer">
+          <button onClick={onClose} className="btn btn-secondary">Cancelar</button>
+          <button onClick={handleGenerate} disabled={generating || !description.trim()} className="sigma-btn-primary">
             {generating ? (
               <><div style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Gerando...</>
             ) : (
@@ -297,19 +312,27 @@ export default function CopySettingsPage() {
       <div className={styles.pageContainer}>
         <div style={{ marginBottom: 28 }}>
           <h1 className="page-title">Config. Copy</h1>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: 4 }}>
-            Modelo de geracao e estruturas de copy
+          <p className="page-subtitle">
+            Modelo de geração e estruturas de copy
           </p>
         </div>
 
         {/* ── Seção 1: Modelo de Geração ── */}
-        <div className={`glass-card ${styles.sectionCard}`}>
-          <div className={styles.sectionHeader}>
-            <div className={styles.sectionTitle}>Modelo de Geracao</div>
-            <div className={styles.sectionSubtitle}>IA usada para criar copies, legendas e roteiros</div>
+        <div className="set-section-card">
+          <div className="set-section-header">
+            <div className="set-section-header-left">
+              <div className="set-section-title-row">
+                <span className="set-section-dot" />
+                <span className="set-section-title-text">Modelo de Geração</span>
+                <span className="set-section-line" />
+              </div>
+              <div className="set-section-description">
+                IA usada para criar copies, legendas e roteiros.
+              </div>
+            </div>
           </div>
           <div className={styles.modelRow}>
-            <div className={styles.modelLabel}>Modelo padrao</div>
+            <div className={styles.modelLabel}>Modelo padrão</div>
             <select className={styles.modelSelect} value={copyModel} onChange={e => saveModel(e.target.value)}>
               {MODEL_OPTIONS.map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -319,10 +342,18 @@ export default function CopySettingsPage() {
         </div>
 
         {/* ── Seção 2: Estruturas de Copy (completa) ── */}
-        <div className={`glass-card ${styles.sectionCard}`}>
-          <div className={styles.sectionHeader}>
-            <div className={styles.sectionTitle}>Estruturas Cadastradas</div>
-            <div className={styles.sectionSubtitle}>Templates usados no gerador de copy</div>
+        <div className="set-section-card">
+          <div className="set-section-header">
+            <div className="set-section-header-left">
+              <div className="set-section-title-row">
+                <span className="set-section-dot" />
+                <span className="set-section-title-text">Estruturas Cadastradas</span>
+                <span className="set-section-line" />
+              </div>
+              <div className="set-section-description">
+                Templates usados pelo gerador de copy. Cada estrutura tem prompt base + perguntas-chave.
+              </div>
+            </div>
           </div>
 
           {structures.map(s => (
@@ -385,24 +416,47 @@ export default function CopySettingsPage() {
 
         {/* Modal de edição/criação split-pane */}
         {editing && (
-          <div onClick={() => setEditing(null)} style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-            <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 1000, maxHeight: '88vh', borderRadius: 16, background: 'linear-gradient(145deg, rgba(14,14,14,0.99), rgba(8,8,8,0.99))', border: '1px solid rgba(255,255,255,0.06)', borderTop: '2px solid var(--action-primary)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div className="set-modal-overlay" onClick={() => setEditing(null)}>
+            <div className="set-modal set-modal-wide" onClick={e => e.stopPropagation()} style={{ height: 'min(720px, 88vh)' }}>
 
-              {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)', flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)' }}>{editing === 'new' ? 'Nova Estrutura' : form.name || 'Editar'}</span>
-                  {editing !== 'new' && (() => { const s = structures.find(x => x.id === editing); return s ? <span style={badgeStyle(s.is_default ? 'rgba(59,130,246,0.08)' : 'rgba(34,197,94,0.08)', s.is_default ? '#3b82f6' : '#22c55e')}>{s.is_default ? 'PADRAO' : 'CUSTOM'}</span> : null; })()}
-                  {form.questions?.length > 0 && <span style={badgeStyle('rgba(249,115,22,0.08)', '#f97316')}>{form.questions.length} pergunta(s)</span>}
+              {/* Header padronizado */}
+              <div className="set-modal-header">
+                <div className="set-modal-header-title-box">
+                  <div className="set-modal-header-badge">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="9" y1="13" x2="15" y2="13" />
+                      <line x1="9" y1="17" x2="13" y2="17" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="set-modal-title">
+                      {editing === 'new' ? 'Nova Estrutura' : 'Editar Estrutura'}
+                    </h2>
+                    <div className="set-modal-subtitle">
+                      Configure o prompt base e as perguntas-chave preenchidas pelo operador.
+                    </div>
+                    {(editing !== 'new' || (form.questions?.length > 0)) && (
+                      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                        {editing !== 'new' && (() => {
+                          const s = structures.find(x => x.id === editing);
+                          return s ? <span style={badgeStyle(s.is_default ? 'rgba(59,130,246,0.08)' : 'rgba(34,197,94,0.08)', s.is_default ? '#3b82f6' : '#22c55e')}>{s.is_default ? 'PADRÃO' : 'CUSTOM'}</span> : null;
+                        })()}
+                        {form.questions?.length > 0 && <span style={badgeStyle('rgba(249,115,22,0.08)', '#f97316')}>{form.questions.length} pergunta{form.questions.length !== 1 ? 's' : ''}</span>}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => setEditing(null)} style={btnSecondary}>Cancelar</button>
-                  <button onClick={handleSaveStructure} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.5 : 1 }}>{saving ? 'Salvando...' : 'Salvar'}</button>
-                </div>
+                <button className="set-modal-close-btn" onClick={() => setEditing(null)}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
               </div>
 
               {/* Body split */}
-              <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
                 {/* Esquerda: campos */}
                 <div style={{ flex: '0 0 55%', padding: '20px 24px', overflowY: 'auto', borderRight: '1px solid rgba(255,255,255,0.04)', display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div>
@@ -449,6 +503,14 @@ export default function CopySettingsPage() {
                     Adicionar pergunta
                   </button>
                 </div>
+              </div>
+
+              {/* Footer padronizado */}
+              <div className="set-modal-footer">
+                <button onClick={() => setEditing(null)} className="btn btn-secondary">Cancelar</button>
+                <button onClick={handleSaveStructure} disabled={saving} className="sigma-btn-primary">
+                  {saving ? 'Salvando...' : editing === 'new' ? 'Criar Estrutura' : 'Salvar'}
+                </button>
               </div>
             </div>
           </div>

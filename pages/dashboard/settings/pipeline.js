@@ -163,16 +163,24 @@ export default function PipelineSettingsPage() {
       <div className={styles.pageContainer}>
         <div style={{ marginBottom: 28 }}>
           <h1 className="page-title">Config. Pipeline</h1>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: 4 }}>
-            Modelos de IA, fallback automatico e prompts dos agentes
+          <p className="page-subtitle">
+            Modelos de IA, fallback automático e prompts dos agentes
           </p>
         </div>
 
         {/* ── Seção 1: Modelos por Nível ── */}
-        <div className={`glass-card ${styles.sectionCard}`}>
-          <div className={styles.sectionHeader}>
-            <div className={styles.sectionTitle}>Modelos do Pipeline</div>
-            <div className={styles.sectionSubtitle}>Escolha qual IA roda em cada etapa do pipeline</div>
+        <div className="set-section-card">
+          <div className="set-section-header">
+            <div className="set-section-header-left">
+              <div className="set-section-title-row">
+                <span className="set-section-dot" />
+                <span className="set-section-title-text">Modelos do Pipeline</span>
+                <span className="set-section-line" />
+              </div>
+              <div className="set-section-description">
+                Escolha qual modelo de IA roda em cada etapa do pipeline.
+              </div>
+            </div>
           </div>
 
           {MODEL_LEVELS.map(level => {
@@ -201,10 +209,18 @@ export default function PipelineSettingsPage() {
         </div>
 
         {/* ── Seção 2: Fallback Automático ── */}
-        <div className={`glass-card ${styles.sectionCard}`}>
-          <div className={styles.sectionHeader}>
-            <div className={styles.sectionTitle}>Fallback Automatico</div>
-            <div className={styles.sectionSubtitle}>Se o modelo principal falhar por cota ou token, tenta este modelo</div>
+        <div className="set-section-card">
+          <div className="set-section-header">
+            <div className="set-section-header-left">
+              <div className="set-section-title-row">
+                <span className="set-section-dot" />
+                <span className="set-section-title-text">Fallback Automático</span>
+                <span className="set-section-line" />
+              </div>
+              <div className="set-section-description">
+                Se o modelo principal falhar por cota ou token, o sistema tenta este modelo automaticamente.
+              </div>
+            </div>
           </div>
 
           <div className={styles.fallbackRow}>
@@ -244,10 +260,18 @@ export default function PipelineSettingsPage() {
         </div>
 
         {/* ── Seção 3: Prompts dos Agentes ── */}
-        <div className={`glass-card ${styles.sectionCard}`}>
-          <div className={styles.sectionHeader}>
-            <div className={styles.sectionTitle}>Prompts dos Agentes</div>
-            <div className={styles.sectionSubtitle}>Edite o prompt base de cada agente. Salvo aqui, sobrescreve o padrao do sistema.</div>
+        <div className="set-section-card">
+          <div className="set-section-header">
+            <div className="set-section-header-left">
+              <div className="set-section-title-row">
+                <span className="set-section-dot" />
+                <span className="set-section-title-text">Prompts dos Agentes</span>
+                <span className="set-section-line" />
+              </div>
+              <div className="set-section-description">
+                Edite o prompt base de cada agente. Salvar aqui sobrescreve o padrão do sistema.
+              </div>
+            </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

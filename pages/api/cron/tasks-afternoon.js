@@ -5,6 +5,11 @@
  */
 const { query } = require('../../../infra/db');
 const { sendText } = require('../../../infra/api/zapi');
+const {
+  resolveTemplate,
+  renderTemplate,
+  formatTaskList,
+} = require('../../../models/taskBotMessages');
 
 function getTodayBRT() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
@@ -55,16 +60,14 @@ export default async function handler(req, res) {
 
         if (pending.length === 0) continue;
 
-        const priorityEmoji = { urgente: '🔴', alta: '🟠', normal: '🔵', baixa: '⚪' };
-        let msg = `⏰ *Atenção, ${cfg.user_name}!*\n\n`;
-        msg += `Você ainda tem *${pending.length} task(s)* pendente(s) para hoje:\n\n`;
-
-        for (const t of pending) {
-          const pe = priorityEmoji[t.priority] || '🔵';
-          msg += `${pe} *${t.title}*\n`;
-        }
-
-        msg += `\nAinda dá tempo! 🚀`;
+        // Tarde reaproveita o template "overdue" — semanticamente é sobre tasks
+        // pendentes que precisam de ação. Variáveis: {nome}, {tarefas}, {count}.
+        const template = await resolveTemplate(cfg, tenant.id, 'overdue');
+        const msg = renderTemplate(template, {
+          nome: cfg.user_name || 'usuário',
+          tarefas: formatTaskList(pending),
+          count: pending.length,
+        });
 
         try {
           await sendText(cfg.phone, msg);

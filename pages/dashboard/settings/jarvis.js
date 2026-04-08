@@ -116,8 +116,8 @@ export default function JarvisSettingsPage() {
         {/* HEADER */}
         <div className={styles.pageHeader}>
           <div className={styles.titleBlock}>
-            <h1 className={styles.pageTitle}>J.A.R.V.I.S</h1>
-            <span className={styles.pageSubtitle}>Configure o assistente de inteligência artificial da Sigma</span>
+            <h1 className="page-title">J.A.R.V.I.S</h1>
+            <p className="page-subtitle">Configure o assistente de inteligência artificial da Sigma</p>
           </div>
           <div className={styles.statusBadge}>
             <span className={`${styles.statusDot} ${!isOnline ? styles.statusDotOffline : ''}`} />
@@ -128,10 +128,18 @@ export default function JarvisSettingsPage() {
         </div>
 
         {/* SEÇÃO 1 — MODELO */}
-        <div className={`glass-card ${styles.sectionCard}`}>
-          <div className={styles.sectionHeader}>
-            <div className={styles.sectionTitle}>01 · Modelo de Inteligência</div>
-            <div className={styles.sectionSubtitle}>Qual modelo de IA o Jarvis vai usar para entender seus comandos</div>
+        <div className="set-section-card">
+          <div className="set-section-header">
+            <div className="set-section-header-left">
+              <div className="set-section-title-row">
+                <span className="set-section-dot" />
+                <span className="set-section-title-text">Modelo de Inteligência</span>
+                <span className="set-section-line" />
+              </div>
+              <div className="set-section-description">
+                Qual modelo de IA o Jarvis vai usar para entender seus comandos.
+              </div>
+            </div>
           </div>
           <div className={styles.fieldRow}>
             <select
@@ -147,10 +155,18 @@ export default function JarvisSettingsPage() {
         </div>
 
         {/* SEÇÃO 2 — VOZ */}
-        <div className={`glass-card ${styles.sectionCard}`}>
-          <div className={styles.sectionHeader}>
-            <div className={styles.sectionTitle}>02 · Voz do Assistente</div>
-            <div className={styles.sectionSubtitle}>Respostas por voz usando síntese de fala da ElevenLabs</div>
+        <div className="set-section-card">
+          <div className="set-section-header">
+            <div className="set-section-header-left">
+              <div className="set-section-title-row">
+                <span className="set-section-dot" />
+                <span className="set-section-title-text">Voz do Assistente</span>
+                <span className="set-section-line" />
+              </div>
+              <div className="set-section-description">
+                Respostas por voz usando síntese de fala da ElevenLabs.
+              </div>
+            </div>
           </div>
 
           <div className={styles.toggleRow}>
@@ -190,10 +206,18 @@ export default function JarvisSettingsPage() {
         </div>
 
         {/* SEÇÃO 3 — LIMITES */}
-        <div className={`glass-card ${styles.sectionCard}`}>
-          <div className={styles.sectionHeader}>
-            <div className={styles.sectionTitle}>03 · Limites Diários</div>
-            <div className={styles.sectionSubtitle}>Controla quantos comandos cada tipo de usuário pode fazer por dia. Reseta à meia-noite.</div>
+        <div className="set-section-card">
+          <div className="set-section-header">
+            <div className="set-section-header-left">
+              <div className="set-section-title-row">
+                <span className="set-section-dot" />
+                <span className="set-section-title-text">Limites Diários</span>
+                <span className="set-section-line" />
+              </div>
+              <div className="set-section-description">
+                Controla quantos comandos cada tipo de usuário pode fazer por dia. Reseta à meia-noite.
+              </div>
+            </div>
           </div>
 
           <div className={styles.inputRow}>
@@ -226,10 +250,18 @@ export default function JarvisSettingsPage() {
         </div>
 
         {/* SEÇÃO 4 — IDIOMA */}
-        <div className={`glass-card ${styles.sectionCard}`}>
-          <div className={styles.sectionHeader}>
-            <div className={styles.sectionTitle}>04 · Idioma Padrão</div>
-            <div className={styles.sectionSubtitle}>Idioma das respostas do Jarvis quando o usuário não especifica.</div>
+        <div className="set-section-card">
+          <div className="set-section-header">
+            <div className="set-section-header-left">
+              <div className="set-section-title-row">
+                <span className="set-section-dot" />
+                <span className="set-section-title-text">Idioma Padrão</span>
+                <span className="set-section-line" />
+              </div>
+              <div className="set-section-description">
+                Idioma das respostas do Jarvis quando o usuário não especifica.
+              </div>
+            </div>
           </div>
           <div className={styles.langToggle}>
             {['pt', 'en'].map(lang => (
@@ -245,10 +277,18 @@ export default function JarvisSettingsPage() {
         </div>
 
         {/* SEÇÃO 5 — FUNÇÕES */}
-        <div className={`glass-card ${styles.sectionCard}`}>
-          <div className={styles.sectionHeader}>
-            <div className={styles.sectionTitle}>05 · Funções Disponíveis</div>
-            <div className={styles.sectionSubtitle}>Ative ou desative cada capacidade do Jarvis. Por padrão, todas estão ativas.</div>
+        <div className="set-section-card">
+          <div className="set-section-header">
+            <div className="set-section-header-left">
+              <div className="set-section-title-row">
+                <span className="set-section-dot" />
+                <span className="set-section-title-text">Funções Disponíveis</span>
+                <span className="set-section-line" />
+              </div>
+              <div className="set-section-description">
+                Ative ou desative cada capacidade do Jarvis. Por padrão, todas estão ativas.
+              </div>
+            </div>
           </div>
 
           {Object.entries(groupedFns).map(([groupName, fns]) => {

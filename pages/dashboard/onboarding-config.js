@@ -105,8 +105,8 @@ export default function OnboardingConfigPage() {
 
   return (
     <DashboardLayout activeTab="onboarding-config">
-      <div style={{ padding: '24px 32px' }}>
-        <div className={styles.configHeader}>
+      <div>
+        <div style={{ marginBottom: 24 }}>
           <h1 className="page-title">Configuração do Onboarding</h1>
           <p className="page-subtitle">
             15 dias · 12 etapas com vídeo + perguntas, 3 dias de descanso.
@@ -117,7 +117,20 @@ export default function OnboardingConfigPage() {
         {loading && <div className="skeleton" style={{ height: 200 }} />}
 
         {!loading && (
-          <>
+          <div className="set-section-card">
+            <div className="set-section-header">
+              <div className="set-section-header-left">
+                <div className="set-section-title-row">
+                  <span className="set-section-dot" />
+                  <span className="set-section-title-text">Timeline da jornada</span>
+                  <span className="set-section-line" />
+                </div>
+                <div className="set-section-description">
+                  {timeline.length} célula{timeline.length !== 1 ? 's' : ''} configurada{timeline.length !== 1 ? 's' : ''}. Clique em qualquer card para editar.
+                </div>
+              </div>
+            </div>
+
             {/* Timeline em grid */}
             <div className={styles.configTimeline}>
               {timeline.map(cell => (
@@ -128,7 +141,7 @@ export default function OnboardingConfigPage() {
                 />
               ))}
             </div>
-          </>
+          </div>
         )}
 
         {/* Modal de edição de etapa */}
@@ -239,13 +252,31 @@ function StageEditModal({ stage, onClose, onSave }) {
   }
 
   return (
-    <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={styles.modalCard} style={{ maxWidth: 720 }}>
-        <button className={styles.modalClose} onClick={onClose}>×</button>
-        <h2 className={styles.modalTitle}>
-          Editar Etapa {stage.stageNumber}
-        </h2>
-        <p className={styles.modalSubtitle}>Dia {stage.dayRelease} da jornada</p>
+    <div className="set-modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="set-modal" style={{ width: 'min(760px, 100%)' }}>
+        <div className="set-modal-header">
+          <div className="set-modal-header-title-box">
+            <div className="set-modal-header-badge">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="23 7 16 12 23 17 23 7" />
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="set-modal-title">Editar Etapa {stage.stageNumber}</h2>
+              <div className="set-modal-subtitle">
+                Dia {stage.dayRelease} da jornada — vídeo, perguntas e mensagens.
+              </div>
+            </div>
+          </div>
+          <button className="set-modal-close-btn" onClick={onClose}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="set-modal-body">
 
         <div className={styles.modalSection}>
           <div className={styles.modalSectionLabel}>TÍTULO</div>
@@ -334,15 +365,17 @@ function StageEditModal({ stage, onClose, onSave }) {
           </button>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-          <button className={styles.advanceBtn} onClick={onClose} style={{ flex: 1 }}>
+        </div>
+        {/* fim set-modal-body */}
+
+        <div className="set-modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>
             Cancelar
           </button>
           <button
-            className={styles.submitBtn}
+            className="sigma-btn-primary"
             onClick={handleSave}
             disabled={saving}
-            style={{ flex: 1, marginTop: 0 }}
           >
             {saving ? 'Salvando...' : 'Salvar Etapa'}
           </button>
@@ -466,33 +499,49 @@ function RestDayEditModal({ rest, onClose, onSave }) {
   }
 
   return (
-    <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={styles.modalCard}>
-        <button className={styles.modalClose} onClick={onClose}>×</button>
-        <h2 className={styles.modalTitle}>Dia {rest.dayNumber} — Descanso</h2>
-        <p className={styles.modalSubtitle}>
-          Mensagem enviada via WhatsApp na manhã desse dia. Sem etapa, sem link.
-        </p>
-
-        <div className={styles.modalSection}>
-          <div className={styles.modalSectionLabel}>MENSAGEM</div>
-          <textarea
-            className={styles.textarea}
-            value={message}
-            onChange={e => setMessage(e.target.value)}
-            rows={6}
-          />
+    <div className="set-modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="set-modal" style={{ width: 'min(560px, 100%)' }}>
+        <div className="set-modal-header">
+          <div className="set-modal-header-title-box">
+            <div className="set-modal-header-badge">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="set-modal-title">Dia {rest.dayNumber} — Descanso</h2>
+              <div className="set-modal-subtitle">
+                Mensagem enviada via WhatsApp na manhã deste dia. Sem etapa, sem link.
+              </div>
+            </div>
+          </div>
+          <button className="set-modal-close-btn" onClick={onClose}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-          <button className={styles.advanceBtn} onClick={onClose} style={{ flex: 1 }}>
+        <div className="set-modal-body">
+          <div className={styles.modalSection}>
+            <div className={styles.modalSectionLabel}>MENSAGEM <span className="set-required">*</span></div>
+            <textarea
+              className={styles.textarea}
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              rows={6}
+            />
+          </div>
+        </div>
+
+        <div className="set-modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>
             Cancelar
           </button>
           <button
-            className={styles.submitBtn}
+            className="sigma-btn-primary"
             onClick={handleSave}
             disabled={saving || !message.trim()}
-            style={{ flex: 1, marginTop: 0 }}
           >
             {saving ? 'Salvando...' : 'Salvar Mensagem'}
           </button>

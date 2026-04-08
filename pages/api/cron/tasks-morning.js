@@ -6,6 +6,12 @@
  */
 const { query } = require('../../../infra/db');
 const { sendText } = require('../../../infra/api/zapi');
+const {
+  resolveTemplate,
+  renderTemplate,
+  formatTaskList,
+  formatMeetingList,
+} = require('../../../models/taskBotMessages');
 
 function getTodayBRT() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
@@ -71,31 +77,14 @@ export default async function handler(req, res) {
 
         if (tasks.length === 0 && meetings.length === 0) continue;
 
-        // Build message
-        const priorityEmoji = { urgente: '🔴', alta: '🟠', normal: '🔵', baixa: '⚪' };
-        let msg = `🌅 *Bom dia, ${cfg.user_name}!*\n\n`;
-
-        if (tasks.length > 0) {
-          msg += `📋 *Suas tarefas de hoje:*\n`;
-          for (const t of tasks) {
-            const cat = t.category_name ? ` — _${t.category_name}_` : '';
-            const pe = priorityEmoji[t.priority] || '🔵';
-            msg += `${pe} *${t.title}*${cat}\n`;
-          }
-          msg += '\n';
-        }
-
-        if (meetings.length > 0) {
-          msg += `📅 *Reuniões de hoje:*\n`;
-          for (const m of meetings) {
-            const time = m.start_time?.substring(0, 5) || '';
-            const client = m.client_name ? ` com ${m.client_name}` : '';
-            msg += `• *${m.title}* às *${time}*${client}\n`;
-          }
-          msg += '\n';
-        }
-
-        msg += 'Bora! 💪';
+        // Resolve template (per-user > tenant global > hardcoded) e renderiza variáveis
+        const template = await resolveTemplate(cfg, tenant.id, 'morning');
+        const msg = renderTemplate(template, {
+          nome: cfg.user_name || 'usuário',
+          tarefas: formatTaskList(tasks),
+          reunioes: formatMeetingList(meetings),
+          count: tasks.length,
+        });
 
         try {
           await sendText(cfg.phone, msg);

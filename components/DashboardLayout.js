@@ -49,7 +49,7 @@ const NAV_SECTIONS = [
   {
     category: 'PAINEL',
     items: [
-      { href: '/dashboard',                  label: 'Dashboard',              tag: '01', icon: 'home'      },
+      { href: '/dashboard',                  label: 'Visão Geral',              tag: '01', icon: 'home'      },
     ],
   },
   {
