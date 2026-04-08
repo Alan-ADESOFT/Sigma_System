@@ -24,6 +24,17 @@ import styles from '../assets/style/dashboard.module.css';
 import { useAuth } from '../hooks/useAuth';
 import JarvisOrb from './JarvisOrb';
 
+/* PERF: prefetch do context snapshot do JARVIS ao montar o dashboard.
+   Aquece o cache (120s TTL) antes do usuário abrir o orb. */
+function useJarvisPrefetch() {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetch('/api/jarvis/prefetch').catch(() => {});
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    Constantes de layout
 ───────────────────────────────────────────────────────────────────────────── */
@@ -892,6 +903,7 @@ export default function DashboardLayout({ children, activeTab }) {
   const router                        = useRouter();
   const { user, loading, logout }     = useAuth();
   const [time, setTime]               = useState('');
+  useJarvisPrefetch();
 
   /*
    * collapsed — controla o estado da sidebar.
@@ -1151,7 +1163,7 @@ export default function DashboardLayout({ children, activeTab }) {
       </main>
 
       {/* ── ORB flutuante do Jarvis — aparece em todas as páginas ── */}
-      <JarvisOrb />
+      <JarvisOrb userName={user?.name} />
     </div>
   );
 }

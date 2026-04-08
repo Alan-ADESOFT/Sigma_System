@@ -412,7 +412,7 @@ const BoltIcon = (
 /* ═══════════════════════════════════════════════════════════════
    Main Component
    ═══════════════════════════════════════════════════════════ */
-export default function JarvisOrb() {
+export default function JarvisOrb({ userName }) {
   const [open, setOpen]             = useState(false);
   const [state, setState]           = useState('idle');
   const [text, setText]             = useState('');
@@ -424,6 +424,7 @@ export default function JarvisOrb() {
   const [showChat, setShowChat]     = useState(false);
 
   const statusPhrase = useStatusCycle(state);
+  const greetedRef = useRef(false);
 
   const recorderRef = useRef(null);
   const chunksRef   = useRef([]);
@@ -447,6 +448,28 @@ export default function JarvisOrb() {
   }, []);
 
   useEffect(() => { loadQuota(); }, [open, loadQuota]);
+
+  // Saudação ao abrir o painel
+  useEffect(() => {
+    if (!open) return;
+    const firstName = (userName || 'Operador').split(' ')[0];
+    // Primeira abertura da sessão: saudação completa
+    // Aberturas seguintes: "bem-vindo de volta"
+    const alreadyGreeted = sessionStorage.getItem('jarvis_greeted');
+    let greeting;
+    if (!alreadyGreeted) {
+      greeting = `Olá, ${firstName}! Seja bem-vindo. Como posso ajudar?`;
+      sessionStorage.setItem('jarvis_greeted', '1');
+    } else {
+      greeting = `Bem-vindo de volta, ${firstName}. No que posso ajudar?`;
+    }
+    // Evita repetir se o painel já estava aberto
+    if (greetedRef.current) return;
+    greetedRef.current = true;
+    setResponse(greeting);
+    setState('speaking');
+    playTTS(greeting);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (showChat && inputRef.current) {
@@ -616,6 +639,7 @@ export default function JarvisOrb() {
     setPending(null);
     setText('');
     setShowChat(false);
+    greetedRef.current = false;
   }
 
   function toggleChat() {
