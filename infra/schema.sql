@@ -337,6 +337,21 @@ CREATE INDEX IF NOT EXISTS idx_client_installments_contract ON client_installmen
 CREATE INDEX IF NOT EXISTS idx_client_installments_due      ON client_installments(due_date);
 
 -- ============================================================
+-- 15b. FINANCE_CATEGORIES (categorias de gastos fixos/variáveis)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS finance_categories (
+    id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name       TEXT NOT NULL,
+    type       TEXT NOT NULL DEFAULT 'variable',
+    color      TEXT NOT NULL DEFAULT '#6366F1',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(tenant_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_finance_categories_tenant ON finance_categories(tenant_id);
+
+-- ============================================================
 -- 16. COMPANY_FINANCES (custos e ganhos da empresa)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS company_finances (
@@ -352,8 +367,29 @@ CREATE TABLE IF NOT EXISTS company_finances (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE company_finances ADD COLUMN IF NOT EXISTS category_id TEXT REFERENCES finance_categories(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_company_finances_tenant ON company_finances(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_company_finances_date   ON company_finances(date);
+
+-- ============================================================
+-- 16b. FINANCE_CHARGE_LOG (log de cobranças enviadas)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS finance_charge_log (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    installment_id  TEXT NOT NULL REFERENCES client_installments(id) ON DELETE CASCADE,
+    client_id       TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    stage           TEXT NOT NULL,
+    sent_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    channel         TEXT NOT NULL DEFAULT 'personal',
+    success         BOOLEAN NOT NULL DEFAULT true,
+    error_message   TEXT,
+    UNIQUE(installment_id, stage, channel)
+);
+CREATE INDEX IF NOT EXISTS idx_finance_charge_log_tenant      ON finance_charge_log(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_finance_charge_log_installment ON finance_charge_log(installment_id);
+CREATE INDEX IF NOT EXISTS idx_finance_charge_log_date        ON finance_charge_log(sent_at);
 
 -- ============================================================
 -- 17. AI_SEARCH_HISTORY (pesquisas web dos agentes)
@@ -845,6 +881,133 @@ CREATE INDEX IF NOT EXISTS idx_jarvis_log_tenant  ON jarvis_usage_log(tenant_id,
 CREATE INDEX IF NOT EXISTS idx_jarvis_log_command ON jarvis_usage_log(command, created_at);
 
 -- ============================================================
+-- 34. TASK_CATEGORIES (categorias configuráveis por tenant)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS task_categories (
+    id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name       TEXT NOT NULL,
+    color      TEXT NOT NULL DEFAULT '#6366F1',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(tenant_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_task_categories_tenant ON task_categories(tenant_id);
+
+-- Sprint Tasks: novas colunas em client_tasks
+ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS status          TEXT NOT NULL DEFAULT 'pending';
+ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS category_id     TEXT;
+ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS estimated_hours NUMERIC(5,2);
+CREATE INDEX IF NOT EXISTS idx_client_tasks_status   ON client_tasks(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_client_tasks_category ON client_tasks(category_id);
+
+-- ============================================================
+-- 35. TASK_DEPENDENCIES (dependências entre tasks)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS task_dependencies (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    task_id         TEXT NOT NULL REFERENCES client_tasks(id) ON DELETE CASCADE,
+    depends_on_id   TEXT NOT NULL REFERENCES client_tasks(id) ON DELETE CASCADE,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(task_id, depends_on_id)
+);
+CREATE INDEX IF NOT EXISTS idx_task_deps_task       ON task_dependencies(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_deps_depends_on ON task_dependencies(depends_on_id);
+
+-- ============================================================
+-- 36. TASK_COMMENTS (comentários com suporte a @menções)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS task_comments (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    task_id     TEXT NOT NULL REFERENCES client_tasks(id) ON DELETE CASCADE,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    author_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    content     TEXT NOT NULL,
+    mentions    TEXT[] DEFAULT '{}',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_task_comments_task ON task_comments(task_id);
+
+-- ============================================================
+-- 37. TASK_ACTIVITY_LOG (histórico de alterações)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS task_activity_log (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    task_id     TEXT NOT NULL REFERENCES client_tasks(id) ON DELETE CASCADE,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    actor_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    action      TEXT NOT NULL,
+    old_value   TEXT,
+    new_value   TEXT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_task_activity_task ON task_activity_log(task_id);
+
+-- ============================================================
+-- 39. MEETINGS (calendário de reuniões)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS meetings (
+    id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id     TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    title         TEXT NOT NULL,
+    description   TEXT,
+    meeting_date  DATE NOT NULL,
+    start_time    TIME NOT NULL,
+    end_time      TIME,
+    client_id     TEXT REFERENCES marketing_clients(id) ON DELETE SET NULL,
+    participants  TEXT[] NOT NULL DEFAULT '{}',
+    status        TEXT NOT NULL DEFAULT 'scheduled',
+    meet_link     TEXT,
+    minutes_url   TEXT,
+    obs           TEXT,
+    created_by    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_meetings_tenant ON meetings(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_meetings_date   ON meetings(meeting_date);
+CREATE INDEX IF NOT EXISTS idx_meetings_client ON meetings(client_id);
+
+-- ============================================================
+-- 40. TASK_TEMPLATES (automação de tasks)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS task_templates (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    trigger     TEXT NOT NULL,
+    tasks_json  JSONB NOT NULL DEFAULT '[]',
+    is_active   BOOLEAN NOT NULL DEFAULT true,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_task_templates_tenant ON task_templates(tenant_id);
+
+-- ============================================================
+-- 41. TASK_BOT_CONFIG (configuração do bot de lembrete)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS task_bot_config (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id         TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    phone           TEXT NOT NULL,
+    dispatch_time   TIME NOT NULL DEFAULT '08:00',
+    active_days     INTEGER[] NOT NULL DEFAULT '{1,2,3,4,5}',
+    message_morning TEXT,
+    message_overdue TEXT,
+    is_active       BOOLEAN NOT NULL DEFAULT true,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(tenant_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_task_bot_config_tenant ON task_bot_config(tenant_id);
+
+-- Sprint Tasks: grupo WhatsApp na ficha do cliente
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS whatsapp_group_id   TEXT;
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS whatsapp_group_name TEXT;
+
+-- ============================================================
 -- CLEANUP (tabelas descontinuadas)
 -- ============================================================
 DROP TABLE IF EXISTS stage_quality_scores;
@@ -872,7 +1035,9 @@ BEGIN
         'onboarding_stages_config','onboarding_rest_days_config',
         'onboarding_progress','onboarding_stage_responses',
         'client_form_summaries',
-        'instagram_accounts','instagram_scheduled_posts'
+        'instagram_accounts','instagram_scheduled_posts',
+        'task_comments','meetings','task_templates','task_bot_config',
+        'finance_categories'
     ])
     LOOP
         EXECUTE format('

@@ -1,0 +1,699 @@
+/* ============================================================
+   Meetings / Calendar — meetings.module.css
+   SIGMA dark terminal theme. CSS custom properties only.
+   ============================================================ */
+
+/* ── Layout ── */
+
+.pageContainer {
+  padding: 0;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.headerControls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ── View Toggle ── */
+
+.viewToggle {
+  display: inline-flex;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  background: rgba(10, 10, 10, 0.8);
+}
+
+.viewBtn {
+  padding: 6px 16px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  transition: all 0.2s;
+}
+
+.viewBtn:hover {
+  color: var(--text-secondary);
+}
+
+.viewBtnActive {
+  background: rgba(255, 0, 51, 0.12);
+  color: #ff6680;
+}
+
+/* ── Month Navigation ── */
+
+.monthNav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.monthLabel {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  min-width: 160px;
+  text-align: center;
+}
+
+.navBtn {
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.navBtn:hover {
+  border-color: rgba(255, 0, 51, 0.3);
+  color: var(--brand-500);
+}
+
+/* ── Calendar Wrapper (glass-card) ── */
+
+.calendarWrapper {
+  background: linear-gradient(145deg, rgba(17, 17, 17, 0.95), rgba(10, 10, 10, 0.98));
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+
+.calendarWrapper::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 0, 51, 0.2), transparent);
+}
+
+/* ── Calendar Grid (Month View) ── */
+
+.calendarGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dayHeader {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 12px 4px;
+  background: var(--surface-card);
+}
+
+.dayCell {
+  background: var(--surface-card);
+  min-height: 90px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: background 0.15s;
+  cursor: default;
+}
+
+.dayCell:hover {
+  background: rgba(17, 17, 17, 1);
+}
+
+.dayCellToday {
+  background: rgba(255, 0, 51, 0.04);
+  border-left: 2px solid var(--brand-500);
+}
+
+.dayCellOtherMonth {
+  opacity: 0.3;
+}
+
+.dayNumber {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.dayNumberToday {
+  color: var(--brand-500);
+  font-weight: 700;
+}
+
+/* ── Meeting Chips ── */
+
+.meetingChip {
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 0.6rem;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all 0.15s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+.meetingChipInternal {
+  background: rgba(59, 130, 246, 0.12);
+  border-left: 2px solid var(--info);
+  color: var(--info);
+}
+
+.meetingChipClient {
+  background: rgba(34, 197, 94, 0.12);
+  border-left: 2px solid var(--success);
+  color: var(--success);
+}
+
+.meetingChipCancelled {
+  background: rgba(115, 115, 115, 0.1);
+  border-left: 2px solid #525252;
+  color: #737373;
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.meetingChip:hover {
+  filter: brightness(1.2);
+}
+
+/* ── Week View ── */
+
+.weekGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weekRow {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 12px;
+  padding: 14px;
+  background: linear-gradient(145deg, rgba(17, 17, 17, 0.95), rgba(10, 10, 10, 0.98));
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.weekRow::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 0, 51, 0.1), transparent);
+}
+
+.weekRowToday {
+  border-color: rgba(255, 0, 51, 0.15);
+}
+
+.weekRowToday::before {
+  background: linear-gradient(90deg, transparent, rgba(255, 0, 51, 0.3), transparent);
+}
+
+.weekDate {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding-top: 2px;
+}
+
+.weekDateDay {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.weekDateDayToday {
+  color: var(--brand-500);
+}
+
+.weekMeetings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── Meeting Card (Week/List View) ── */
+
+.meetingCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(10, 10, 10, 0.5);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.meetingCard:hover {
+  border-color: rgba(255, 0, 51, 0.18);
+  background: rgba(15, 15, 15, 0.7);
+}
+
+.meetingTime {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+.meetingInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.meetingTitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meetingClient {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+
+/* ── Modal ── */
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(6px);
+}
+
+.meetingModal {
+  background: linear-gradient(145deg, rgba(15, 15, 15, 0.99), rgba(8, 8, 8, 0.99));
+  border: 1px solid rgba(255, 0, 51, 0.15);
+  border-radius: 12px;
+  width: 90vw;
+  max-width: 600px;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 24px;
+  position: relative;
+  animation: modalScaleIn 0.2s ease-out;
+}
+
+.meetingModal::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 0, 51, 0.3), transparent);
+  pointer-events: none;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.modalTitle {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+.modalSubtitle {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.modalCloseBtn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s;
+}
+
+.modalCloseBtn:hover {
+  color: var(--text-primary);
+}
+
+/* ── Form ── */
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.formGroupFull {
+  grid-column: span 2;
+}
+
+.formLabel {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.formHint {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+/* ── Participants Box ── */
+
+.participantsBox {
+  max-height: 140px;
+  overflow-y: auto;
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.participantLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  transition: color 0.15s;
+}
+
+.participantLabelActive {
+  color: var(--text-primary);
+}
+
+.participantCheckbox {
+  accent-color: var(--brand-500);
+}
+
+/* ── Status Badges ── */
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.statusScheduled {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  color: var(--info);
+}
+
+.statusDone {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  color: var(--success);
+}
+
+.statusCancelled {
+  background: rgba(115, 115, 115, 0.1);
+  border: 1px solid rgba(115, 115, 115, 0.25);
+  color: #737373;
+}
+
+/* ── Participants Avatars ── */
+
+.participantsRow {
+  display: flex;
+}
+
+.participantsRow > *:not(:first-child) {
+  margin-left: -4px;
+}
+
+.participantAvatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 0, 51, 0.1);
+  border: 2px solid var(--surface-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.45rem;
+  color: var(--brand-500);
+  font-weight: 700;
+}
+
+/* ── Upload Button ── */
+
+.uploadBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  background: rgba(17, 17, 17, 0.9);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: all 0.15s;
+}
+
+.uploadBtn:hover {
+  border-color: rgba(255, 0, 51, 0.2);
+  color: var(--text-primary);
+}
+
+/* ── Footer ── */
+
+.modalFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-default);
+}
+
+.deleteBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  background: rgba(255, 0, 51, 0.08);
+  border: 1px solid rgba(255, 0, 51, 0.2);
+  color: #ff1a4d;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: all 0.15s;
+}
+
+.deleteBtn:hover {
+  background: rgba(255, 0, 51, 0.15);
+}
+
+.deleteBtn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.cancelBtn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: all 0.15s;
+}
+
+.cancelBtn:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+}
+
+/* ── Loading ── */
+
+.loadingState {
+  text-align: center;
+  padding: 40px 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* ── Empty day (week view) ── */
+
+.emptyDay {
+  padding: 8px 12px;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  opacity: 0.5;
+}
+
+/* ── Section title ── */
+
+.sectionLabel {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+/* ── Animation ── */
+
+@keyframes modalScaleIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 768px) {
+  .calendarGrid {
+    grid-template-columns: repeat(7, 1fr);
+  }
+
+  .dayCell {
+    min-height: 60px;
+    padding: 4px;
+  }
+
+  .dayNumber {
+    font-size: 0.6rem;
+  }
+
+  .meetingChip {
+    font-size: 0.5rem;
+    padding: 2px 4px;
+  }
+
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .formGroupFull {
+    grid-column: span 1;
+  }
+
+  .headerRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .weekRow {
+    grid-template-columns: 56px 1fr;
+  }
+
+  .meetingCard {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .meetingTime {
+    min-width: auto;
+  }
+}

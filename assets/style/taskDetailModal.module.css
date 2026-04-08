@@ -1,0 +1,59 @@
+/* TaskDetailModal — SIGMA terminal/HUD aesthetic
+   The component uses inline styles for all structural elements.
+   This file retains only the classes referenced via styles.xxx */
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ─── Spinner (loading state) ─── */
+
+.spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+.spinner::after {
+  content: '';
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(255, 0, 51, 0.15);
+  border-top-color: var(--brand-500);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Empty state placeholder ─── */
+
+.emptyState {
+  padding: 16px 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ─── @mention highlight in comments ─── */
+
+.mention {
+  color: var(--brand-500);
+  font-weight: 600;
+  background: rgba(255, 0, 51, 0.08);
+  padding: 0 3px;
+  border-radius: 3px;
+}

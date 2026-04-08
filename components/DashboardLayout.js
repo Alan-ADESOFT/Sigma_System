@@ -59,42 +59,52 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    category: 'ORGANIZAÇÃO',
+    items: [
+      { href: '/dashboard/tasks',               label: 'Tarefas',               tag: '03', icon: 'clipboard' },
+      { href: '/dashboard/meetings',             label: 'Calendário',            tag: '04', icon: 'calendar'  },
+      { href: '/dashboard/task-automation',      label: 'Automação',             tag: '05', icon: 'zap'       },
+    ],
+  },
+  {
     category: 'DADOS',
     items: [
-      { href: '/dashboard/clients',          label: 'Clientes',               tag: '03', icon: 'users'     },
-      { href: '/dashboard/database',         label: 'Base de Dados',          tag: '04', icon: 'database'  },
+      { href: '/dashboard/clients',          label: 'Clientes',               tag: '06', icon: 'users'     },
+      { href: '/dashboard/database',         label: 'Base de Dados',          tag: '07', icon: 'database'  },
     ],
   },
   {
     category: 'AGENTES DE IA',
     items: [
-      { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '05', icon: 'zap'       },
-      { href: '/dashboard/jarvis',           label: 'J.A.R.V.I.S',           tag: '05b', icon: 'bot'      },
-      { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '06', icon: 'edit'      },
+      { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '08', icon: 'zap'       },
+      { href: '/dashboard/jarvis',           label: 'J.A.R.V.I.S',           tag: '09', icon: 'bot'       },
+      { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '10', icon: 'edit'      },
     ],
   },
   {
     category: 'SOCIAL MEDIA',
     items: [
-      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '07', icon: 'barChart'  },
-      { href: '/dashboard/content-plan',     label: 'Planejamento',           tag: '08', icon: 'list'      },
-      { href: '/dashboard/publish',          label: 'Publicar Agora',         tag: '09', icon: 'send'      },
+      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '11', icon: 'barChart'  },
+      { href: '/dashboard/content-plan',     label: 'Planejamento',           tag: '12', icon: 'list'      },
+      { href: '/dashboard/publish',          label: 'Publicar Agora',         tag: '13', icon: 'send'      },
     ],
   },
   {
     category: 'TRÁFEGO',
     items: [
-      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '10', icon: 'megaphone' },
+      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '14', icon: 'megaphone' },
     ],
   },
   {
     category: 'SISTEMA',
     items: [
-      { href: '/dashboard/onboarding-config',    label: 'Config. Onboarding',    tag: '11', icon: 'calendar'  },
-      { href: '/dashboard/settings/pipeline',     label: 'Config. Pipeline',      tag: '12', icon: 'cpu'       },
-      { href: '/dashboard/settings/copy',         label: 'Config. Copy',          tag: '13', icon: 'edit2'     },
-      { href: '/dashboard/settings/prompt-library',  label: 'Biblioteca de Prompts', tag: '14', icon: 'book'      },
-      { href: '/dashboard/settings/jarvis',          label: 'Config. Jarvis',        tag: '16', icon: 'bot'       },
+      { href: '/dashboard/onboarding-config',    label: 'Config. Onboarding',    tag: '15', icon: 'calendar'  },
+      { href: '/dashboard/settings/pipeline',     label: 'Config. Pipeline',      tag: '16', icon: 'cpu'       },
+      { href: '/dashboard/settings/copy',         label: 'Config. Copy',          tag: '17', icon: 'edit2'     },
+      { href: '/dashboard/settings/prompt-library',  label: 'Biblioteca de Prompts', tag: '18', icon: 'book'      },
+      { href: '/dashboard/settings/jarvis',          label: 'Config. Jarvis',        tag: '19', icon: 'bot'       },
+      { href: '/dashboard/settings/tasks',            label: 'Config. Tarefas',       tag: '20', icon: 'settings'  },
+      { href: '/dashboard/settings/financeiro',       label: 'Config. Financeiro',    tag: '21', icon: 'chart',     adminOnly: true },
     ],
   },
 ];
@@ -1056,7 +1066,7 @@ export default function DashboardLayout({ children, activeTab }) {
               )}
 
               {/* Links individuais da seção */}
-              {section.items.map(item => {
+              {section.items.filter(item => !item.adminOnly || user?.role === 'admin').map(item => {
                 // Match exato OU prefixo seguido de "/" — evita que /dashboard/social
                 // case com /dashboard/social-dashboard
                 const isActive = item.href === '/dashboard'

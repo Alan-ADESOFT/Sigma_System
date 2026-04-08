@@ -158,6 +158,223 @@ function PlaceholderTab({ label }) {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   WhatsApp Group Field — vincula grupo de WhatsApp ao cliente
+═══════════════════════════════════════════════════════════ */
+function WhatsAppGroupField({ clientId, currentGroupId, currentGroupName }) {
+  const { notify } = useNotification();
+  const [groups, setGroups] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState(currentGroupId || '');
+  const [groupName, setGroupName] = useState(currentGroupName || '');
+  const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  async function loadGroups() {
+    if (groups.length > 0) { setOpen(true); return; }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/whatsapp/groups');
+      const data = await res.json();
+      if (data.success) setGroups(data.groups || []);
+      else notify('Erro ao buscar grupos', 'error');
+    } catch { notify('Erro de conexao com Z-API', 'error'); }
+    finally { setLoading(false); setOpen(true); }
+  }
+
+  async function saveGroup() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/whatsapp-group`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId: selectedGroup || null, groupName: groupName || null }),
+      });
+      const data = await res.json();
+      if (data.success) notify('Grupo WhatsApp vinculado', 'success');
+      else notify(data.error || 'Erro', 'error');
+    } catch { notify('Erro ao salvar', 'error'); }
+    finally { setSaving(false); }
+  }
+
+  const linked = !!selectedGroup;
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 8 }}>
+        Grupo WhatsApp
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+        Ao vincular o grupo, o cliente receberá informativos e lembretes automáticos de reunião via WhatsApp
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{
+          width: 10, height: 10, borderRadius: '50%',
+          background: linked ? 'var(--success)' : 'var(--text-muted)',
+          boxShadow: linked ? '0 0 8px rgba(34,197,94,0.4)' : 'none',
+          flexShrink: 0,
+        }} />
+        {open ? (
+          <select
+            style={{ flex: 1, padding: '8px 12px', background: 'rgba(10,10,10,0.8)', border: '1px solid var(--border-default)', borderRadius: 6, color: 'var(--text-primary)', fontSize: 13, outline: 'none' }}
+            value={selectedGroup}
+            onChange={e => {
+              setSelectedGroup(e.target.value);
+              const g = groups.find(x => x.id === e.target.value);
+              setGroupName(g?.name || '');
+            }}
+          >
+            <option value="">Nenhum grupo vinculado</option>
+            {groups.map(g => (
+              <option key={g.id} value={g.id}>{g.name} ({g.participants} participantes)</option>
+            ))}
+          </select>
+        ) : (
+          <span style={{ flex: 1, fontSize: 13, color: linked ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+            {groupName || 'Nenhum grupo vinculado'}
+          </span>
+        )}
+        {!open ? (
+          <button onClick={loadGroups} disabled={loading} style={{
+            padding: '7px 14px', borderRadius: 6, cursor: loading ? 'wait' : 'pointer',
+            border: '1px solid var(--border-default)', background: 'rgba(255,255,255,0.03)',
+            color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+          }}>
+            {loading ? 'Carregando...' : 'Selecionar'}
+          </button>
+        ) : (
+          <button onClick={saveGroup} disabled={saving} style={{
+            padding: '7px 14px', borderRadius: 6, cursor: saving ? 'wait' : 'pointer',
+            border: '1px solid rgba(255,0,51,0.3)', background: 'rgba(255,0,51,0.1)',
+            color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+          }}>
+            {saving ? 'Salvando...' : 'Salvar'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TAB: TAREFAS — lista de tasks do cliente com progresso
+═══════════════════════════════════════════════════════════ */
+function TabTarefas({ clientId }) {
+  const { notify } = useNotification();
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchTasks = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/tasks?view=team&clientId=${clientId}`);
+      const data = await res.json();
+      if (data.success) setTasks(data.tasks || []);
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  }, [clientId]);
+
+  useEffect(() => { fetchTasks(); }, [fetchTasks]);
+
+  const total = tasks.length;
+  const done = tasks.filter(t => t.status === 'done').length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  const STATUS_COLORS = {
+    pending: { bg: 'rgba(82,82,82,0.12)', border: 'rgba(82,82,82,0.3)', color: '#737373', label: 'Pendente' },
+    in_progress: { bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.3)', color: '#3b82f6', label: 'Em progresso' },
+    done: { bg: 'rgba(34,197,94,0.1)', border: 'rgba(34,197,94,0.3)', color: '#22c55e', label: 'Concluída' },
+    overdue: { bg: 'rgba(255,0,51,0.1)', border: 'rgba(255,0,51,0.3)', color: '#ff1a4d', label: 'Atrasada' },
+  };
+
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><div className="spinner" /></div>;
+
+  return (
+    <div>
+      {/* Progresso */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            PROGRESSO
+          </span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-primary)', fontWeight: 600 }}>
+            {done}/{total} concluídas ({pct}%)
+          </span>
+        </div>
+        <div style={{ width: '100%', height: 6, background: 'rgba(255,255,255,0.04)', borderRadius: 3, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, var(--brand-500), var(--success))', borderRadius: 3, transition: 'width 0.5s ease' }} />
+        </div>
+      </div>
+
+      {/* Lista de tasks */}
+      {tasks.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}>
+          Nenhuma task para este cliente
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {tasks.map(t => {
+            const sc = STATUS_COLORS[t.status] || STATUS_COLORS.pending;
+            return (
+              <div key={t.id} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 14px',
+                background: 'rgba(10,10,10,0.5)',
+                border: '1px solid var(--border-default)',
+                borderRadius: 8,
+                borderLeft: `3px solid ${sc.color}`,
+              }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 2 }}>{t.title}</div>
+                  {t.due_date && (
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+                      {new Date(t.due_date).toLocaleDateString('pt-BR')}
+                    </span>
+                  )}
+                </div>
+                <span style={{
+                  padding: '2px 8px', borderRadius: 4,
+                  fontFamily: 'var(--font-mono)', fontSize: '0.55rem', fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: '0.04em',
+                  background: sc.bg, border: `1px solid ${sc.border}`, color: sc.color,
+                }}>
+                  {sc.label}
+                </span>
+                {t.assigned_name && (
+                  <div style={{
+                    width: 24, height: 24, borderRadius: '50%',
+                    background: 'rgba(255,0,51,0.1)', border: '1px solid rgba(255,0,51,0.25)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: 'var(--font-mono)', fontSize: '0.5rem', color: '#ff0033', fontWeight: 700,
+                  }} title={t.assigned_name}>
+                    {t.assigned_name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Nova task */}
+      <button
+        onClick={() => window.location.href = `/dashboard/tasks?clientId=${clientId}`}
+        style={{
+          marginTop: 16, width: '100%', padding: 10,
+          background: 'transparent', border: '1px dashed var(--border-default)',
+          borderRadius: 6, color: 'var(--text-muted)',
+          fontFamily: 'var(--font-mono)', fontSize: '0.65rem', cursor: 'pointer',
+          textTransform: 'uppercase', letterSpacing: '0.05em',
+          transition: 'all 0.2s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,0,51,0.3)'; e.currentTarget.style.color = '#ff0033'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+      >
+        + Nova Task
+      </button>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
    BOTÃO + POPUP: ENVIAR ONBOARDING VIA WHATSAPP (Z-API)
    1. Clica → /api/onboarding/prepare → abre popup com copy editável
    2. No popup o operador revisa/edita a mensagem do DIA 1
@@ -1551,6 +1768,9 @@ function TabInfo({ client, onSave }) {
           color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
         }}>+</button>
       </div>
+
+      {/* ── Grupo WhatsApp ── */}
+      <WhatsAppGroupField clientId={client.id} currentGroupId={client.whatsapp_group_id} currentGroupName={client.whatsapp_group_name} />
 
       {/* ── Erro + Salvar ── */}
       {err && (
@@ -3266,7 +3486,7 @@ export default function ClientInfoPage() {
         {activeTab === 'database'   && (
           <TabDatabase client={client} stages={stages} onStageUpdated={handleStageUpdated} onOpenPipeline={() => setShowPipelineModal(true)} />
         )}
-        {activeTab === 'afazeres'   && <PlaceholderTab label="Afazeres" />}
+        {activeTab === 'afazeres'   && <TabTarefas clientId={client.id} />}
         {activeTab === 'anexos'     && <TabAnexos clientId={client.id} />}
         {activeTab === 'financeiro' && <TabFinanceiro clientId={client.id} clientServices={client.services || []} />}
         {activeTab === 'observacoes'&& <TabObservacoes clientId={client.id} />}
