@@ -529,7 +529,7 @@ export default function AgentesKBPage() {
             </div>
             <div>
               <h1 className="page-title" style={{ marginBottom: 0 }}>Base de Conhecimento</h1>
-              <p className="page-subtitle" style={{ fontSize: '0.75rem', marginTop: 2 }}>
+              <p className="page-subtitle" style={{ marginTop: 2 }}>
                 Dados injetados automaticamente nos prompts dos agentes
               </p>
             </div>

@@ -22,9 +22,11 @@ export default async function handler(req, res) {
   try {
     const sql = getDb();
     const rows = await sql`
-      SELECT id, name, email, username, role, avatar_url
-      FROM tenants
-      WHERE id = ${session.userId} AND is_active = true
+      SELECT t.id, t.name, t.email, t.username, t.role, t.phone, t.avatar_url,
+             t.custom_role_id, r.name AS custom_role_name, r.allowed_pages
+      FROM tenants t
+      LEFT JOIN user_roles r ON r.id = t.custom_role_id
+      WHERE t.id = ${session.userId} AND t.is_active = true
       LIMIT 1
     `;
 
@@ -37,12 +39,15 @@ export default async function handler(req, res) {
     return res.json({
       success: true,
       user: {
-        id:       u.id,
-        name:     u.name,
-        email:    u.email,
-        username: u.username,
-        role:     u.role,
-        avatarUrl: u.avatar_url,
+        id:             u.id,
+        name:           u.name,
+        email:          u.email,
+        username:       u.username,
+        role:           u.role,
+        avatarUrl:      u.avatar_url,
+        customRoleId:   u.custom_role_id || null,
+        customRoleName: u.custom_role_name || null,
+        allowedPages:   u.allowed_pages || null,
       },
     });
   } catch (err) {

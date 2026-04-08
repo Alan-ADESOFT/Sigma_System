@@ -18,14 +18,17 @@ import styles from '../assets/style/jarvisOrb.module.css';
    ═══════════════════════════════════════════════════════════ */
 
 const PARTICLE_COUNT = 2200;
-const BASE_RADIUS = 125;
+// BASE_RADIUS ↓ de 125 pra 105 — com canvas size=360 e sc=1.44, raio efetivo
+// fica em ~151px num half de 180px → 29px de margem pro idle, suficiente pra
+// pulsos/breathe não tocarem na borda do canvas.
+const BASE_RADIUS = 105;
 const REF_SIZE = 250;
 
 const STATES = {
-  idle:       { radius: 125, speed: 0.0008, scatter: 1.00, pulseAmp: 4,  pulseFreq: 0.5, colorShift: 0,   rings: 0 },
-  listening:  { radius: 135, speed: 0.0022, scatter: 1.35, pulseAmp: 14, pulseFreq: 1.4, colorShift: 12,  rings: 3 },
-  processing: { radius: 132, speed: 0.0060, scatter: 1.70, pulseAmp: 8,  pulseFreq: 3.2, colorShift: -15, rings: 0 },
-  speaking:   { radius: 140, speed: 0.0030, scatter: 1.55, pulseAmp: 28, pulseFreq: 2.0, colorShift: 8,   rings: 4 },
+  idle:       { radius: 105, speed: 0.0008, scatter: 1.00, pulseAmp: 4,  pulseFreq: 0.5, colorShift: 0,   rings: 0 },
+  listening:  { radius: 110, speed: 0.0022, scatter: 1.20, pulseAmp: 12, pulseFreq: 1.4, colorShift: 12,  rings: 3 },
+  processing: { radius: 108, speed: 0.0060, scatter: 1.30, pulseAmp: 8,  pulseFreq: 3.2, colorShift: -15, rings: 0 },
+  speaking:   { radius: 115, speed: 0.0030, scatter: 1.25, pulseAmp: 22, pulseFreq: 2.0, colorShift: 8,   rings: 4 },
 };
 
 function randomOnSphere(r) {
@@ -158,8 +161,12 @@ function CanvasOrb({ orbState, size }) {
       // Draw particles
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
-        const projX = CX + p.x * sc;
-        const projY = CY + p.y * 0.9 * sc;
+        // Projeção ortográfica 1:1. p.x/p.y JÁ estão em pixels do canvas
+        // (porque targetR usa globalR que já tem sc embutido). NÃO multiplicar
+        // por sc aqui — fazia double-scaling, dando 1.44× do canvas e o
+        // canvas clipava em quadrado. Bug oculto desde o início.
+        const projX = CX + p.x;
+        const projY = CY + p.y;
 
         const zNorm = (p.z + globalR * 1.5) / (globalR * 3.0);
         const distC = Math.sqrt(p.x * p.x + p.y * p.y) / (globalR || 1);
@@ -418,6 +425,7 @@ export default function JarvisOrb({ userName }) {
   const [text, setText]             = useState('');
   const [response, setResponse]     = useState('');
   const [pendingAction, setPending] = useState(null);
+  const [confirming, setConfirming] = useState(false);
   const [quota, setQuota]           = useState(null);
   const [language, setLanguage]     = useState('pt');
   const [recording, setRecording]   = useState(false);
@@ -533,7 +541,7 @@ export default function JarvisOrb({ userName }) {
       clearTimeout(waitTimer);
       const d = await r.json();
       if (!d.success) {
-        const errMsg = d.error || 'Não consegui processar sua solicitação. Tente novamente.';
+        const errMsg = d.userMessage || 'Ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.';
         setResponse(errMsg);
         setState('speaking');
         await playTTS(errMsg);
@@ -565,7 +573,8 @@ export default function JarvisOrb({ userName }) {
   }
 
   async function confirmAction() {
-    if (!pendingAction) return;
+    if (!pendingAction || confirming) return;
+    setConfirming(true);
     setState('processing');
     try {
       const r = await fetch('/api/jarvis/confirm', {
@@ -575,11 +584,12 @@ export default function JarvisOrb({ userName }) {
       });
       const d = await r.json();
       if (d.success) {
-        setResponse(d.message || 'Ação concluída.');
+        const successMsg = (d.message || 'Ação concluída.') + ' Posso te ajudar em mais alguma coisa?';
+        setResponse(successMsg);
         setState('speaking');
-        await playTTS(d.message || 'Concluído.');
+        await playTTS(successMsg);
       } else {
-        const errMsg = d.error || 'Não consegui executar essa ação. Tente novamente.';
+        const errMsg = d.userMessage || 'Ocorreu um erro ao executar essa ação. Tente novamente mais tarde.';
         setResponse(errMsg);
         setState('speaking');
         await playTTS(errMsg);
@@ -591,6 +601,7 @@ export default function JarvisOrb({ userName }) {
       await playTTS(errMsg);
     }
     setPending(null);
+    setConfirming(false);
   }
 
   async function cancelAction() {
@@ -655,11 +666,18 @@ export default function JarvisOrb({ userName }) {
     setShowChat(prev => !prev);
   }
 
+  function formatDateBR(dateStr) {
+    if (!dateStr) return '—';
+    const m = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+    return dateStr;
+  }
+
   function renderConfirmCard() {
     if (!pendingAction) return null;
     const { action, data } = pendingAction;
     const title =
-      action === 'create_task'        ? 'Nova Tarefa'
+      action === 'create_task'        ? (data?.is_recurring ? 'Nova Task Recorrente' : 'Nova Tarefa')
       : action === 'save_income'      ? 'Nova Receita'
       : action === 'save_expense'     ? 'Nova Despesa'
       : action === 'generate_summary' ? 'Rodar Pipeline'
@@ -671,12 +689,32 @@ export default function JarvisOrb({ userName }) {
       if (data?.priority) rows.push(['Prioridade', String(data.priority).toUpperCase()]);
       if (data?.client_name) rows.push(['Cliente', data.client_name]);
       if (data?.assigned_to_name) rows.push(['Para', data.assigned_to_name]);
-      if (data?.due_date) rows.push(['Vencimento', data.due_date]);
+      if (data?.category_name) rows.push(['Categoria', data.category_name]);
+      if (data?.due_date && !data?.is_recurring) rows.push(['Vencimento', formatDateBR(data.due_date)]);
+
+      // Recorrência — substitui vencimento se for recorrente
+      if (data?.is_recurring) {
+        const WEEKDAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+        const freqLabel =
+          data.frequency === 'daily'  ? 'Diariamente' :
+          data.frequency === 'weekly' ? `Semanal (${WEEKDAY_NAMES[data.weekday] || '?'})` :
+                                        `Mensal (dia ${data.day_of_month})`;
+        rows.push(['Recorrência', freqLabel]);
+      }
+
+      // Subtasks — exibe cada uma individualmente
+      if (Array.isArray(data?.subtasks) && data.subtasks.length > 0) {
+        const titles = data.subtasks
+          .map(s => typeof s === 'string' ? s : s?.title)
+          .filter(Boolean);
+        rows.push([`Subtarefas (${titles.length})`, '__subtasks__']);
+        titles.forEach((t, i) => rows.push([`  ${i + 1}.`, t]));
+      }
     } else if (action === 'save_income' || action === 'save_expense') {
       rows.push(['Descrição', data?.description]);
       rows.push(['Valor', `R$ ${Number(data?.value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`]);
       if (data?.category) rows.push(['Categoria', data.category]);
-      rows.push(['Data', data?.date]);
+      rows.push(['Data', formatDateBR(data?.date)]);
     } else if (action === 'generate_summary') {
       rows.push(['Cliente', data?.client_name]);
       rows.push(['Ação', 'Pipeline estratégico completo']);
@@ -684,17 +722,26 @@ export default function JarvisOrb({ userName }) {
       rows.push(['Cliente', data?.client_name]);
       rows.push(['WhatsApp', data?.phone]);
     }
+    const isProcessing = confirming || state === 'processing';
     return (
-      <div className={styles.confirmCard}>
+      <div className={styles.confirmCard} style={isProcessing ? { opacity: 0.5, pointerEvents: 'none' } : undefined}>
         <div className={styles.confirmTitle}>{BoltIcon} {title}</div>
-        {rows.map(([k, v]) => (
-          <div key={k} className={styles.confirmRow}>
-            <span>{k}</span><strong>{v || '—'}</strong>
-          </div>
+        {rows.map(([k, v], i) => (
+          v === '__subtasks__' ? (
+            <div key={`row-${i}`} className={styles.confirmRow} style={{ marginTop: 6, borderBottom: 'none' }}>
+              <span style={{ color: 'var(--brand-500, #ff0033)', fontWeight: 600 }}>{k}</span>
+            </div>
+          ) : (
+            <div key={`row-${i}`} className={styles.confirmRow}>
+              <span>{k}</span><strong>{v || '—'}</strong>
+            </div>
+          )
         ))}
         <div className={styles.confirmActions}>
-          <button className={`${styles.btn} ${styles.btnGhost}`} onClick={cancelAction}>Cancelar</button>
-          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={confirmAction}>Confirmar</button>
+          <button className={`${styles.btn} ${styles.btnGhost}`} onClick={cancelAction} disabled={isProcessing}>Cancelar</button>
+          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={confirmAction} disabled={isProcessing}>
+            {isProcessing ? 'Processando...' : 'Confirmar'}
+          </button>
         </div>
       </div>
     );
@@ -704,17 +751,25 @@ export default function JarvisOrb({ userName }) {
     <>
       {/* FAB */}
       {!open && (
-        <button className={styles.fab} onClick={() => setOpen(true)} aria-label="Abrir JARVIS" title="JARVIS">
+        <button className={styles.fab} onClick={() => setOpen(true)} aria-label="Abrir JARVIS">
           <span className={styles.fabPulseRing} />
-          <svg className={styles.fabIcon} width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <circle cx="12" cy="12" r="3" />
-            <line x1="12" y1="2" x2="12" y2="5" />
-            <line x1="12" y1="19" x2="12" y2="22" />
-            <line x1="2" y1="12" x2="5" y2="12" />
-            <line x1="19" y1="12" x2="22" y2="12" />
+          {/* Ícone waveform — estética "voice / AI listening" */}
+          <svg className={styles.fabIcon} width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 12 h2 l2 -7 l3 14 l3 -14 l3 14 l3 -7 h3" />
           </svg>
+
+          {/* Label "J.A.R.V.I.S" — pill no canto superior direito */}
           <span className={styles.fabBadge}>J.A.R.V.I.S</span>
+
+          {/* Badge da quota diária — filled vermelho no canto inferior */}
+          {quota && (
+            <span
+              className={styles.fabQuotaBadge}
+              title={`${quota.remaining} de ${quota.limit} comandos restantes hoje`}
+            >
+              {quota.remaining}
+            </span>
+          )}
         </button>
       )}
 
@@ -730,7 +785,7 @@ export default function JarvisOrb({ userName }) {
               <div className={styles.subtitle}>Assistente de Comando — Sigma</div>
             </div>
 
-            <CanvasOrb orbState={state} size={280} />
+            <CanvasOrb orbState={state} size={360} />
 
             <div className={styles.statusWrap}>
               <span

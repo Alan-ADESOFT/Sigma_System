@@ -30,16 +30,45 @@ const TOOL_SCHEMAS = [
   {
     id: 'criar_tarefa',
     name: 'criar_tarefa',
-    description: 'Prepara a criação de uma tarefa por voz/texto. NÃO salva diretamente — retorna um preview para o usuário confirmar. Use quando o usuário pedir para criar uma tarefa, lembrete ou afazer.',
+    description: `Prepara a criação de uma tarefa. NÃO salva diretamente — retorna preview para confirmação.
+
+TIPOS DE TASK QUE O USUÁRIO PODE PEDIR:
+1. Task para um CLIENTE (tem client_name) — ex: "cria uma tarefa pro cliente X fazer Y"
+2. Task PESSOAL (sem cliente, assigned_to = próprio usuário) — ex: "me lembra de fazer X"
+3. Task para OUTRO MEMBRO (assigned_to_name diferente do usuário) — ex: "cria tarefa pra João fazer X"
+4. Task RECORRENTE (is_recurring=true + frequency) — ex: "toda segunda, criar relatório", "todo dia 5, cobrar parcelas"
+
+PARÂMETROS ESSENCIAIS POR TIPO:
+- Toda task: title (obrigatório), priority, due_date
+- Task de cliente: + client_name
+- Task para outro: + assigned_to_name
+- Task recorrente: + is_recurring=true, frequency, weekday (se weekly), day_of_month (se monthly)
+- Opcionais sempre: description, category_name, subtasks
+
+Se o usuário não especificar prioridade, use "normal".
+Se não especificar data e NÃO for recorrente, deixe due_date null.
+Se for recorrente, NÃO precisa de due_date (o cron gera as instâncias automaticamente).
+
+SUBTASKS AUTOMÁTICAS: Para tarefas complexas com múltiplas etapas (ex: "montar proposta", "lançar campanha", "preparar relatório mensal", "criar landing page"), quebre proativamente em subtasks. Exemplo: "Montar proposta comercial" → subtasks: ["Levantar dados do cliente", "Definir escopo de serviços", "Montar apresentação", "Revisar valores e prazos", "Enviar para aprovação"]. Não pergunte — inclua quando a tarefa claramente se beneficia de decomposição.`,
     parameters: {
       type: 'object',
       properties: {
-        title:             { type: 'string', description: 'Título curto da tarefa.' },
-        description:       { type: 'string', description: 'Descrição/contexto opcional da tarefa.' },
-        priority:          { type: 'string', enum: ['baixa', 'normal', 'alta', 'urgente'], description: 'Prioridade.' },
-        due_date:          { type: 'string', description: 'Data de vencimento em formato YYYY-MM-DD ou expressão como "amanhã", "sexta".' },
-        client_name:       { type: 'string', description: 'Nome do cliente vinculado, se houver.' },
-        assigned_to_name:  { type: 'string', description: 'Nome do membro da equipe a quem a tarefa será atribuída. Se ausente, é atribuída ao próprio usuário.' },
+        title:             { type: 'string', description: 'Título curto e claro da tarefa.' },
+        description:       { type: 'string', description: 'Descrição detalhada / contexto adicional.' },
+        priority:          { type: 'string', enum: ['baixa', 'normal', 'alta', 'urgente'], description: 'Prioridade. Default: normal.' },
+        due_date:          { type: 'string', description: 'Data de vencimento. Formato YYYY-MM-DD ou expressão natural ("amanhã", "sexta", "próxima terça"). Ignorado se for task recorrente.' },
+        client_name:       { type: 'string', description: 'Nome do cliente vinculado. Se vazio = task pessoal/interna.' },
+        assigned_to_name:  { type: 'string', description: 'Nome do membro da equipe. Se vazio = atribuída ao próprio usuário.' },
+        category_name:     { type: 'string', description: 'Nome da categoria da task (ex: "Desenvolvimento", "Design", "Financeiro"). Se não existir, será criada automaticamente.' },
+        subtasks:          {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Lista de subtarefas em texto. Ex: ["Fazer layout", "Revisar textos", "Publicar"]',
+        },
+        is_recurring:      { type: 'boolean', description: 'Se true, vira uma task recorrente (gera instâncias automaticamente pelo cron).' },
+        frequency:         { type: 'string', enum: ['daily', 'weekly', 'monthly'], description: 'Frequência da recorrência. Obrigatório se is_recurring=true.' },
+        weekday:           { type: 'integer', description: 'Dia da semana (0=domingo, 1=segunda... 6=sábado). Obrigatório se frequency=weekly.' },
+        day_of_month:      { type: 'integer', description: 'Dia do mês (1-31). Obrigatório se frequency=monthly.' },
       },
       required: ['title'],
     },
@@ -48,6 +77,12 @@ const TOOL_SCHEMAS = [
     id: 'tarefas_atrasadas',
     name: 'tarefas_atrasadas',
     description: 'Lista todas as tarefas vencidas e ainda não concluídas, ordenadas pelas mais antigas. Use quando o usuário pedir tarefas atrasadas ou pendências antigas.',
+    parameters: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    id: 'listar_categorias_task',
+    name: 'listar_categorias_task',
+    description: 'Lista as categorias de tarefas disponíveis no sistema. Use quando o usuário perguntar "que categorias existem", "quais categorias de task tenho", ou antes de criar uma task quando precisar saber se uma categoria já existe.',
     parameters: { type: 'object', properties: {}, required: [] },
   },
   {

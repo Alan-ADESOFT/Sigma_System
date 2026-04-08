@@ -23,7 +23,8 @@ const { query, queryOne } = require('../../infra/db');
 const JARVIS_FUNCTIONS = [
   // CLIENTES
   { id: 'buscar_cliente',          group: 'CLIENTES',         title: 'Situação do Cliente',     description: 'Pergunta sobre um cliente e recebe um resumo com contratos, parcelas e tarefas abertas.' },
-  { id: 'criar_tarefa',            group: 'CLIENTES',         title: 'Criar Tarefa',            description: 'Cria uma tarefa por voz ou texto, podendo atribuir a outro usuário e vincular a um cliente.' },
+  { id: 'criar_tarefa',            group: 'CLIENTES',         title: 'Criar Tarefa',            description: 'Cria tasks por voz/texto: para clientes, pessoais, para outros membros do time, e recorrentes (diária/semanal/mensal). Suporta categoria e subtarefas.' },
+  { id: 'listar_categorias_task',  group: 'CLIENTES',         title: 'Categorias de Tarefas',   description: 'Lista as categorias de tarefas disponíveis no sistema para ajudar na criação de tasks.' },
   { id: 'tarefas_atrasadas',       group: 'CLIENTES',         title: 'Tarefas Atrasadas',       description: 'Lista todas as tarefas vencidas e lembretes pendentes, ordenadas pelas mais antigas.' },
   { id: 'resumo_do_dia',           group: 'CLIENTES',         title: 'Resumo do Dia',           description: 'Mostra o que tem para hoje: tarefas, prioridades, parcelas vencendo e onboardings pendentes.' },
   { id: 'tarefas_usuario',         group: 'CLIENTES',         title: 'Tarefas de outro usuário', description: 'Permite ver as tarefas atribuídas a outro membro da equipe. (Apenas administradores)' },
@@ -88,11 +89,12 @@ async function getJarvisConfig(tenantId) {
  */
 async function getDailyLimit(tenantId, userRole) {
   const role = (userRole || 'admin').toLowerCase();
-  const key  = role === 'admin' ? 'jarvis_daily_limit_admin' : 'jarvis_daily_limit_user';
+  const isAdmin = role === 'admin' || role === 'god';
+  const key  = isAdmin ? 'jarvis_daily_limit_admin' : 'jarvis_daily_limit_user';
   const v    = await getSetting(tenantId, key);
   const num  = parseInt(v, 10);
   if (Number.isFinite(num) && num > 0) return num;
-  return role === 'admin' ? 40 : 10;
+  return isAdmin ? 40 : 40;
 }
 
 /**

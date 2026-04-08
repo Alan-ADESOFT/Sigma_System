@@ -60,7 +60,7 @@ async function buildContextSnapshot(tenantId) {
         SELECT ct.title, ct.due_date, ct.priority, mc.company_name
         FROM client_tasks ct
         LEFT JOIN marketing_clients mc ON mc.id = ct.client_id
-        WHERE mc.tenant_id = $1 AND ct.done = false
+        WHERE ct.tenant_id = $1 AND ct.done = false
           AND ct.due_date IS NOT NULL AND ct.due_date < CURRENT_DATE
         ORDER BY ct.due_date ASC LIMIT 10
       `, [tenantId]),
@@ -68,8 +68,7 @@ async function buildContextSnapshot(tenantId) {
       // Tarefas de hoje
       queryOne(`
         SELECT COUNT(*)::int AS c FROM client_tasks ct
-        LEFT JOIN marketing_clients mc ON mc.id = ct.client_id
-        WHERE mc.tenant_id = $1 AND ct.done = false
+        WHERE ct.tenant_id = $1 AND ct.done = false
           AND (ct.due_date IS NULL OR ct.due_date <= CURRENT_DATE)
       `, [tenantId]),
 

@@ -311,6 +311,11 @@ function TabTarefas({ clientId }) {
 
   return (
     <div>
+      <HowItWorks>
+        Gerencie as tarefas deste cliente. Crie novas tarefas, acompanhe o progresso e marque como concluídas.
+        Use o botão abaixo para criar uma nova tarefa vinculada a este cliente.
+      </HowItWorks>
+
       {/* Progresso */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -1655,129 +1660,133 @@ function TabInfo({ client, onSave }) {
   return (
     <div style={{ maxWidth: 780 }}>
 
-      {/* ── Logo ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 24 }}>
-        <Avatar src={form.logo_url} name={form.company_name} size={72} />
-        <div>
-          <Label>Logo do negócio</Label>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            onChange={handleLogoFile}
-            style={{ display: 'none' }}
-          />
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            style={{
-              padding: '6px 14px', borderRadius: 6, cursor: uploading ? 'not-allowed' : 'pointer',
-              border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.03)',
-              color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.68rem',
-            }}
-          >
-            {uploading ? 'Enviando...' : form.logo_url ? 'Trocar logo' : 'Escolher imagem'}
-          </button>
-          {form.logo_url && (
-            <button
-              onClick={() => { setForm(p => ({ ...p, logo_url: '' })); setSaved(false); }}
-              style={{ marginLeft: 8, background: 'none', border: 'none', cursor: 'pointer', color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.62rem' }}
-            >
-              remover
-            </button>
-          )}
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-muted)', marginTop: 4 }}>
-            JPG, PNG, WEBP · máx 3 MB
+      {/* ── Logo + Identificação ── */}
+      <div className="glass-card" style={{ padding: '20px 24px', marginBottom: 16 }}>
+        <SectionTitle>Logo e Identificação</SectionTitle>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 20 }}>
+          <Avatar src={form.logo_url} name={form.company_name} size={72} />
+          <div style={{ flex: 1 }}>
+            <input ref={fileRef} type="file" accept="image/*" onChange={handleLogoFile} style={{ display: 'none' }} />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                style={{
+                  padding: '6px 14px', borderRadius: 6, cursor: uploading ? 'not-allowed' : 'pointer',
+                  border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.03)',
+                  color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.68rem',
+                }}
+              >
+                {uploading ? 'Enviando...' : form.logo_url ? 'Trocar logo' : 'Escolher imagem'}
+              </button>
+              {form.logo_url && (
+                <button
+                  onClick={() => { setForm(p => ({ ...p, logo_url: '' })); setSaved(false); }}
+                  style={{
+                    padding: '6px 14px', borderRadius: 6, cursor: 'pointer',
+                    border: '1px solid rgba(255,0,51,0.2)', background: 'rgba(255,0,51,0.04)',
+                    color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+                  }}
+                >
+                  Remover logo
+                </button>
+              )}
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginTop: 6 }}>
+              JPG, PNG, WEBP · máx 3 MB
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <Label>Empresa / Marca *</Label>
+            <input value={form.company_name} onChange={h('company_name')} style={INP} />
+          </div>
+          <div>
+            <Label>Nicho</Label>
+            <input value={form.niche} onChange={h('niche')} placeholder="ex: Fitness, Saúde..." style={INP} />
+          </div>
+          <div>
+            <Label>Região / Mercado</Label>
+            <input value={form.region} onChange={h('region')} placeholder="Brasil, Online..." style={INP} />
           </div>
         </div>
       </div>
 
-      <Divider />
-
-      {/* ── Identificação ── */}
-      <SectionTitle>Identificação</SectionTitle>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-        <div>
-          <Label>Empresa / Marca *</Label>
-          <input value={form.company_name} onChange={h('company_name')} style={INP} />
-        </div>
-        <div>
-          <Label>Nicho</Label>
-          <input value={form.niche} onChange={h('niche')} placeholder="ex: Fitness, Saúde..." style={INP} />
-        </div>
-        <div>
-          <Label>E-mail</Label>
-          <input type="email" value={form.email} onChange={h('email')} placeholder="contato@empresa.com" style={INP} />
-        </div>
-        <div>
-          <Label>Telefone</Label>
-          <input value={maskPhone(form.phone)} onChange={e => { setForm(p => ({ ...p, phone: maskPhone(e.target.value) })); setSaved(false); }} placeholder="(11) 99999-9999" style={INP} />
-        </div>
-        <div>
-          <Label>Região / Mercado</Label>
-          <input value={form.region} onChange={h('region')} placeholder="Brasil, Online..." style={INP} />
-        </div>
-        <div>
-          <Label>Ticket Médio (contrato)</Label>
-          <input
-            value={contractMonthly !== null ? fmtBRL(contractMonthly) : (form.avg_ticket || '—')}
-            readOnly
-            style={{ ...INP, opacity: 0.55, cursor: 'default' }}
-          />
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginTop: 3 }}>
-            Derivado do valor mensal do contrato
+      {/* ── Contato ── */}
+      <div className="glass-card" style={{ padding: '20px 24px', marginBottom: 16 }}>
+        <SectionTitle>Contato</SectionTitle>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div>
+            <Label>E-mail</Label>
+            <input type="email" value={form.email} onChange={h('email')} placeholder="contato@empresa.com" style={INP} />
+          </div>
+          <div>
+            <Label>Telefone</Label>
+            <input value={maskPhone(form.phone)} onChange={e => { setForm(p => ({ ...p, phone: maskPhone(e.target.value) })); setSaved(false); }} placeholder="(11) 99999-9999" style={INP} />
+          </div>
+          <div>
+            <Label>Ticket Médio (contrato)</Label>
+            <input
+              value={contractMonthly !== null ? fmtBRL(contractMonthly) : (form.avg_ticket || '—')}
+              readOnly
+              style={{ ...INP, opacity: 0.55, cursor: 'default' }}
+            />
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginTop: 3 }}>
+              Derivado do valor mensal do contrato
+            </div>
           </div>
         </div>
       </div>
-
-      <Divider />
 
       {/* ── Links importantes ── */}
-      <SectionTitle
-        action={
-          <button onClick={addLink} style={{
-            padding: '4px 10px', borderRadius: 5, cursor: 'pointer',
-            border: '1px solid rgba(255,0,51,0.2)', background: 'rgba(255,0,51,0.05)',
-            color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
-          }}>
-            + Link
-          </button>
-        }
-      >
-        Links Importantes
-      </SectionTitle>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
-        {links.length === 0 && (
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)', padding: '12px 0' }}>
-            Nenhum link adicionado. Clique em "+ Link" para adicionar.
-          </div>
-        )}
-        {links.map((lk, i) => (
-          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input
-              placeholder="Rótulo (ex: Site, Instagram...)"
-              value={lk.label}
-              onChange={e => updateLink(i, 'label', e.target.value)}
-              style={{ ...INP, flex: '0 0 180px', width: 180 }}
-            />
-            <input
-              placeholder="https://..."
-              value={lk.url}
-              onChange={e => updateLink(i, 'url', e.target.value)}
-              style={{ ...INP, flex: 1 }}
-            />
-            <button onClick={() => removeLink(i)} style={{
-              background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
-              fontSize: '1rem', padding: '0 4px', flexShrink: 0,
-            }}>×</button>
-          </div>
-        ))}
+      <div className="glass-card" style={{ padding: '20px 24px', marginBottom: 16 }}>
+        <SectionTitle
+          action={
+            <button onClick={addLink} style={{
+              padding: '4px 10px', borderRadius: 5, cursor: 'pointer',
+              border: '1px solid rgba(255,0,51,0.2)', background: 'rgba(255,0,51,0.05)',
+              color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+            }}>
+              + Link
+            </button>
+          }
+        >
+          Links Importantes
+        </SectionTitle>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {links.length === 0 && (
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)', padding: '12px 0' }}>
+              Nenhum link adicionado. Clique em "+ Link" para adicionar.
+            </div>
+          )}
+          {links.map((lk, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                placeholder="Rótulo (ex: Site, Instagram...)"
+                value={lk.label}
+                onChange={e => updateLink(i, 'label', e.target.value)}
+                style={{ ...INP, flex: '0 0 180px', width: 180 }}
+              />
+              <input
+                placeholder="https://..."
+                value={lk.url}
+                onChange={e => updateLink(i, 'url', e.target.value)}
+                style={{ ...INP, flex: 1 }}
+              />
+              <button onClick={() => removeLink(i)} style={{
+                background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
+                fontSize: '1rem', padding: '0 4px', flexShrink: 0,
+              }}>×</button>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <Divider />
-
       {/* ── Serviços Fechados ── */}
-      <SectionTitle>Serviços Fechados</SectionTitle>
+      <div className="glass-card" style={{ padding: '20px 24px', marginBottom: 16 }}>
+        <SectionTitle>Serviços Fechados</SectionTitle>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
         {services.map((svc, i) => (
           <div key={svc.id || i} style={{
@@ -1823,9 +1832,12 @@ function TabInfo({ client, onSave }) {
           color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
         }}>+</button>
       </div>
+      </div>
 
       {/* ── Grupo WhatsApp ── */}
-      <WhatsAppGroupField clientId={client.id} currentGroupId={client.whatsapp_group_id} currentGroupName={client.whatsapp_group_name} />
+      <div className="glass-card" style={{ padding: '20px 24px', marginBottom: 16 }}>
+        <WhatsAppGroupField clientId={client.id} currentGroupId={client.whatsapp_group_id} currentGroupName={client.whatsapp_group_name} />
+      </div>
 
       {/* ── Erro + Salvar ── */}
       {err && (

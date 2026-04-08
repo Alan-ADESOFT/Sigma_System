@@ -298,38 +298,26 @@ function StageEditModal({ stage, onClose, onSave }) {
           />
         </div>
 
+        {/* ── CARD DE VÍDEO ── preview visual + URL + duração + nota ── */}
         <div className={styles.modalSection}>
-          <div className={styles.modalSectionLabel}>URL DO VÍDEO</div>
-          <input
-            type="text"
-            className={styles.input}
-            value={videoUrl}
-            onChange={e => setVideoUrl(e.target.value)}
-            placeholder="https://... (Panda, YouTube, MP4 direto, etc)"
+          <div className={styles.modalSectionLabel}>VÍDEO DA ETAPA</div>
+          <VideoConfigCard
+            videoUrl={videoUrl}
+            videoDuration={videoDuration}
+            onUrlChange={setVideoUrl}
+            onDurationChange={setVideoDuration}
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div className={styles.modalSection}>
-            <div className={styles.modalSectionLabel}>DURAÇÃO (segundos)</div>
-            <input
-              type="number"
-              className={styles.input}
-              value={videoDuration}
-              onChange={e => setVideoDuration(e.target.value)}
-              placeholder="ex: 90"
-            />
-          </div>
-          <div className={styles.modalSection}>
-            <div className={styles.modalSectionLabel}>TEMPO ESTIMADO</div>
-            <input
-              type="text"
-              className={styles.input}
-              value={timeEstimate}
-              onChange={e => setTimeEstimate(e.target.value)}
-              placeholder="~5 min"
-            />
-          </div>
+        <div className={styles.modalSection}>
+          <div className={styles.modalSectionLabel}>TEMPO ESTIMADO DO FORMULÁRIO</div>
+          <input
+            type="text"
+            className={styles.input}
+            value={timeEstimate}
+            onChange={e => setTimeEstimate(e.target.value)}
+            placeholder="~5 min"
+          />
         </div>
 
         <div className={styles.modalSection}>
@@ -381,6 +369,248 @@ function StageEditModal({ stage, onClose, onSave }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   VIDEO CONFIG CARD — preview + URL + duração + dica
+   Substitui o input simples de URL por um cartão visual que
+   mostra preview do vídeo (se URL preenchida) ou placeholder.
+═══════════════════════════════════════════════════════════ */
+
+function VideoConfigCard({ videoUrl, videoDuration, onUrlChange, onDurationChange }) {
+  const hasUrl = !!(videoUrl && videoUrl.trim().length > 0);
+
+  // Detecta provedor pra montar o embed correto. YouTube e Vimeo precisam
+  // de URLs específicas; Panda/Bunny/MP4 caem no <video> nativo.
+  const embedInfo = (() => {
+    if (!hasUrl) return null;
+    const url = videoUrl.trim();
+
+    // YouTube
+    const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([\w-]{11})/);
+    if (ytMatch) {
+      return { type: 'iframe', src: `https://www.youtube.com/embed/${ytMatch[1]}` };
+    }
+
+    // Vimeo
+    const vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+    if (vimeoMatch) {
+      return { type: 'iframe', src: `https://player.vimeo.com/video/${vimeoMatch[1]}` };
+    }
+
+    // Panda Video — já vem com /embed/ na URL normalmente
+    if (url.includes('pandavideo')) {
+      return { type: 'iframe', src: url };
+    }
+
+    // MP4 direto / outros — usa <video> nativo
+    if (/\.(mp4|webm|mov|m3u8)(\?|$)/i.test(url)) {
+      return { type: 'video', src: url };
+    }
+
+    // Fallback: tenta iframe
+    return { type: 'iframe', src: url };
+  })();
+
+  function handleClear() {
+    onUrlChange('');
+    onDurationChange('');
+  }
+
+  return (
+    <div style={{
+      background: 'rgba(10, 10, 10, 0.6)',
+      border: '1px solid var(--border-default)',
+      borderRadius: 10,
+      padding: 14,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 12,
+    }}>
+      {/* Header do card */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+      }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: 8,
+          background: 'rgba(255, 0, 51, 0.08)',
+          border: '1px solid rgba(255, 0, 51, 0.25)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#ff1a4d',
+          flexShrink: 0,
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="23 7 16 12 23 17 23 7" />
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+          </svg>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.7rem',
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+          }}>
+            Player de Vídeo
+          </div>
+          <div style={{
+            fontFamily: 'var(--font-sans)',
+            fontSize: '0.68rem',
+            color: 'var(--text-muted)',
+            marginTop: 2,
+          }}>
+            {hasUrl ? 'Vídeo configurado' : 'Sem vídeo configurado'}
+          </div>
+        </div>
+        {hasUrl && (
+          <button
+            type="button"
+            onClick={handleClear}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--border-default)',
+              color: 'var(--text-muted)',
+              borderRadius: 6,
+              padding: '6px 10px',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.65rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}
+            title="Remover vídeo"
+          >
+            Limpar
+          </button>
+        )}
+      </div>
+
+      {/* Preview do vídeo OU placeholder */}
+      <div style={{
+        position: 'relative',
+        width: '100%',
+        aspectRatio: '16 / 9',
+        background: '#050505',
+        border: '1px solid rgba(255, 255, 255, 0.06)',
+        borderRadius: 8,
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        {embedInfo?.type === 'iframe' && (
+          <iframe
+            src={embedInfo.src}
+            title="Preview do vídeo"
+            style={{ width: '100%', height: '100%', border: 0 }}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        )}
+        {embedInfo?.type === 'video' && (
+          <video
+            src={embedInfo.src}
+            controls
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          />
+        )}
+        {!hasUrl && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8,
+            color: 'var(--text-muted)',
+            textAlign: 'center',
+            padding: 16,
+          }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}>
+              <polygon points="23 7 16 12 23 17 23 7" />
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+            </svg>
+            <div style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.68rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              opacity: 0.6,
+            }}>
+              Nenhum vídeo
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Inputs de URL e duração */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.6rem',
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            marginBottom: 4,
+          }}>
+            URL do vídeo
+          </div>
+          <input
+            type="text"
+            className={styles.input}
+            value={videoUrl}
+            onChange={e => onUrlChange(e.target.value)}
+            placeholder="YouTube, Vimeo, Panda, Bunny, MP4 direto..."
+          />
+        </div>
+
+        <div>
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.6rem',
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            marginBottom: 4,
+          }}>
+            Duração (segundos)
+          </div>
+          <input
+            type="number"
+            className={styles.input}
+            value={videoDuration}
+            onChange={e => onDurationChange(e.target.value)}
+            placeholder="ex: 90"
+          />
+        </div>
+      </div>
+
+      {/* Nota sobre modo teste */}
+      {!hasUrl && (
+        <div style={{
+          padding: '8px 10px',
+          background: 'rgba(249, 115, 22, 0.06)',
+          border: '1px solid rgba(249, 115, 22, 0.2)',
+          borderRadius: 6,
+          fontFamily: 'var(--font-mono)',
+          fontSize: '0.62rem',
+          color: 'var(--text-muted)',
+          lineHeight: 1.5,
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 6,
+        }}>
+          <span style={{ color: '#f97316', fontSize: '0.75rem', lineHeight: 1 }}>!</span>
+          <span>
+            Sem vídeo, o formulário libera sem countdown (modo teste).
+          </span>
+        </div>
+      )}
     </div>
   );
 }

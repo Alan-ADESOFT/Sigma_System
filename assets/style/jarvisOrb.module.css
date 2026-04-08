@@ -37,24 +37,95 @@
   transform: scale(1.06);
 }
 
+/* ── Label J.A.R.V.I.S — pill discreto no topo do FAB ── */
 .fabBadge {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 18px;
-  height: 18px;
-  border-radius: 9px;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 16px;
+  padding: 0 8px;
+  border-radius: 8px;
   background: rgba(8, 8, 8, 0.95);
-  border: 1px solid rgba(255, 0, 51, 0.4);
+  border: 1px solid rgba(255, 0, 51, 0.45);
   font-family: var(--font-mono);
   font-size: 0.5rem;
   font-weight: 700;
-  color: var(--brand-500, #ff0033);
+  letter-spacing: 0.08em;
+  color: #ff1a4d;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 4px;
-  z-index: 2;
+  white-space: nowrap;
+  z-index: 3;
+  box-shadow: 0 0 10px rgba(255, 0, 51, 0.25);
+  pointer-events: none;
+}
+
+/* ── Badge da quota diária — filled vermelho, mostra requests restantes ── */
+.fabQuotaBadge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: #ff0033;
+  border: 2px solid #050505;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+  box-shadow:
+    0 0 12px rgba(255, 0, 51, 0.7),
+    0 0 24px rgba(255, 0, 51, 0.3);
+  pointer-events: none;
+  animation: fabQuotaPulse 2.6s ease-in-out infinite;
+}
+
+@keyframes fabQuotaPulse {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(255, 0, 51, 0.7), 0 0 24px rgba(255, 0, 51, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(255, 0, 51, 0.9), 0 0 32px rgba(255, 0, 51, 0.5);
+  }
+}
+
+/* ── Ícone "J" dentro do chip do FAB ── */
+.fabIcon {
+  display: block;
+  color: #ff1a4d;
+  filter: drop-shadow(0 0 6px rgba(255, 0, 51, 0.55));
+  z-index: 1;
+  position: relative;
+  pointer-events: none;
+}
+
+/* ── Anel pulsante ao redor do FAB ── */
+.fabPulseRing {
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 0, 51, 0.4);
+  pointer-events: none;
+  animation: fabRingPulse 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes fabRingPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 0;
+  }
 }
 
 /* ── FAB inner wireframe sphere ────────────────────────────── */
@@ -106,6 +177,15 @@
   align-items: center;
   justify-content: center;
   perspective: 800px;
+}
+
+/* ── Canvas da esfera de partículas (CanvasOrb) ──
+   Garante display:block (canvas é inline por default) e centralização. */
+.orbCanvas {
+  display: block;
+  margin: 0 auto;
+  pointer-events: none;
+  filter: drop-shadow(0 0 18px rgba(255, 0, 51, 0.18));
 }
 
 .orbRim {
@@ -325,6 +405,29 @@
 @keyframes panelIn {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+
+/* ── Background canvas (BgParticles) e backdrop ──
+   IMPORTANTE: precisam ser absolute. Sem isso, o canvas (que tem
+   width/height = window.inner*) ocupa o fluxo e empurra o .content
+   pra fora da viewport — só fica visível o .bottomSection (fixed). */
+.bgCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.panelBg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(255, 0, 51, 0.05) 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 80%, rgba(255, 0, 51, 0.03) 0%, transparent 50%);
 }
 
 /* ── Stars ─────────────────────────────────────────────────── */

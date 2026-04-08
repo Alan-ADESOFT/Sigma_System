@@ -443,12 +443,8 @@ export default function FinanceiroDashboard() {
     <DashboardLayout activeTab="financeiro">
       {/* Header */}
       <div style={{ marginBottom: 16 }}>
-        <h1 style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0, marginBottom: 4 }}>
-          Financeiro
-        </h1>
-        <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)', margin: 0 }}>
-          Visão consolidada de receitas, despesas e contratos.
-        </p>
+        <h1 className="page-title">Financeiro</h1>
+        <p className="page-subtitle">Visão consolidada de receitas, despesas e contratos.</p>
       </div>
 
       {error && (

@@ -45,68 +45,93 @@ const SIDEBAR_COLLAPSED = 56;  // px — sidebar recolhida (somente ícones)
    Estrutura de navegação
    Cada seção agrupa rotas por domínio funcional; ícone é chave do objeto ICONS.
 ───────────────────────────────────────────────────────────────────────────── */
+/* ── Hierarquia de cargos ── */
+const ROLE_LEVEL = { user: 1, admin: 2, god: 3 };
+function hasAccess(userRole, minRole) {
+  return (ROLE_LEVEL[userRole] || 0) >= (ROLE_LEVEL[minRole] || 0);
+}
+
+/**
+ * Verifica se o usuário pode ver determinado item de navegação.
+ * - god: acesso total
+ * - admin: tudo exceto minRole='god'
+ * - user: checa allowedPages do cargo personalizado
+ */
+function canSeeItem(user, item) {
+  if (!user) return false;
+  if (user.role === 'god') return true;
+  if (user.role === 'admin') return item.minRole !== 'god';
+  // role = 'user' → verifica cargo personalizado
+  if (!user.allowedPages || !Array.isArray(user.allowedPages)) return false;
+  return user.allowedPages.includes(item.href);
+}
+
 const NAV_SECTIONS = [
   {
     category: 'PAINEL',
     items: [
-      { href: '/dashboard/overview',         label: 'Visão Geral',            tag: '01', icon: 'eye'       },
+      { href: '/dashboard/overview',         label: 'Visão Geral',            tag: '01', icon: 'eye',       minRole: 'user' },
     ],
   },
   {
     category: 'FINANÇAS',
     items: [
-      { href: '/dashboard/financeiro',       label: 'Financeiro',             tag: '02', icon: 'chart'     },
+      { href: '/dashboard/financeiro',       label: 'Financeiro',             tag: '02', icon: 'chart',     minRole: 'admin' },
     ],
   },
   {
     category: 'ORGANIZAÇÃO',
     items: [
-      { href: '/dashboard/productivity',         label: 'Produtividade',         tag: '03', icon: 'barChart'  },
-      { href: '/dashboard/tasks',                label: 'Tarefas',               tag: '04', icon: 'clipboard' },
-      { href: '/dashboard/meetings',             label: 'Calendário',            tag: '05', icon: 'calendar'  },
-      { href: '/dashboard/task-automation',      label: 'Automação',             tag: '06', icon: 'zap'       },
+      { href: '/dashboard/productivity',         label: 'Produtividade',         tag: '03', icon: 'barChart',  minRole: 'user' },
+      { href: '/dashboard/tasks',                label: 'Tarefas',               tag: '04', icon: 'clipboard', minRole: 'user' },
+      { href: '/dashboard/meetings',             label: 'Calendário',            tag: '05', icon: 'calendar',  minRole: 'user' },
+      { href: '/dashboard/task-automation',      label: 'Automação',             tag: '06', icon: 'zap',       minRole: 'admin' },
     ],
   },
   {
     category: 'DADOS',
     items: [
-      { href: '/dashboard/clients',          label: 'Clientes',               tag: '07', icon: 'users'     },
-      { href: '/dashboard/database',         label: 'Base de Dados',          tag: '08', icon: 'database'  },
-      { href: '/dashboard/indicacoes',       label: 'Indicações',             tag: '09', icon: 'share'    },
+      { href: '/dashboard/clients',          label: 'Clientes',               tag: '07', icon: 'users',     minRole: 'user' },
+      { href: '/dashboard/database',         label: 'Base de Dados',          tag: '08', icon: 'database',  minRole: 'admin' },
+      { href: '/dashboard/indicacoes',       label: 'Indicações',             tag: '09', icon: 'share',     minRole: 'admin' },
     ],
   },
   {
     category: 'AGENTES DE IA',
     items: [
-      { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '10', icon: 'zap'       },
-      { href: '/dashboard/jarvis',           label: 'J.A.R.V.I.S',           tag: '11', icon: 'bot'       },
-      { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '12', icon: 'edit'      },
+      { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '10', icon: 'zap',       minRole: 'admin' },
+      { href: '/dashboard/jarvis',           label: 'J.A.R.V.I.S',           tag: '11', icon: 'bot',       minRole: 'admin' },
+      { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '12', icon: 'edit',      minRole: 'admin' },
     ],
   },
   {
     category: 'SOCIAL MEDIA',
+    hidden: true,
     items: [
-      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '13', icon: 'barChart'  },
-      { href: '/dashboard/content-plan',     label: 'Planejamento',           tag: '14', icon: 'list'      },
-      { href: '/dashboard/publish',          label: 'Publicar Agora',         tag: '15', icon: 'send'      },
+      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '13', icon: 'barChart',  minRole: 'admin' },
+      { href: '/dashboard/content-plan',     label: 'Planejamento',           tag: '14', icon: 'list',      minRole: 'admin' },
+      { href: '/dashboard/publish',          label: 'Publicar Agora',         tag: '15', icon: 'send',      minRole: 'admin' },
     ],
   },
   {
     category: 'TRÁFEGO',
+    hidden: true,
     items: [
-      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '16', icon: 'megaphone' },
+      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '16', icon: 'megaphone', minRole: 'admin' },
     ],
   },
   {
     category: 'SISTEMA',
     items: [
-      { href: '/dashboard/onboarding-config',    label: 'Config. Onboarding',    tag: '17', icon: 'calendar'  },
-      { href: '/dashboard/settings/pipeline',     label: 'Config. Pipeline',      tag: '18', icon: 'cpu'       },
-      { href: '/dashboard/settings/copy',         label: 'Config. Copy',          tag: '19', icon: 'edit2'     },
-      { href: '/dashboard/settings/prompt-library',  label: 'Biblioteca de Prompts', tag: '20', icon: 'book'      },
-      { href: '/dashboard/settings/jarvis',          label: 'Config. Jarvis',        tag: '21', icon: 'bot'       },
-      { href: '/dashboard/settings/tasks',            label: 'Config. Tarefas',       tag: '22', icon: 'settings'  },
-      { href: '/dashboard/settings/financeiro',       label: 'Config. Financeiro',    tag: '23', icon: 'chart',     adminOnly: true },
+      { href: '/dashboard/settings/users',           label: 'Gestão de Usuários',    tag: '17', icon: 'users',     minRole: 'god' },
+      { href: '/dashboard/onboarding-config',       label: 'Config. Onboarding',    tag: '18', icon: 'calendar',  minRole: 'god' },
+      { href: '/dashboard/settings/pipeline',        label: 'Config. Pipeline',      tag: '19', icon: 'cpu',       minRole: 'god' },
+      { href: '/dashboard/settings/copy',            label: 'Config. Copy',          tag: '20', icon: 'edit2',     minRole: 'god' },
+      { href: '/dashboard/settings/jarvis',          label: 'Config. Jarvis',        tag: '21', icon: 'bot',       minRole: 'god' },
+      { href: '/dashboard/settings/tasks',           label: 'Config. Tarefas',       tag: '22', icon: 'settings',  minRole: 'god' },
+      { href: '/dashboard/settings/financeiro',      label: 'Config. Financeiro',    tag: '23', icon: 'chart',     minRole: 'god' },
+      { href: '/dashboard/settings/prompt-library',  label: 'Biblioteca de Prompts', tag: '24', icon: 'book',      minRole: 'god' },
+
     ],
   },
 ];
@@ -451,17 +476,31 @@ function ThreeDotMenu({ user, logout }) {
             </div>
           </div>
 
-          {/* Opção: Configurações */}
+          {/* Opção: Meu Perfil (todos) */}
           <MenuDropdownItem
             icon={
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
               </svg>
             }
-            label="Configuracoes"
-            onClick={() => { setOpen(false); router.push('/dashboard/settings/pipeline'); }}
+            label="Meu Perfil"
+            onClick={() => { setOpen(false); router.push('/dashboard/profile'); }}
           />
+
+          {/* Opção: Configurações (só god) */}
+          {user?.role === 'god' && (
+            <MenuDropdownItem
+              icon={
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              }
+              label="Configurações"
+              onClick={() => { setOpen(false); router.push('/dashboard/settings/pipeline'); }}
+            />
+          )}
 
           <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '4px 0' }} />
 
@@ -1055,7 +1094,10 @@ export default function DashboardLayout({ children, activeTab }) {
 
         {/* ── Navegação em categorias ── */}
         <nav className={styles.sidebarNav}>
-          {NAV_SECTIONS.map((section, sIdx) => (
+          {NAV_SECTIONS.filter(s => !s.hidden).map((section, sIdx) => {
+            const visibleItems = section.items.filter(item => canSeeItem(user, item));
+            if (visibleItems.length === 0) return null;
+            return (
             <div key={section.category}>
               {/*
                * Rótulo de categoria — só aparece quando sidebar está expandida.
@@ -1083,7 +1125,7 @@ export default function DashboardLayout({ children, activeTab }) {
               )}
 
               {/* Links individuais da seção */}
-              {section.items.filter(item => !item.adminOnly || user?.role === 'admin').map(item => {
+              {visibleItems.map(item => {
                 // Match exato OU prefixo seguido de "/" — evita que /dashboard/social
                 // case com /dashboard/social-dashboard
                 const isActive = item.href === '/dashboard'
@@ -1141,7 +1183,8 @@ export default function DashboardLayout({ children, activeTab }) {
                 );
               })}
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         {/* ── Footer da sidebar — visível apenas quando expandida ── */}

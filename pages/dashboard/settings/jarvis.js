@@ -345,6 +345,61 @@ export default function JarvisSettingsPage() {
             );
           })}
         </div>
+
+        {/* SEÇÃO 6 — TASKS VIA JARVIS */}
+        <div className="set-section-card">
+          <div className="set-section-header">
+            <div className="set-section-header-left">
+              <div className="set-section-title-row">
+                <span className="set-section-dot" />
+                <span className="set-section-title-text">Tasks via Jarvis</span>
+                <span className="set-section-line" />
+              </div>
+              <div className="set-section-description">
+                Comportamento do Jarvis ao criar tarefas por voz/texto: categorias automáticas, recorrência e atribuição a outros membros.
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.toggleRow}>
+            <div>
+              <div className={styles.toggleLabel}>Criar categorias automaticamente</div>
+              <div className={styles.toggleDesc}>
+                Quando o Jarvis recebe uma categoria que não existe, cria automaticamente com cor padrão.
+              </div>
+            </div>
+            <Toggle
+              checked={config.jarvis_task_auto_category === 'true'}
+              onChange={v => saveKey('jarvis_task_auto_category', v ? 'true' : 'false')}
+            />
+          </div>
+
+          <div className={styles.toggleRow}>
+            <div>
+              <div className={styles.toggleLabel}>Tasks recorrentes via voz</div>
+              <div className={styles.toggleDesc}>
+                Permite criar tasks recorrentes (diária / semanal / mensal) por comando de voz.
+              </div>
+            </div>
+            <Toggle
+              checked={config.jarvis_task_recurring_enabled !== 'false'}
+              onChange={v => saveKey('jarvis_task_recurring_enabled', v ? 'true' : 'false')}
+            />
+          </div>
+
+          <div className={styles.toggleRow}>
+            <div>
+              <div className={styles.toggleLabel}>Atribuir tasks a outros membros</div>
+              <div className={styles.toggleDesc}>
+                Permite que o Jarvis crie tasks atribuídas a outros usuários do time.
+              </div>
+            </div>
+            <Toggle
+              checked={config.jarvis_task_assign_others !== 'false'}
+              onChange={v => saveKey('jarvis_task_assign_others', v ? 'true' : 'false')}
+            />
+          </div>
+        </div>
       </div>
     </DashboardLayout>
   );

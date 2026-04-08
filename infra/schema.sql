@@ -27,6 +27,26 @@ CREATE TABLE IF NOT EXISTS tenants (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Sprint Usuários: coluna de telefone para perfil
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS phone TEXT;
+
+-- ============================================================
+-- 1b. USER_ROLES (cargos personalizados por tenant)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_roles (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    allowed_pages   JSONB NOT NULL DEFAULT '[]',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(tenant_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_user_roles_tenant ON user_roles(tenant_id);
+
+-- Vincula usuário a um cargo personalizado (usado quando role = 'user')
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS custom_role_id TEXT REFERENCES user_roles(id) ON DELETE SET NULL;
+
 -- ============================================================
 -- 2. ACCOUNTS (contas Instagram vinculadas a um tenant)
 -- ============================================================
@@ -253,6 +273,10 @@ ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS assigned_to  TEXT REFERENCES t
 ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS created_by   TEXT REFERENCES tenants(id) ON DELETE SET NULL;
 ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS description  TEXT;
 ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS tenant_id    TEXT REFERENCES tenants(id) ON DELETE CASCADE;
+
+-- Sprint Jarvis: tasks PESSOAIS (sem cliente vinculado) — torna client_id nullable.
+-- Antes era NOT NULL e o Jarvis quebrava ao criar task tipo "lembra de fazer X".
+ALTER TABLE client_tasks ALTER COLUMN client_id DROP NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_client_tasks_client   ON client_tasks(client_id);
 CREATE INDEX IF NOT EXISTS idx_client_tasks_assigned ON client_tasks(assigned_to);
@@ -1036,6 +1060,59 @@ CREATE INDEX IF NOT EXISTS idx_task_recurrences_tenant ON task_recurrences(tenan
 CREATE INDEX IF NOT EXISTS idx_task_recurrences_active ON task_recurrences(is_active);
 
 -- ============================================================
+-- SPRINT REFERRAL — Sistema de Indicação (pós-onboarding)
+-- ============================================================
+-- Cliente termina onboarding → gera link único → indicado vê
+-- página secreta mobile-only com VSL, oferta e timer 72h.
+-- Migration espelhada em infra/migrations/003_referral_system.sql
+-- ============================================================
+CREATE TABLE IF NOT EXISTS referrals (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    referrer_id     TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    ref_code        TEXT NOT NULL UNIQUE,
+    ref_link        TEXT NOT NULL,
+    referred_name   TEXT,
+    referred_phone  TEXT,
+    referred_email  TEXT,
+    status          TEXT NOT NULL DEFAULT 'link_created',
+    video_progress  INTEGER NOT NULL DEFAULT 0,
+    first_access_at TIMESTAMPTZ,
+    timer_expires   TIMESTAMPTZ,
+    purchased_at    TIMESTAMPTZ,
+    purchase_value  NUMERIC(12,2),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_id);
+CREATE INDEX IF NOT EXISTS idx_referrals_tenant   ON referrals(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_referrals_ref_code ON referrals(ref_code);
+CREATE INDEX IF NOT EXISTS idx_referrals_status   ON referrals(status);
+
+CREATE TABLE IF NOT EXISTS referral_config (
+    id                    TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id             TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    vsl_video_url         TEXT,
+    vsl_video_duration    INTEGER NOT NULL DEFAULT 240,
+    offer_reveal_at       INTEGER NOT NULL DEFAULT 210,
+    offer_price           NUMERIC(12,2) NOT NULL DEFAULT 997.00,
+    offer_original        NUMERIC(12,2) NOT NULL DEFAULT 5000.00,
+    offer_installments    INTEGER NOT NULL DEFAULT 12,
+    timer_hours           INTEGER NOT NULL DEFAULT 72,
+    checkout_url          TEXT,
+    copy_warning_message  TEXT,
+    whatsapp_message      TEXT,
+    page_active           BOOLEAN NOT NULL DEFAULT true,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(tenant_id)
+);
+ALTER TABLE referral_config ADD COLUMN IF NOT EXISTS offer_reveal_at      INTEGER NOT NULL DEFAULT 210;
+ALTER TABLE referral_config ADD COLUMN IF NOT EXISTS copy_warning_message TEXT;
+ALTER TABLE referral_config ADD COLUMN IF NOT EXISTS whatsapp_message     TEXT;
+CREATE INDEX IF NOT EXISTS idx_referral_config_tenant ON referral_config(tenant_id);
+
+-- ============================================================
 -- CLEANUP (tabelas descontinuadas)
 -- ============================================================
 DROP TABLE IF EXISTS stage_quality_scores;
@@ -1066,7 +1143,8 @@ BEGIN
         'instagram_accounts','instagram_scheduled_posts',
         'task_comments','meetings','task_templates','task_bot_config',
         'task_recurrences',
-        'finance_categories'
+        'finance_categories',
+        'referrals','referral_config'
     ])
     LOOP
         EXECUTE format('

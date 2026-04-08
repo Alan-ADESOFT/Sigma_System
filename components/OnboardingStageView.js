@@ -5,8 +5,8 @@
  *
  * Estados internos (linha do tempo do que o cliente vê):
  *   1. Header da etapa (sempre visível)
- *   2. Vídeo obrigatório
- *   3. Botão "Iniciar Formulário" — começa locked, libera após countdown de 20s
+ *   2. Vídeo (visível, mas NÃO é mais barreira — só registra que assistiu)
+ *   3. Botão "Iniciar Formulário" — começa locked, libera após countdown de 10s
  *   4. Formulário (renderizado por OnboardingFormFields)
  *   5. Botão de envio
  *   6. Após envio: substitui tudo por <MicroCelebration />
@@ -20,8 +20,12 @@
  *   - nextStage:    teaser da próxima
  *   - onSubmitted:  () => void (chamado após envio bem-sucedido — pai pode recarregar)
  *
- * IMPORTANTE: o vídeo é barreira obrigatória. Se não tem URL configurada,
- * libera direto (modo teste). Se tem, o cliente assiste E aguarda 20s.
+ * IMPORTANTE (mudança de UX):
+ *   O vídeo NÃO bloqueia mais o formulário. O countdown de 10s começa no MOUNT
+ *   do componente, em paralelo ao vídeo. Quando zera, o botão libera —
+ *   independente do cliente ter assistido ou não. O sistema continua
+ *   registrando o vídeo como "watched" pra estatística, mas isso não é
+ *   mais barreira. Se já assistiu numa visita anterior, libera direto (0s).
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -53,15 +57,6 @@ function ClockIcon() {
   );
 }
 
-function LockIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  );
-}
-
 function ArrowIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -82,18 +77,22 @@ function MicIcon() {
   );
 }
 
-const COUNTDOWN_SECONDS = 20;
+// Tempo mínimo (em segundos) que o cliente vê a página antes do botão
+// liberar. Conta DESDE O MOUNT, não desde o fim do vídeo. Mantém uma
+// barreira temporal pequena pra evitar tap-and-skip e dar respiro visual.
+const COUNTDOWN_SECONDS = 10;
 
 export default function OnboardingStageView({
   token, day, stage, response, nextStage, onSubmitted,
 }) {
   const { notify } = useNotification();
 
-  /* ─── Estado do fluxo (vídeo → countdown → form → submit → celebração) ─── */
-  const hasVideo = !!stage?.video?.url;
-  // Se o cliente já assistiu o vídeo numa visita anterior (gravado no banco
-  // via /api/onboarding/video-watched), pula a barreira: sem countdown,
-  // sem precisar reassistir. O vídeo continua visível pra rever se quiser.
+  /* ─── Estado do fluxo (countdown → form → submit → celebração) ───
+   * O vídeo continua sendo exibido, mas não é mais barreira — só registramos
+   * "assistido" pra métrica. O countdown roda em paralelo, desde o mount.
+   * Se o cliente já assistiu numa visita anterior (ou se a etapa não tem
+   * vídeo configurado, modo teste), pula o countdown e libera direto. */
+  const hasVideo       = !!stage?.video?.url;
   const alreadyWatched = stage?.video?.watched || !hasVideo;
 
   const [videoWatched, setVideoWatched]   = useState(alreadyWatched);
@@ -133,27 +132,21 @@ export default function OnboardingStageView({
      EFEITOS — countdown, video watched, etc
   ═══════════════════════════════════════════════════════════ */
 
-  /* ─── Countdown de 20s rodando EM PARALELO ao vídeo ─────────
-   * Começa no mount e decrementa 1s por segundo até zerar.
-   * Se não tem vídeo (modo teste), o countdown já começa em 0.
-   * Se o vídeo dura 3 minutos, o countdown termina bem antes —
-   * quando o vídeo acabar, libera imediato. Se o vídeo é curto
-   * (ex: 5s), o cliente ainda precisa esperar os 15s restantes.
-   * A ideia é não "contar 20s a mais" depois de assistir o vídeo,
-   * mas sim GARANTIR 20s de tela, em paralelo. */
+  /* ─── Countdown de 10s rodando DESDE O MOUNT ─────────────────
+   * Decrementa 1s por segundo até zerar. NÃO depende do vídeo —
+   * roda em paralelo. Quando bate em 0, libera o formulário,
+   * independente do vídeo ter sido assistido ou não.
+   *
+   * Se o cliente já assistiu numa visita anterior (alreadyWatched),
+   * o estado inicial já é 0 e o form sai liberado direto. */
   useEffect(() => {
-    if (!hasVideo) return; // modo teste — já liberado
-    if (countdown <= 0) return;
+    if (countdown <= 0) {
+      setFormUnlocked(true);
+      return;
+    }
     const t = setTimeout(() => setCountdown(c => Math.max(0, c - 1)), 1000);
     return () => clearTimeout(t);
-  }, [countdown, hasVideo]);
-
-  /* ─── Condição de unlock: vídeo assistido E countdown zerou ── */
-  useEffect(() => {
-    if (videoWatched && countdown <= 0) {
-      setFormUnlocked(true);
-    }
-  }, [videoWatched, countdown]);
+  }, [countdown]);
 
   /* ─── Reseta o estado quando muda a etapa (depois de adiantar dia) ── */
   useEffect(() => {
@@ -484,18 +477,14 @@ export default function OnboardingStageView({
         />
       </div>
 
-      {/* ── BOTÃO INICIAR FORMULÁRIO — 3 estados ──
-          Estado A: vídeo não assistido (independente do countdown)
-          Estado B: vídeo OK mas countdown de 20s ainda rolando (vídeo curto)
-          Estado C: vídeo OK + countdown zero → LIBERADO */}
+      {/* ── BOTÃO INICIAR FORMULÁRIO — 2 estados ──
+          Estado A: countdown > 0 → desabilitado, mostrando os segundos
+          Estado B: countdown == 0 → habilitado, libera o formulário
+          O vídeo NÃO é mais barreira — ele continua visível acima e
+          o sistema registra "watched" via API, mas não bloqueia o form. */}
       {!showForm && (
         <div className={styles.startBlock}>
-          {!videoWatched && (
-            <button className={`${styles.startBtn} ${styles.locked}`} disabled>
-              <LockIcon /> Assista o vídeo para desbloquear
-            </button>
-          )}
-          {videoWatched && countdown > 0 && (
+          {!formUnlocked && (
             <button className={`${styles.startBtn} ${styles.countdown}`} disabled>
               <ClockIcon />
               Disponível em <span className={styles.countdownNumber}>{countdown}s</span>...

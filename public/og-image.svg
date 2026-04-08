@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <!-- Fundo dark com radial gradient vermelho sutil -->
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#1a0205" stop-opacity="1"/>
+      <stop offset="60%" stop-color="#080308" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#050505" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="titleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f0f0f0"/>
+      <stop offset="100%" stop-color="#ff1a4d"/>
+    </linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M 48 0 L 0 0 0 48" fill="none" stroke="rgba(255,0,51,0.04)" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <!-- Camadas de fundo -->
+  <rect width="1200" height="630" fill="url(#bgGrad)"/>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+
+  <!-- Glow vermelho difuso no centro-esquerda -->
+  <ellipse cx="380" cy="315" rx="380" ry="220" fill="rgba(255, 0, 51, 0.06)"/>
+  <ellipse cx="900" cy="315" rx="280" ry="180" fill="rgba(255, 0, 51, 0.04)"/>
+
+  <!-- Linha decorativa superior -->
+  <line x1="80" y1="80" x2="320" y2="80" stroke="#ff0033" stroke-width="2" opacity="0.7"/>
+  <circle cx="80" cy="80" r="4" fill="#ff0033"/>
+
+  <!-- Label técnico -->
+  <text x="80" y="118" font-family="JetBrains Mono, monospace" font-size="18" font-weight="700" fill="#ff1a4d" letter-spacing="6">
+    // SIGMA MARKETING SYSTEM
+  </text>
+
+  <!-- Título principal SIGMA gigante -->
+  <text x="80" y="280" font-family="JetBrains Mono, monospace" font-size="160" font-weight="800" fill="url(#titleGrad)" letter-spacing="-2">
+    SIGMA
+  </text>
+
+  <!-- Subtítulo -->
+  <text x="80" y="340" font-family="JetBrains Mono, monospace" font-size="28" font-weight="600" fill="#f0f0f0" letter-spacing="2">
+    MARKETING STRATEGY ENGINE
+  </text>
+
+  <!-- Tagline -->
+  <text x="80" y="395" font-family="Inter, sans-serif" font-size="24" font-weight="400" fill="#a3a3a3">
+    Diagnóstico, concorrentes, público, avatar e posicionamento.
+  </text>
+  <text x="80" y="427" font-family="Inter, sans-serif" font-size="24" font-weight="400" fill="#a3a3a3">
+    Pipeline estratégico completo com IA.
+  </text>
+
+  <!-- Pills com features -->
+  <g font-family="JetBrains Mono, monospace" font-size="14" font-weight="700" letter-spacing="1">
+    <rect x="80"  y="490" width="155" height="36" rx="6" fill="rgba(255, 0, 51, 0.08)" stroke="rgba(255, 0, 51, 0.3)" stroke-width="1"/>
+    <text x="100" y="513" fill="#ff1a4d">PIPELINE IA</text>
+
+    <rect x="250" y="490" width="155" height="36" rx="6" fill="rgba(255, 0, 51, 0.08)" stroke="rgba(255, 0, 51, 0.3)" stroke-width="1"/>
+    <text x="270" y="513" fill="#ff1a4d">ONBOARDING 15D</text>
+
+    <rect x="420" y="490" width="155" height="36" rx="6" fill="rgba(255, 0, 51, 0.08)" stroke="rgba(255, 0, 51, 0.3)" stroke-width="1"/>
+    <text x="440" y="513" fill="#ff1a4d">AGENTES IA</text>
+
+    <rect x="590" y="490" width="155" height="36" rx="6" fill="rgba(255, 0, 51, 0.08)" stroke="rgba(255, 0, 51, 0.3)" stroke-width="1"/>
+    <text x="610" y="513" fill="#ff1a4d">DIAGNÓSTICO</text>
+  </g>
+
+  <!-- Linha decorativa inferior -->
+  <line x1="80" y1="568" x2="1120" y2="568" stroke="rgba(255, 0, 51, 0.2)" stroke-width="1"/>
+  <text x="80" y="595" font-family="JetBrains Mono, monospace" font-size="14" fill="#525252" letter-spacing="2">
+    SIGMA · CONFIDENCIAL · ACESSO RESTRITO
+  </text>
+  <text x="1120" y="595" font-family="JetBrains Mono, monospace" font-size="14" fill="#525252" letter-spacing="2" text-anchor="end">
+    v1.0
+  </text>
+
+  <!-- Elemento gráfico circular (orb) na lateral direita -->
+  <g transform="translate(960, 290)">
+    <!-- Anéis concêntricos -->
+    <circle r="160" fill="none" stroke="rgba(255, 0, 51, 0.08)" stroke-width="1"/>
+    <circle r="130" fill="none" stroke="rgba(255, 0, 51, 0.12)" stroke-width="1"/>
+    <circle r="100" fill="none" stroke="rgba(255, 0, 51, 0.18)" stroke-width="1"/>
+    <circle r="70"  fill="none" stroke="rgba(255, 0, 51, 0.25)" stroke-width="1.5"/>
+    <circle r="40"  fill="none" stroke="rgba(255, 0, 51, 0.4)"  stroke-width="1.5"/>
+
+    <!-- Core central -->
+    <circle r="20" fill="rgba(255, 0, 51, 0.15)"/>
+    <circle r="10" fill="rgba(255, 0, 51, 0.4)"/>
+    <circle r="4"  fill="#ff1a4d"/>
+
+    <!-- Crosshair lines -->
+    <line x1="-180" y1="0" x2="-50" y2="0" stroke="rgba(255, 0, 51, 0.3)" stroke-width="1"/>
+    <line x1="50" y1="0" x2="180" y2="0" stroke="rgba(255, 0, 51, 0.3)" stroke-width="1"/>
+    <line x1="0" y1="-180" x2="0" y2="-50" stroke="rgba(255, 0, 51, 0.3)" stroke-width="1"/>
+    <line x1="0" y1="50" x2="0" y2="180" stroke="rgba(255, 0, 51, 0.3)" stroke-width="1"/>
+
+    <!-- Particles decorativas -->
+    <circle cx="60"  cy="-90" r="2" fill="#ff1a4d"/>
+    <circle cx="-110" cy="40" r="1.5" fill="#ff1a4d"/>
+    <circle cx="120" cy="60" r="2" fill="#ff1a4d"/>
+    <circle cx="-50" cy="-110" r="1.5" fill="#ff1a4d"/>
+    <circle cx="-130" cy="-30" r="1.5" fill="#ff1a4d"/>
+    <circle cx="80" cy="120" r="1.5" fill="#ff1a4d"/>
+    <circle cx="-90" cy="100" r="2" fill="#ff1a4d"/>
+    <circle cx="140" cy="-40" r="1.5" fill="#ff1a4d"/>
+  </g>
+</svg>

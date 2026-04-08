@@ -131,41 +131,230 @@ async function cmdBuscarCliente(params, tenantId /*, userId */) {
 async function cmdCriarTarefa(params, tenantId, userId) {
   console.log('[INFO][Jarvis:CriarTarefa]', { tenantId, userId, params });
 
-  const title = (params?.title || '').trim();
-  if (!title) return { summary: 'Não consegui identificar o título da tarefa.', data: null };
+  try {
+    // ── Validação do título (obrigatório) ──
+    const title = (params?.title || '').trim();
+    if (!title) {
+      return {
+        summary: 'Não consegui identificar o título da tarefa. Por favor, diga algo como "Cria tarefa: Revisar proposta do cliente X".',
+        data: null,
+      };
+    }
 
-  const description = params?.description || null;
-  const priority    = ['baixa','normal','alta','urgente'].includes(params?.priority) ? params.priority : 'normal';
-  const due_date    = parseLooseDate(params?.due_date);
+    // ── Campos básicos ──
+    const description = params?.description || null;
+    const priority = ['baixa', 'normal', 'alta', 'urgente'].includes(params?.priority)
+      ? params.priority : 'normal';
+    const due_date = params?.is_recurring ? null : parseLooseDate(params?.due_date);
 
-  let client = null;
-  if (params?.client_name) client = await findClientByName(tenantId, params.client_name);
+    // ── Buscar cliente (se informado) ──
+    let client = null;
+    if (params?.client_name) {
+      client = await findClientByName(tenantId, params.client_name);
+      if (!client) {
+        return {
+          summary: `Não encontrei nenhum cliente com o nome "${params.client_name}". Verifique o nome e tente novamente. Dica: você pode dizer "lista meus clientes" para ver os nomes.`,
+          data: null,
+        };
+      }
+    }
 
-  let assigned = null;
-  if (params?.assigned_to_name) assigned = await findUserByName(tenantId, params.assigned_to_name);
-  if (!assigned) assigned = await queryOne(`SELECT id, name FROM tenants WHERE id = $1`, [userId]);
+    // ── Buscar membro do time (se informado) ──
+    let assigned = null;
+    if (params?.assigned_to_name) {
+      assigned = await findUserByName(tenantId, params.assigned_to_name);
+      if (!assigned) {
+        return {
+          summary: `Não encontrei nenhum membro da equipe com o nome "${params.assigned_to_name}". Verifique o nome.`,
+          data: null,
+        };
+      }
+    }
+    if (!assigned) {
+      assigned = await queryOne(`SELECT id, name FROM tenants WHERE id = $1`, [userId]);
+    }
 
-  const preview = {
-    title,
-    description,
-    priority,
-    due_date,
-    client_id:    client?.id || null,
-    client_name:  client?.company_name || null,
-    assigned_to:      assigned?.id || userId,
-    assigned_to_name: assigned?.name || null,
-    created_by: userId,
-    tenant_id:  tenantId,
-  };
+    // ── Buscar ou criar categoria (se informada) ──
+    let category = null;
+    if (params?.category_name) {
+      const catName = String(params.category_name).trim();
+      if (catName) {
+        category = await queryOne(
+          `SELECT id, name, color FROM task_categories
+            WHERE tenant_id = $1 AND LOWER(name) = LOWER($2)`,
+          [tenantId, catName]
+        );
+        if (!category) {
+          // Criar categoria automaticamente com cor padrão (índigo)
+          try {
+            category = await queryOne(
+              `INSERT INTO task_categories (tenant_id, name, color)
+               VALUES ($1, $2, $3) RETURNING id, name, color`,
+              [tenantId, catName, '#6366F1']
+            );
+            console.log('[INFO][Jarvis:CriarTarefa] categoria criada', { catName });
+          } catch (err) {
+            console.warn('[WARN][Jarvis:CriarTarefa] falha ao criar categoria', err.message);
+            // Não bloqueia a criação da task
+          }
+        }
+      }
+    }
 
-  console.log('[SUCESSO][Jarvis:CriarTarefa] preview montado', { preview });
+    // ── Montar subtasks ──
+    let subtasksFormatted = [];
+    if (Array.isArray(params?.subtasks) && params.subtasks.length > 0) {
+      subtasksFormatted = params.subtasks
+        .filter(s => s && String(s).trim())
+        .map((s, i) => ({
+          id: `sub_${Date.now()}_${i}`,
+          title: String(s).trim(),
+          done: false,
+        }));
+    }
 
-  return {
-    summary: `Tarefa "${title}" pronta para criação${client ? ` para ${client.company_name}` : ''}${assigned ? `, atribuída a ${assigned.name}` : ''}.`,
-    data: preview,
-    requiresConfirmation: true,
-    confirmAction: 'create_task',
-  };
+    // ─────────────────────────────────────────────────────
+    //  TASK RECORRENTE
+    // ─────────────────────────────────────────────────────
+    if (params?.is_recurring) {
+      const frequency = ['daily', 'weekly', 'monthly'].includes(params?.frequency)
+        ? params.frequency : 'weekly';
+
+      // Validação por frequência
+      if (frequency === 'weekly' && (params?.weekday === undefined || params?.weekday === null)) {
+        return {
+          summary: 'Para task recorrente semanal, preciso saber o dia da semana. Ex: "toda segunda" (1), "toda sexta" (5).',
+          data: null,
+        };
+      }
+      if (frequency === 'monthly' && (params?.day_of_month === undefined || params?.day_of_month === null)) {
+        return {
+          summary: 'Para task recorrente mensal, preciso saber o dia do mês. Ex: "todo dia 5", "todo dia 15".',
+          data: null,
+        };
+      }
+
+      const WEEKDAY_NAMES = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+      const freqLabel =
+        frequency === 'daily'  ? 'todos os dias' :
+        frequency === 'weekly' ? `toda ${WEEKDAY_NAMES[params.weekday] || 'semana'}` :
+                                 `todo dia ${params.day_of_month}`;
+
+      const preview = {
+        title,
+        description,
+        priority,
+        category_id:      category?.id || null,
+        category_name:    category?.name || null,
+        client_id:        client?.id || null,
+        client_name:      client?.company_name || null,
+        assigned_to:      assigned?.id || userId,
+        assigned_to_name: assigned?.name || null,
+        frequency,
+        weekday:      frequency === 'weekly' ? params.weekday : null,
+        day_of_month: frequency === 'monthly' ? params.day_of_month : null,
+        subtasks: subtasksFormatted,
+        subtasks_required: subtasksFormatted.length > 0,
+        is_recurring: true,
+        created_by: userId,
+        tenant_id:  tenantId,
+      };
+
+      console.log('[SUCESSO][Jarvis:CriarTarefa] preview recorrente', { title, frequency });
+
+      return {
+        summary: `Task recorrente "${title}" (${freqLabel})${client ? ` para ${client.company_name}` : ''}${assigned && assigned.id !== userId ? `, atribuída a ${assigned.name}` : ''}. Confirme para ativar.`,
+        data: preview,
+        requiresConfirmation: true,
+        confirmAction: 'create_task',
+      };
+    }
+
+    // ─────────────────────────────────────────────────────
+    //  TASK NORMAL (pontual)
+    // ─────────────────────────────────────────────────────
+    const preview = {
+      title,
+      description,
+      priority,
+      due_date,
+      category_id:      category?.id || null,
+      category_name:    category?.name || null,
+      client_id:        client?.id || null,
+      client_name:      client?.company_name || null,
+      assigned_to:      assigned?.id || userId,
+      assigned_to_name: assigned?.name || null,
+      subtasks: subtasksFormatted,
+      subtasks_required: subtasksFormatted.length > 0,
+      created_by: userId,
+      tenant_id:  tenantId,
+      is_recurring: false,
+    };
+
+    const parts = [];
+    if (client) parts.push(`cliente: ${client.company_name}`);
+    if (assigned && assigned.id !== userId) parts.push(`atribuída a ${assigned.name}`);
+    if (category) parts.push(`categoria: ${category.name}`);
+    if (due_date) parts.push(`vencimento: ${due_date}`);
+    if (priority !== 'normal') parts.push(`prioridade: ${priority}`);
+    if (subtasksFormatted.length) parts.push(`${subtasksFormatted.length} subtarefa(s)`);
+
+    console.log('[SUCESSO][Jarvis:CriarTarefa] preview pontual', { title });
+
+    return {
+      summary: `Tarefa "${title}" pronta para criação${parts.length ? ' — ' + parts.join(', ') : ''}. Confirme para salvar.`,
+      data: preview,
+      requiresConfirmation: true,
+      confirmAction: 'create_task',
+    };
+
+  } catch (err) {
+    console.error('[ERRO][Jarvis:CriarTarefa]', {
+      tenantId, userId, params,
+      error: err.message,
+      stack: err.stack,
+    });
+    return {
+      summary: `Ocorreu um erro ao preparar a tarefa: ${err.message}. Tente novamente ou crie manualmente em Tarefas.`,
+      data: null,
+    };
+  }
+}
+
+/**
+ * Lista as categorias de task disponíveis no tenant. Útil pro Jarvis usar
+ * antes de criar uma task quando o usuário menciona uma categoria.
+ */
+async function cmdListarCategoriasTask(params, tenantId /*, userId */) {
+  console.log('[INFO][Jarvis:ListarCategoriasTask]', { tenantId });
+
+  try {
+    const rows = await query(
+      `SELECT id, name, color FROM task_categories
+        WHERE tenant_id = $1
+        ORDER BY name ASC`,
+      [tenantId]
+    );
+
+    if (!rows.length) {
+      return {
+        summary: 'Nenhuma categoria de tarefa cadastrada ainda. Você pode criar uma ao mesmo tempo que cria a primeira task — basta dizer o nome dela.',
+        data: [],
+      };
+    }
+
+    const list = rows.slice(0, 15).map(r => `· ${r.name}`).join('\n');
+    return {
+      summary: `${rows.length} categoria(s) de tarefa:\n${list}`,
+      data: rows,
+    };
+  } catch (err) {
+    console.error('[ERRO][Jarvis:ListarCategoriasTask]', err);
+    return {
+      summary: `Não consegui listar as categorias: ${err.message}`,
+      data: null,
+    };
+  }
 }
 
 async function cmdTarefasAtrasadas(params, tenantId /*, userId */) {
@@ -176,7 +365,7 @@ async function cmdTarefasAtrasadas(params, tenantId /*, userId */) {
             mc.company_name
      FROM client_tasks ct
      LEFT JOIN marketing_clients mc ON mc.id = ct.client_id
-     WHERE mc.tenant_id = $1 AND ct.done = false AND ct.due_date IS NOT NULL
+     WHERE ct.tenant_id = $1 AND ct.done = false AND ct.due_date IS NOT NULL
        AND ct.due_date < CURRENT_DATE
      ORDER BY ct.due_date ASC
      LIMIT 30`,
@@ -197,8 +386,7 @@ async function cmdResumoDoDia(params, tenantId /*, userId */) {
 
   const tarefasHoje = await queryOne(
     `SELECT COUNT(*)::int AS c FROM client_tasks ct
-     LEFT JOIN marketing_clients mc ON mc.id = ct.client_id
-     WHERE mc.tenant_id = $1 AND ct.done = false
+     WHERE ct.tenant_id = $1 AND ct.done = false
        AND (ct.due_date IS NULL OR ct.due_date <= CURRENT_DATE)`,
     [tenantId]
   );
@@ -240,7 +428,7 @@ async function cmdTarefasDeOutroUsuario(params, tenantId, userId, userRole) {
     `SELECT ct.id, ct.title, ct.priority, ct.due_date, ct.done, mc.company_name
      FROM client_tasks ct
      LEFT JOIN marketing_clients mc ON mc.id = ct.client_id
-     WHERE mc.tenant_id = $1 AND ct.assigned_to = $2 AND ct.done = false
+     WHERE ct.tenant_id = $1 AND ct.assigned_to = $2 AND ct.done = false
      ORDER BY ct.due_date ASC NULLS LAST
      LIMIT 30`,
     [tenantId, target.id]
@@ -629,6 +817,7 @@ async function cmdEnviarFormulario(params, tenantId, userId) {
 const REGISTRY = {
   buscar_cliente:          cmdBuscarCliente,
   criar_tarefa:            cmdCriarTarefa,
+  listar_categorias_task:  cmdListarCategoriasTask,
   tarefas_atrasadas:       cmdTarefasAtrasadas,
   resumo_do_dia:           cmdResumoDoDia,
   tarefas_usuario:         cmdTarefasDeOutroUsuario,

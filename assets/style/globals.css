@@ -150,8 +150,10 @@ a:hover {
 
 /* Subtítulo de página */
 .page-subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin: 0;
 }
 
 /* Gradiente de texto vermelho */

@@ -16,6 +16,22 @@ import { logJarvisUsage } from '../../../models/jarvis/rateLimit';
 import { createNotification } from '../../../models/clientForm';
 import { invalidate } from '../../../infra/cache';
 
+/**
+ * Helper para retornar erros do Jarvis com 2 mensagens separadas:
+ *   - error       → mensagem técnica completa (vai pro log do dev / DevTools)
+ *   - userMessage → frase curta e amigável que o JarvisOrb vai falar via TTS
+ *
+ * O frontend prioriza userMessage quando existir, evitando que o usuário
+ * ouça stack traces ou mensagens de erro de banco via voz sintetizada.
+ */
+function jarvisError(res, status, technicalError, userMessage) {
+  return res.status(status).json({
+    success: false,
+    error: technicalError,
+    userMessage: userMessage || 'Não consegui completar essa ação. Tente novamente daqui a pouco.',
+  });
+}
+
 export default async function handler(req, res) {
   console.log('[INFO][API:/api/jarvis/confirm] Requisição', { method: req.method });
 
@@ -24,49 +40,130 @@ export default async function handler(req, res) {
   }
 
   const session = verifyToken(req.cookies?.sigma_token);
-  if (!session) return res.status(401).json({ success: false, error: 'Não autenticado.' });
+  if (!session) {
+    return jarvisError(res, 401, 'Não autenticado', 'Você precisa estar logado pra eu fazer isso.');
+  }
 
   try {
     const tenantId = await resolveTenantId(req);
     const user = await queryOne(`SELECT id, name, role FROM tenants WHERE id = $1`, [session.userId]);
-    if (!user) return res.status(401).json({ success: false, error: 'Sessão inválida.' });
+    if (!user) {
+      return jarvisError(res, 401, 'Sessão inválida', 'Sua sessão expirou. Faça login de novo.');
+    }
 
     const { action, data } = req.body || {};
-    if (!action || !data) return res.status(400).json({ success: false, error: 'action e data obrigatórios' });
+    if (!action || !data) {
+      return jarvisError(res, 400, 'action e data obrigatórios', 'Ação inválida. Tente pedir de novo.');
+    }
 
     /* ── CREATE TASK ───────────────────────────────────────── */
     if (action === 'create_task') {
-      if (!data.title) return res.status(400).json({ success: false, error: 'Título obrigatório.' });
+      if (!data.title) {
+        return jarvisError(res, 400, 'Título obrigatório', 'Não consegui pegar o título da tarefa. Pode repetir?');
+      }
 
-      const row = await queryOne(
-        `INSERT INTO client_tasks
-          (client_id, title, description, priority, due_date,
-           assigned_to, created_by, tenant_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING *`,
-        [
-          data.client_id || null,
-          data.title,
-          data.description || null,
-          data.priority || 'normal',
-          data.due_date || null,
-          data.assigned_to || user.id,
-          user.id,
-          tenantId,
-        ]
-      );
-      console.log('[SUCESSO][Jarvis:Confirm] Tarefa criada', { id: row.id });
-      await logJarvisUsage(tenantId, user.id, 'confirm:create_task', JSON.stringify(data), `task ${row.id}`, 0, true, null);
+      // ── Recorrente: cria em task_recurrences (cron gera as instâncias) ──
+      if (data.is_recurring) {
+        const { createRecurrence } = require('../../../models/taskRecurrence.model');
 
+        try {
+          const recurrence = await createRecurrence({
+            title:             data.title,
+            description:       data.description || null,
+            priority:          data.priority || 'normal',
+            category_id:       data.category_id || null,
+            assigned_to:       data.assigned_to || user.id,
+            client_id:         data.client_id || null,
+            frequency:         data.frequency || 'weekly',
+            weekday:           data.weekday,
+            day_of_month:      data.day_of_month,
+            is_active:         true,
+            created_by:        user.id,
+            subtasks:          data.subtasks || [],
+            subtasks_required: data.subtasks_required || false,
+          }, tenantId);
+
+          console.log('[SUCESSO][Jarvis:Confirm] Recorrência criada', { id: recurrence.id });
+          await logJarvisUsage(tenantId, user.id, 'confirm:create_recurring_task',
+            JSON.stringify(data), `recurrence ${recurrence.id}`, 0, true, null);
+
+          const WEEKDAY_NAMES = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+          const freqLabel =
+            data.frequency === 'daily'  ? 'diariamente' :
+            data.frequency === 'weekly' ? `toda ${WEEKDAY_NAMES[data.weekday] || 'semana'}` :
+                                          `todo dia ${data.day_of_month}`;
+
+          try { await invalidate(`task_recurrences:${tenantId}`); } catch {}
+
+          try {
+            await createNotification(
+              tenantId, 'jarvis_action', 'Task recorrente criada via JARVIS',
+              `"${data.title}" — ${freqLabel}${data.client_name ? `, cliente: ${data.client_name}` : ''}.`,
+              data.client_id || null,
+              { action: 'create_recurring_task', recurrenceId: recurrence.id, createdBy: 'jarvis' }
+            );
+          } catch {}
+
+          return res.json({
+            success: true,
+            message: `Task recorrente "${data.title}" criada (${freqLabel}).`,
+          });
+        } catch (err) {
+          console.error('[ERRO][Jarvis:Confirm] Falha ao criar recorrência', err);
+          return jarvisError(
+            res, 500,
+            'Falha ao criar task recorrente: ' + err.message,
+            'Não consegui salvar essa task recorrente. Tenta de novo daqui a pouco.'
+          );
+        }
+      }
+
+      // ── Task normal (pontual) ──
       try {
-        await createNotification(
-          tenantId, 'jarvis_action', 'Tarefa criada via JARVIS',
-          `"${data.title}"${data.client_name ? ` para ${data.client_name}` : ''}${data.assigned_to_name ? `, atribuída a ${data.assigned_to_name}` : ''}.`,
-          data.client_id || null, { action: 'create_task', taskId: row.id, createdBy: 'jarvis' }
+        const row = await queryOne(
+          `INSERT INTO client_tasks
+            (client_id, title, description, priority, due_date, status,
+             category_id, subtasks, subtasks_required,
+             assigned_to, created_by, tenant_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12)
+           RETURNING *`,
+          [
+            data.client_id || null,
+            data.title,
+            data.description || null,
+            data.priority || 'normal',
+            data.due_date || null,
+            'pending',
+            data.category_id || null,
+            JSON.stringify(data.subtasks || []),
+            data.subtasks_required || false,
+            data.assigned_to || user.id,
+            user.id,
+            tenantId,
+          ]
         );
-      } catch {}
+        console.log('[SUCESSO][Jarvis:Confirm] Tarefa criada', { id: row.id });
+        await logJarvisUsage(tenantId, user.id, 'confirm:create_task', JSON.stringify(data), `task ${row.id}`, 0, true, null);
 
-      return res.json({ success: true, message: 'Tarefa criada com sucesso.', task: row });
+        try { await invalidate(`tasks:${tenantId}`); } catch {}
+
+        try {
+          await createNotification(
+            tenantId, 'jarvis_action', 'Tarefa criada via JARVIS',
+            `"${data.title}"${data.client_name ? ` para ${data.client_name}` : ''}${data.assigned_to_name ? `, atribuída a ${data.assigned_to_name}` : ''}${data.category_name ? ` [${data.category_name}]` : ''}.`,
+            data.client_id || null, { action: 'create_task', taskId: row.id, createdBy: 'jarvis' }
+          );
+        } catch {}
+
+        return res.json({ success: true, message: `Tarefa "${data.title}" criada com sucesso.`, task: row });
+      } catch (err) {
+        console.error('[ERRO][Jarvis:Confirm] Falha ao criar task', err);
+        return jarvisError(
+          res, 500,
+          'Falha ao criar tarefa: ' + err.message,
+          'Não consegui salvar essa tarefa agora. Tenta de novo em alguns segundos.'
+        );
+      }
     }
 
     /* ── SAVE INCOME / EXPENSE ─────────────────────────────── */

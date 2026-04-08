@@ -188,7 +188,7 @@ export default function PromptLibraryPage() {
               {customCount} customizado{customCount !== 1 ? 's' : ''} · {defaultCount} no padrao
             </span>
           </div>
-          <p style={{ fontFamily: 'var(--font-sans)', fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          <p className="page-subtitle">
             Todos os prompts do sistema em um so lugar. Personalize, restaure e controle o que cada IA faz.
           </p>
         </div>

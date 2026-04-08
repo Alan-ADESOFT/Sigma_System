@@ -175,14 +175,14 @@ export default async function handler(req, res) {
     /* 1. Resolve sessao + tenant */
     const session = verifyToken(req.cookies?.sigma_token);
     if (!session) {
-      return res.status(401).json({ success: false, error: 'Não autenticado.' });
+      return res.status(401).json({ success: false, error: 'Não autenticado.', userMessage: 'Você precisa estar logado para usar o Jarvis.' });
     }
     const tenantId = await resolveTenantId(req);
     const user = await queryOne(
       `SELECT id, name, role FROM tenants WHERE id = $1 AND is_active = true LIMIT 1`,
       [session.userId]
     );
-    if (!user) return res.status(401).json({ success: false, error: 'Usuário não encontrado.' });
+    if (!user) return res.status(401).json({ success: false, error: 'Usuário não encontrado.', userMessage: 'Sua sessão expirou. Faça login novamente.' });
 
     /* 2. Quota */
     const quota = await checkJarvisQuota(tenantId, user.id, user.role);
@@ -190,6 +190,7 @@ export default async function handler(req, res) {
       return res.status(429).json({
         success: false,
         error: `Limite diário do Jarvis atingido (${quota.used}/${quota.limit}). Aguarde até a meia-noite.`,
+        userMessage: `Limite diário atingido (${quota.used}/${quota.limit}). Tente novamente amanhã.`,
         quota,
       });
     }
@@ -291,7 +292,7 @@ export default async function handler(req, res) {
     } catch (err) {
       console.error('[ERRO][Jarvis:LLM] Turn 1 falhou', { model: cfg.jarvis_model, provider, error: err.message });
       await logJarvisUsage(tenantId, user.id, 'error', text, null, Date.now() - startedAt, false, err.message);
-      return res.status(502).json({ success: false, error: 'Falha ao consultar a IA: ' + err.message });
+      return res.status(502).json({ success: false, error: 'Falha ao consultar a IA: ' + err.message, userMessage: 'Ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.' });
     }
 
     totalTokensIn += (firstResult.usage?.input || 0);
@@ -342,7 +343,7 @@ export default async function handler(req, res) {
       } catch (err) {
         console.error('[ERRO][Jarvis:Tool]', { command: toolName, error: err.message });
         await logJarvisUsage(tenantId, user.id, toolName, text, null, Date.now() - startedAt, false, err.message);
-        return res.status(500).json({ success: false, error: 'Falha ao executar comando: ' + err.message });
+        return res.status(500).json({ success: false, error: 'Falha ao executar comando: ' + err.message, userMessage: 'Ocorreu um erro ao executar essa ação. Tente novamente mais tarde.' });
       }
 
       // Devolve resultado da tool ao LLM (turn 2)
@@ -466,6 +467,6 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('[ERRO][Jarvis] Erro inesperado', { error: err.message, stack: err.stack });
-    return res.status(500).json({ success: false, error: 'Erro interno no Jarvis.' });
+    return res.status(500).json({ success: false, error: 'Erro interno no Jarvis.', userMessage: 'Ocorreu um erro inesperado. Tente novamente mais tarde.' });
   }
 }
