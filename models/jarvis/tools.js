@@ -193,6 +193,13 @@ const TOOL_SCHEMAS = [
  * @param {string[]} enabledIds — IDs das funções habilitadas (vem do config).
  * @param {'openai'|'anthropic'} provider
  */
+/**
+ * Retorna todos os IDs de tools existentes.
+ */
+function getAllToolIds() {
+  return TOOL_SCHEMAS.map(t => t.id);
+}
+
 function getToolDefinitions(enabledIds, provider) {
   const allowed = new Set(enabledIds || []);
   const filtered = TOOL_SCHEMAS.filter(t => allowed.has(t.id));
@@ -219,4 +226,5 @@ function getToolDefinitions(enabledIds, provider) {
 module.exports = {
   TOOL_SCHEMAS,
   getToolDefinitions,
+  getAllToolIds,
 };

@@ -487,12 +487,19 @@ export default function JarvisOrb() {
     setState('processing');
     setResponse('');
     setPending(null);
+
+    // Timer de "aguarde" — mostra mensagem se demorar mais de 5s
+    const waitTimer = setTimeout(() => {
+      setResponse('Aguarde, estou processando sua solicitação...');
+    }, 5000);
+
     try {
       const r = await fetch('/api/jarvis/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...payload, language }),
       });
+      clearTimeout(waitTimer);
       const d = await r.json();
       if (!d.success) {
         const errMsg = d.error || 'Não consegui processar sua solicitação. Tente novamente.';
@@ -517,6 +524,7 @@ export default function JarvisOrb() {
         setTimeout(() => setState('idle'), Math.max(1500, d.response.length * 30));
       }
     } catch (err) {
+      clearTimeout(waitTimer);
       console.error('[ERRO][JarvisOrb] sendCommand', err.message);
       const errMsg = 'Falha de conexão com o servidor. Tente novamente.';
       setResponse(errMsg);

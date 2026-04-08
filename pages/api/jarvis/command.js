@@ -17,7 +17,7 @@ import { verifyToken } from '../../../lib/auth';
 import { queryOne } from '../../../infra/db';
 import { getJarvisConfig } from '../../../models/jarvis/config';
 import { checkJarvisQuota, logJarvisUsage, getRecentUsage } from '../../../models/jarvis/rateLimit';
-import { getToolDefinitions } from '../../../models/jarvis/tools';
+import { getToolDefinitions, getAllToolIds } from '../../../models/jarvis/tools';
 import { executeCommand } from '../../../models/jarvis/commands';
 
 const { DEFAULT_SYSTEM_PT, DEFAULT_SYSTEM_EN, renderPrompt } = require('../../../models/jarvis/systemPrompt');
@@ -229,9 +229,10 @@ export default async function handler(req, res) {
       getRecentUsage(tenantId, user.id, 3),
     ]);
 
-    const enabledIds = Object.entries(cfg.functions || {}).filter(([, v]) => v).map(([k]) => k);
+    const enabledSet = new Set(Object.entries(cfg.functions || {}).filter(([, v]) => v).map(([k]) => k));
     const provider = isAnthropic(cfg.jarvis_model) ? 'anthropic' : 'openai';
-    const tools = getToolDefinitions(enabledIds, provider);
+    // Envia TODAS as tools ao modelo — intercepta desabilitadas antes de executar
+    const tools = getToolDefinitions(getAllToolIds(), provider);
 
     /* 5. System prompt = base + contexto + memoria */
     const lang = (language || cfg.jarvis_language || 'pt').toLowerCase();
@@ -310,6 +311,24 @@ export default async function handler(req, res) {
     if (firstResult.toolCall) {
       const toolName = firstResult.toolCall.name;
       const toolArgs = firstResult.toolCall.args;
+
+      // Verifica se a função está habilitada no config do tenant
+      if (!enabledSet.has(toolName)) {
+        const { JARVIS_FUNCTIONS } = require('../../../models/jarvis/config');
+        const fnLabel = (JARVIS_FUNCTIONS.find(f => f.id === toolName) || {}).title || toolName;
+        const msg = `A função "${fnLabel}" está desativada nas configurações do JARVIS. Para usar esse recurso, ative-a em Configurações, Config Jarvis.`;
+        console.log('[INFO][Jarvis:Tool] Função desabilitada', { toolName, fnLabel });
+        await logJarvisUsage(tenantId, user.id, toolName, text, msg, Date.now() - startedAt, false, 'disabled');
+
+        logUsage({
+          tenantId, modelUsed: cfg.jarvis_model, provider,
+          operationType: 'jarvis_chat', tokensInput: totalTokensIn, tokensOutput: totalTokensOut,
+          metadata: { userId: user.id, disabledTool: toolName, durationMs: Date.now() - startedAt },
+        });
+
+        const newQuota = { ...quota, used: quota.used + 1, remaining: Math.max(0, quota.remaining - 1) };
+        return res.json({ success: true, input: text, response: msg, command: null, data: null, requiresConfirmation: false, quota: newQuota });
+      }
 
       // Executa a tool
       let cmdResult;
