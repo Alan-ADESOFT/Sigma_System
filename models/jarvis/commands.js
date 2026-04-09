@@ -73,10 +73,10 @@ async function findUserByName(tenantId, nameLike) {
   return queryOne(
     `SELECT id, name, role
      FROM tenants
-     WHERE id = $1 OR LOWER(name) LIKE LOWER($2)
-     ORDER BY (id = $1) DESC, name ASC
+     WHERE LOWER(name) LIKE LOWER($1) AND is_active = true
+     ORDER BY name ASC
      LIMIT 1`,
-    [tenantId, `%${nameLike}%`]
+    [`%${nameLike}%`]
   );
 }
 

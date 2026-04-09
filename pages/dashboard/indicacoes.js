@@ -755,7 +755,8 @@ function ReferralTestTab({ notify }) {
   const [label, setLabel] = useState('');
   const [generating, setGenerating] = useState(false);
   const [testLinks, setTestLinks] = useState([]);
-  const [expiring, setExpiring] = useState(null); // refCode being expired
+  const [expiring, setExpiring] = useState(null);
+  const [deleting, setDeleting] = useState(null);
 
   async function handleGenerate() {
     setGenerating(true);
@@ -780,6 +781,24 @@ function ReferralTestTab({ notify }) {
   function copyLink(link) {
     navigator.clipboard?.writeText(link);
     notify('Link copiado.', 'success');
+  }
+
+  async function handleDelete(refCode) {
+    if (!confirm('Deletar este link de teste?')) return;
+    setDeleting(refCode);
+    try {
+      const r = await fetch('/api/referral/generate-test', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refCode }),
+      });
+      const d = await r.json();
+      if (d.success) {
+        setTestLinks(prev => prev.filter(tl => tl.refCode !== refCode));
+        notify('Link deletado.', 'success');
+      } else { notify(d.error || 'Erro.', 'error'); }
+    } catch { notify('Erro de conexão.', 'error'); }
+    setDeleting(null);
   }
 
   async function handleExpire(refCode) {
@@ -932,6 +951,22 @@ function ReferralTestTab({ notify }) {
                   }}
                 >
                   {tl.expired ? 'Expirado' : expiring === tl.refCode ? '...' : 'Simular 72h'}
+                </button>
+                <button
+                  onClick={() => handleDelete(tl.refCode)}
+                  disabled={deleting === tl.refCode}
+                  title="Deletar link de teste"
+                  style={{
+                    padding: '6px 10px', borderRadius: 5, flexShrink: 0,
+                    cursor: deleting === tl.refCode ? 'not-allowed' : 'pointer',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    background: 'rgba(255,255,255,0.02)',
+                    color: '#737373', fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#ff0033'; e.currentTarget.style.borderColor = 'rgba(255,0,51,0.2)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = '#737373'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+                >
+                  {deleting === tl.refCode ? '...' : '✕'}
                 </button>
               </div>
             ))}

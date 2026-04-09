@@ -46,7 +46,7 @@ PARÂMETROS ESSENCIAIS POR TIPO:
 - Opcionais sempre: description, category_name, subtasks
 
 Se o usuário não especificar prioridade, use "normal".
-Se não especificar data e NÃO for recorrente, deixe due_date null.
+IMPORTANTE: Se o usuário NÃO informou a data de vencimento e NÃO for recorrente, NÃO chame esta tool — pergunte "Para quando?" primeiro. Tarefas sem data não aparecem corretamente no sistema.
 Se for recorrente, NÃO precisa de due_date (o cron gera as instâncias automaticamente).
 
 SUBTASKS AUTOMÁTICAS: Para tarefas complexas com múltiplas etapas (ex: "montar proposta", "lançar campanha", "preparar relatório mensal", "criar landing page"), quebre proativamente em subtasks. Exemplo: "Montar proposta comercial" → subtasks: ["Levantar dados do cliente", "Definir escopo de serviços", "Montar apresentação", "Revisar valores e prazos", "Enviar para aprovação"]. Não pergunte — inclua quando a tarefa claramente se beneficia de decomposição.`,

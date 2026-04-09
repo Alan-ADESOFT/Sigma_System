@@ -11,11 +11,23 @@ import { queryOne } from '../../../infra/db';
 const crypto = require('crypto');
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Método não permitido.' });
-
   try {
     const user = await requireRole(req, 'admin');
     const tenantId = await resolveTenantId(req);
+
+    /* ── DELETE: remove link de teste ── */
+    if (req.method === 'DELETE') {
+      const { refCode } = req.body || {};
+      if (!refCode) return res.status(400).json({ success: false, error: 'refCode obrigatório.' });
+      const deleted = await queryOne(
+        `DELETE FROM referrals WHERE ref_code = $1 AND tenant_id = $2 AND ref_code LIKE 'test_%' RETURNING id`,
+        [refCode, tenantId]
+      );
+      if (!deleted) return res.status(404).json({ success: false, error: 'Link de teste não encontrado.' });
+      return res.json({ success: true, message: 'Link deletado.' });
+    }
+
+    if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Método não permitido.' });
 
     const { label, clientId } = req.body || {};
     const testLabel = (label || 'Teste').trim().slice(0, 50);

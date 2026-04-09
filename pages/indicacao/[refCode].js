@@ -668,6 +668,11 @@ function VSLSection({ refCode, videoUrl, duration, revealAtSeconds, onMilestone,
       videoRef.current.muted = false;
       videoRef.current.play().catch(() => {});
     }
+    // Para iframes (YouTube/Vimeo): recarrega sem mute
+    if (embed?.type === 'iframe' && embed.src) {
+      const el = document.querySelector(`.${styles.vslWrapper} iframe`);
+      if (el) el.src = embed.src.replace(/mute=1|muted=1/g, 'mute=0');
+    }
     setUnmuted(true);
   }
 
@@ -702,8 +707,8 @@ function VSLSection({ refCode, videoUrl, duration, revealAtSeconds, onMilestone,
           </div>
         )}
 
-        {/* Overlay tap-to-unmute — só pra <video> nativo, antes de tocar */}
-        {embed?.type === 'video' && !unmuted && (
+        {/* Overlay tap-to-unmute — funciona pra <video> nativo e iframes */}
+        {embed && !unmuted && (
           <div className={styles.vslOverlay} onClick={handleUnmute}>
             <div className={styles.vslOverlayPlay}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff">
