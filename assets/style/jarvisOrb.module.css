@@ -530,6 +530,8 @@
 .confirmCard {
   width: 100%;
   max-width: 460px;
+  max-height: 40vh;
+  overflow-y: auto;
   padding: 16px 20px;
   background: rgba(255, 0, 51, 0.03);
   border: 1px solid rgba(255, 0, 51, 0.2);
