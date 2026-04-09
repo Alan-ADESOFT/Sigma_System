@@ -8,8 +8,8 @@
   bottom: 24px;
   right: 24px;
   z-index: 999;
-  width: 42px;
-  height: 42px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   border: 1px solid rgba(255, 0, 51, 0.2);
   background: rgba(8, 8, 8, 0.92);
@@ -40,18 +40,18 @@
 /* ── Label J.A.R.V.I.S — pill discreto no topo do FAB ── */
 .fabBadge {
   position: absolute;
-  top: -6px;
+  top: -8px;
   left: 50%;
   transform: translateX(-50%);
-  height: 14px;
-  padding: 0 6px;
-  border-radius: 7px;
+  height: 16px;
+  padding: 0 8px;
+  border-radius: 8px;
   background: rgba(8, 8, 8, 0.95);
   border: 1px solid rgba(255, 0, 51, 0.45);
   font-family: var(--font-mono);
-  font-size: 0.42rem;
+  font-size: 0.5rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: #ff1a4d;
   display: flex;
   align-items: center;
@@ -67,10 +67,10 @@
   position: absolute;
   bottom: -4px;
   right: -4px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
   background: #ff0033;
   border: 2px solid #050505;
   color: #fff;

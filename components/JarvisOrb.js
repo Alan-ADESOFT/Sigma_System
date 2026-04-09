@@ -17,18 +17,15 @@ import styles from '../assets/style/jarvisOrb.module.css';
    CANVAS ORB — Esfera de partículas
    ═══════════════════════════════════════════════════════════ */
 
-const PARTICLE_COUNT = 2200;
-// BASE_RADIUS ↓ de 125 pra 105 — com canvas size=360 e sc=1.44, raio efetivo
-// fica em ~151px num half de 180px → 29px de margem pro idle, suficiente pra
-// pulsos/breathe não tocarem na borda do canvas.
-const BASE_RADIUS = 105;
-const REF_SIZE = 250;
+const PARTICLE_COUNT = 1800;
+const BASE_RADIUS = 82;
+const REF_SIZE = 200;
 
 const STATES = {
-  idle:       { radius: 105, speed: 0.0008, scatter: 1.00, pulseAmp: 4,  pulseFreq: 0.5, colorShift: 0,   rings: 0 },
-  listening:  { radius: 110, speed: 0.0022, scatter: 1.20, pulseAmp: 12, pulseFreq: 1.4, colorShift: 12,  rings: 3 },
-  processing: { radius: 108, speed: 0.0060, scatter: 1.30, pulseAmp: 8,  pulseFreq: 3.2, colorShift: -15, rings: 0 },
-  speaking:   { radius: 115, speed: 0.0030, scatter: 1.25, pulseAmp: 22, pulseFreq: 2.0, colorShift: 8,   rings: 4 },
+  idle:       { radius: 82,  speed: 0.0008, scatter: 1.00, pulseAmp: 3,  pulseFreq: 0.5, colorShift: 0,   rings: 0 },
+  listening:  { radius: 86,  speed: 0.0022, scatter: 1.20, pulseAmp: 10, pulseFreq: 1.4, colorShift: 12,  rings: 3 },
+  processing: { radius: 84,  speed: 0.0060, scatter: 1.30, pulseAmp: 6,  pulseFreq: 3.2, colorShift: -15, rings: 0 },
+  speaking:   { radius: 90,  speed: 0.0030, scatter: 1.25, pulseAmp: 18, pulseFreq: 2.0, colorShift: 8,   rings: 4 },
 };
 
 function randomOnSphere(r) {
@@ -754,7 +751,7 @@ export default function JarvisOrb({ userName }) {
         <button className={styles.fab} onClick={() => setOpen(true)} aria-label="Abrir JARVIS">
           <span className={styles.fabPulseRing} />
           {/* Ícone waveform — estética "voice / AI listening" */}
-          <svg className={styles.fabIcon} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg className={styles.fabIcon} width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 12 h2 l2 -7 l3 14 l3 -14 l3 14 l3 -7 h3" />
           </svg>
 
@@ -785,7 +782,7 @@ export default function JarvisOrb({ userName }) {
               <div className={styles.subtitle}>Assistente de Comando — Sigma</div>
             </div>
 
-            <CanvasOrb orbState={state} size={360} />
+            <CanvasOrb orbState={state} size={280} />
 
             <div className={styles.statusWrap}>
               <span
