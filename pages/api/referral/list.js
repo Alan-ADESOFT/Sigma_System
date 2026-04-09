@@ -22,6 +22,26 @@ const { getProgressByToken } = require('../../../models/onboarding');
 const { resolveTenantId } = require('../../../infra/get-tenant-id');
 
 export default async function handler(req, res) {
+  /* ── DELETE: remove indicado pelo id (admin only) ── */
+  if (req.method === 'DELETE') {
+    try {
+      const tenantId = await resolveTenantId(req);
+      if (!tenantId) return res.status(401).json({ success: false, error: 'Tenant não resolvido' });
+      const { id } = req.body || {};
+      if (!id) return res.status(400).json({ success: false, error: 'id obrigatório.' });
+      const { queryOne } = require('../../../infra/db');
+      const deleted = await queryOne(
+        `DELETE FROM referrals WHERE id = $1 AND tenant_id = $2 RETURNING id`,
+        [id, tenantId]
+      );
+      if (!deleted) return res.status(404).json({ success: false, error: 'Indicação não encontrada.' });
+      return res.json({ success: true, message: 'Indicação removida.' });
+    } catch (err) {
+      console.error('[ERRO][API:referral/list] DELETE', { error: err.message });
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
   if (req.method !== 'GET') {
     return res.status(405).json({ success: false, error: 'Método não permitido' });
   }

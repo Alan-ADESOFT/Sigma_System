@@ -235,6 +235,7 @@ function ReferralListTab({ notify, onLoaded }) {
   const [loading, setLoading] = useState(true);
   const [referrals, setReferrals] = useState([]);
   const [filter, setFilter] = useState('');
+  const [deleting, setDeleting] = useState(null);
 
   async function load() {
     setLoading(true);
@@ -270,6 +271,31 @@ function ReferralListTab({ notify, onLoaded }) {
   }
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter]);
+
+  async function handleDeleteReferral(id) {
+    if (!confirm('Excluir esta indicação?')) return;
+    setDeleting(id);
+    try {
+      const r = await fetch('/api/referral/list', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const d = await r.json();
+      if (d.success) {
+        setReferrals(prev => prev.filter(ref => ref.id !== id));
+        if (typeof onLoaded === 'function') {
+          onLoaded(referrals.filter(ref => ref.id !== id));
+        }
+        notify('Indicação removida.', 'success');
+      } else {
+        notify(d.error || 'Erro ao remover.', 'error');
+      }
+    } catch {
+      notify('Erro de conexão.', 'error');
+    }
+    setDeleting(null);
+  }
 
   function statusBadge(status) {
     const map = {
@@ -332,6 +358,7 @@ function ReferralListTab({ notify, onLoaded }) {
                 <th>Vídeo</th>
                 <th>Visita</th>
                 <th>Compra</th>
+                <th style={{ width: 50 }}></th>
               </tr>
             </thead>
             <tbody>
@@ -363,6 +390,23 @@ function ReferralListTab({ notify, onLoaded }) {
                         {formatDate(r.purchasedAt)}
                       </span>
                     ) : '—'}
+                  </td>
+                  <td>
+                    <button
+                      onClick={() => handleDeleteReferral(r.id)}
+                      disabled={deleting === r.id}
+                      title="Excluir indicação"
+                      style={{
+                        padding: '4px 8px', borderRadius: 4, cursor: deleting === r.id ? 'not-allowed' : 'pointer',
+                        border: '1px solid rgba(255,255,255,0.06)', background: 'transparent',
+                        color: '#737373', fontFamily: 'var(--font-mono)', fontSize: '0.6rem',
+                        transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.color = '#ff0033'; e.currentTarget.style.borderColor = 'rgba(255,0,51,0.25)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.color = '#737373'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; }}
+                    >
+                      {deleting === r.id ? '...' : '✕'}
+                    </button>
                   </td>
                 </tr>
               ))}

@@ -148,10 +148,13 @@ export default function FinanceiroDashboard() {
   const [error, setError] = useState(null);
 
   /* Filtros */
-  const [filterClient, setFilterClient] = useState('');
-  const [filterMonth,  setFilterMonth ] = useState('');
-  const [filterYear,   setFilterYear  ] = useState(String(new Date().getFullYear()));
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterClient,    setFilterClient   ] = useState('');
+  const [filterMonth,     setFilterMonth    ] = useState('');
+  const [filterYear,      setFilterYear     ] = useState(String(new Date().getFullYear()));
+  const [filterDashMonth, setFilterDashMonth] = useState('');
+  const [filterStatus,    setFilterStatus   ] = useState('all');
+
+  const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
   /* Company filters */
   const [compPeriod,     setCompPeriod    ] = useState('this_year');
@@ -332,52 +335,57 @@ export default function FinanceiroDashboard() {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const thisMonth = new Date().toISOString().slice(0, 7);
 
-  /* KPIs from installments */
+  /* KPIs from installments — filtered by year+month */
   const instKpis = useMemo(() => {
-    const paidAll   = installments.filter(i => i.status === 'paid');
-    const paidMonth = paidAll.filter(i => i.paid_at && i.paid_at.startsWith(thisMonth));
-    const pending   = installments.filter(i => i.status !== 'paid');
+    const prefix = filterDashMonth ? `${filterYear}-${filterDashMonth}` : filterYear;
+    const paidAll   = installments.filter(i => i.status === 'paid' && i.paid_at && i.paid_at.slice(0, 7).startsWith(prefix));
+    const pending   = installments.filter(i => i.status !== 'paid' && i.due_date && i.due_date.slice(0, 7).startsWith(prefix));
     const overdue   = pending.filter(i => new Date(i.due_date) < today);
-    const contracts = new Set(installments.map(i => i.contract_id));
+    const contracts = new Set(installments.filter(i => i.due_date && i.due_date.slice(0, 7).startsWith(prefix)).map(i => i.contract_id));
     return {
-      fatMes:     paidMonth.reduce((s, i) => s + parseFloat(i.value), 0),
       arrecadado: paidAll.reduce((s, i) => s + parseFloat(i.value), 0),
       aReceber:   pending.reduce((s, i) => s + parseFloat(i.value), 0),
       contratos:  contracts.size,
       atrasadas:  overdue.length,
     };
-  }, [installments]);
+  }, [installments, filterYear, filterDashMonth]);
 
-  /* Company KPIs */
+  /* Company KPIs — filtered by year+month */
   const compKpis = useMemo(() => {
-    const inc = companyRecords.filter(r => r.type === 'income').reduce((s, r) => s + parseFloat(r.value), 0);
-    const exp = companyRecords.filter(r => r.type === 'expense').reduce((s, r) => s + parseFloat(r.value), 0);
+    const prefix = filterDashMonth ? `${filterYear}-${filterDashMonth}` : filterYear;
+    const filtered = companyRecords.filter(r => r.date && r.date.split('T')[0].slice(0, 7).startsWith(prefix));
+    const inc = filtered.filter(r => r.type === 'income').reduce((s, r) => s + parseFloat(r.value), 0);
+    const exp = filtered.filter(r => r.type === 'expense').reduce((s, r) => s + parseFloat(r.value), 0);
     return { income: inc, expense: exp, profit: inc - exp };
-  }, [companyRecords]);
+  }, [companyRecords, filterYear, filterDashMonth]);
 
   /* Chart: Entrada × Despesa por mês */
   const chartEntradaDespesa = useMemo(() => {
+    const prefix = filterDashMonth ? `${filterYear}-${filterDashMonth}` : filterYear;
     const map = {};
     // Income from paid installments
     installments.filter(i => i.status === 'paid' && i.paid_at).forEach(i => {
       const mk = i.paid_at.slice(0, 7);
+      if (!mk.startsWith(prefix)) return;
       if (!map[mk]) map[mk] = { month: mk, entrada: 0, despesa: 0 };
       map[mk].entrada += parseFloat(i.value);
     });
     // Company income
     companyRecords.filter(r => r.type === 'income').forEach(r => {
       const mk = r.date.split('T')[0].slice(0, 7);
+      if (!mk.startsWith(prefix)) return;
       if (!map[mk]) map[mk] = { month: mk, entrada: 0, despesa: 0 };
       map[mk].entrada += parseFloat(r.value);
     });
     // Company expenses
     companyRecords.filter(r => r.type === 'expense').forEach(r => {
       const mk = r.date.split('T')[0].slice(0, 7);
+      if (!mk.startsWith(prefix)) return;
       if (!map[mk]) map[mk] = { month: mk, entrada: 0, despesa: 0 };
       map[mk].despesa += parseFloat(r.value);
     });
-    return Object.values(map).sort((a, b) => a.month.localeCompare(b.month)).slice(-12);
-  }, [installments, companyRecords]);
+    return Object.values(map).sort((a, b) => a.month.localeCompare(b.month));
+  }, [installments, companyRecords, filterYear, filterDashMonth]);
 
   /* Chart: Lucro × Tempo */
   const chartLucro = useMemo(() => {
@@ -389,13 +397,16 @@ export default function FinanceiroDashboard() {
 
   /* Chart: Top clientes por valor pago */
   const chartTopClients = useMemo(() => {
+    const prefix = filterDashMonth ? `${filterYear}-${filterDashMonth}` : filterYear;
     const map = {};
-    installments.filter(i => i.status === 'paid').forEach(i => {
+    installments.filter(i => i.status === 'paid' && i.paid_at).forEach(i => {
+      const mk = i.paid_at.slice(0, 7);
+      if (!mk.startsWith(prefix)) return;
       if (!map[i.client_id]) map[i.client_id] = { name: i.company_name, value: 0 };
       map[i.client_id].value += parseFloat(i.value);
     });
     return Object.values(map).sort((a, b) => b.value - a.value).slice(0, 6);
-  }, [installments]);
+  }, [installments, filterYear, filterDashMonth]);
 
   /* Filtros para tab parcelas */
   const months = useMemo(() => {
@@ -487,22 +498,39 @@ export default function FinanceiroDashboard() {
       {/* ═══ TAB: DASHBOARD ═══ */}
       {!loading && activeTab === 'dashboard' && (
         <div>
-          {/* KPIs */}
-          <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
-            <KpiCard label="Faturado este mês" value={fmtBRL(instKpis.fatMes)} color="#22c55e" />
-            <KpiCard label="Total arrecadado" value={fmtBRL(instKpis.arrecadado)} />
-            <KpiCard label="A receber" value={fmtBRL(instKpis.aReceber)} color="#f97316" />
-            <KpiCard label="Despesas (ano)" value={fmtBRL(compKpis.expense)} color="#ff6680" />
-            <KpiCard label="Lucro (ano)" value={fmtBRL(instKpis.arrecadado + compKpis.income - compKpis.expense)}
-              color={instKpis.arrecadado + compKpis.income - compKpis.expense >= 0 ? '#22c55e' : '#ff6680'} />
-          </div>
-
-          {/* Filtro de ano */}
-          <div style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* Filtro de ano + mês */}
+          <div style={{ marginBottom: 16, display: 'flex', gap: 10, alignItems: 'center' }}>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)' }}>Ano:</span>
-            <select value={filterYear} onChange={e => setFilterYear(e.target.value)} style={SEL}>
+            <select value={filterYear} onChange={e => { setFilterYear(e.target.value); setFilterDashMonth(''); }} style={SEL}>
               {years.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)' }}>Mês:</span>
+            <select value={filterDashMonth} onChange={e => setFilterDashMonth(e.target.value)} style={SEL}>
+              <option value="">Todos</option>
+              {MONTH_NAMES.map((name, i) => {
+                const val = String(i + 1).padStart(2, '0');
+                return <option key={val} value={val}>{name}</option>;
+              })}
+            </select>
+            {filterDashMonth && (
+              <button onClick={() => setFilterDashMonth('')} style={{
+                padding: '5px 10px', borderRadius: 6, cursor: 'pointer',
+                border: '1px solid rgba(255,255,255,0.07)', background: 'transparent',
+                color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.6rem',
+              }}>
+                Limpar x
+              </button>
+            )}
+          </div>
+
+          {/* KPIs */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+            <KpiCard label={filterDashMonth ? `Arrecadado em ${MONTH_NAMES[parseInt(filterDashMonth) - 1]}` : `Arrecadado (${filterYear})`} value={fmtBRL(instKpis.arrecadado)} color="#22c55e" />
+            <KpiCard label={filterDashMonth ? `A receber em ${MONTH_NAMES[parseInt(filterDashMonth) - 1]}` : `A receber (${filterYear})`} value={fmtBRL(instKpis.aReceber)} color="#f97316" />
+            <KpiCard label={filterDashMonth ? `Despesas em ${MONTH_NAMES[parseInt(filterDashMonth) - 1]}` : `Despesas (${filterYear})`} value={fmtBRL(compKpis.expense)} color="#ff6680" />
+            <KpiCard label={filterDashMonth ? `Lucro em ${MONTH_NAMES[parseInt(filterDashMonth) - 1]}` : `Lucro (${filterYear})`}
+              value={fmtBRL(instKpis.arrecadado + compKpis.income - compKpis.expense)}
+              color={instKpis.arrecadado + compKpis.income - compKpis.expense >= 0 ? '#22c55e' : '#ff6680'} />
           </div>
 
           {/* Gráficos */}
@@ -580,9 +608,10 @@ export default function FinanceiroDashboard() {
                 Despesas por Categoria
               </div>
               {(() => {
+                const prefix = filterDashMonth ? `${filterYear}-${filterDashMonth}` : filterYear;
                 const catMap = {};
                 const catColors = {};
-                companyRecords.filter(r => r.type === 'expense').forEach(r => {
+                companyRecords.filter(r => r.type === 'expense' && r.date && r.date.split('T')[0].slice(0, 7).startsWith(prefix)).forEach(r => {
                   const cat = r.category_name || r.category || 'Outros';
                   catMap[cat] = (catMap[cat] || 0) + parseFloat(r.value);
                   if (r.category_color) catColors[cat] = r.category_color;
