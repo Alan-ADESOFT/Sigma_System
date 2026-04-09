@@ -137,7 +137,7 @@ export default function SettingsFinanceiro() {
 
   // Admin guard
   useEffect(() => {
-    if (user && user.role !== 'admin') router.replace('/dashboard');
+    if (user && user.role !== 'admin' && user.role !== 'god') router.replace('/dashboard');
   }, [user]);
 
   /* ── Categories state ── */
@@ -304,7 +304,7 @@ export default function SettingsFinanceiro() {
     }
   }
 
-  if (!user || user.role !== 'admin') return null;
+  if (!user || (user.role !== 'admin' && user.role !== 'god')) return null;
 
   return (
     <DashboardLayout activeTab="settings-financeiro">
