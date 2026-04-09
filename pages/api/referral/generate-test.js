@@ -17,8 +17,19 @@ export default async function handler(req, res) {
     const user = await requireRole(req, 'admin');
     const tenantId = await resolveTenantId(req);
 
-    const { label } = req.body || {};
+    const { label, clientId } = req.body || {};
     const testLabel = (label || 'Teste').trim().slice(0, 50);
+
+    // Busca um cliente válido para vincular como referrer
+    let referrerId = clientId;
+    if (!referrerId) {
+      const anyClient = await queryOne(
+        `SELECT id FROM marketing_clients WHERE tenant_id = $1 LIMIT 1`,
+        [tenantId]
+      );
+      if (!anyClient) return res.status(400).json({ success: false, error: 'Cadastre pelo menos um cliente antes de gerar links de teste.' });
+      referrerId = anyClient.id;
+    }
 
     // Gera código único
     let refCode;
@@ -35,7 +46,7 @@ export default async function handler(req, res) {
       `INSERT INTO referrals (referrer_id, tenant_id, ref_code, ref_link, referred_name, status)
        VALUES ($1, $2, $3, $4, $5, 'link_created')
        RETURNING *`,
-      [user.id, tenantId, refCode, refLink, `[TESTE] ${testLabel}`]
+      [referrerId, tenantId, refCode, refLink, `[TESTE] ${testLabel}`]
     );
 
     return res.json({

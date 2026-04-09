@@ -106,7 +106,6 @@ const NAV_SECTIONS = [
   },
   {
     category: 'SOCIAL MEDIA',
-    hidden: true,
     items: [
       { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '13', icon: 'barChart',  minRole: 'admin' },
       { href: '/dashboard/content-plan',     label: 'Planejamento',           tag: '14', icon: 'list',      minRole: 'admin' },
@@ -115,7 +114,6 @@ const NAV_SECTIONS = [
   },
   {
     category: 'TRÁFEGO',
-    hidden: true,
     items: [
       { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '16', icon: 'megaphone', minRole: 'admin' },
     ],
