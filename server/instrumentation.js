@@ -21,21 +21,21 @@
 async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
 
-  // Scheduler legado (contents → meta-publish)
-  try {
-    const { startScheduler } = require('../models/scheduler.service');
-    startScheduler();
-  } catch (err) {
-    console.error('[ERRO][instrumentation] scheduler.service:', err.message);
-  }
+  // OCULTO TEMPORARIAMENTE — Scheduler legado (contents → meta-publish)
+  // try {
+  //   const { startScheduler } = require('../models/scheduler.service');
+  //   startScheduler();
+  // } catch (err) {
+  //   console.error('[ERRO][instrumentation] scheduler.service:', err.message);
+  // }
 
-  // Instagram publisher novo (instagram_scheduled_posts) — 10 min
-  try {
-    const { startInstagramPublisher } = require('./instagramPublisher');
-    startInstagramPublisher();
-  } catch (err) {
-    console.error('[ERRO][instrumentation] instagramPublisher:', err.message);
-  }
+  // OCULTO TEMPORARIAMENTE — Instagram publisher (instagram_scheduled_posts) — 10 min
+  // try {
+  //   const { startInstagramPublisher } = require('./instagramPublisher');
+  //   startInstagramPublisher();
+  // } catch (err) {
+  //   console.error('[ERRO][instrumentation] instagramPublisher:', err.message);
+  // }
 }
 
 module.exports = { register };

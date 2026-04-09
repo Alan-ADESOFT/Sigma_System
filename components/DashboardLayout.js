@@ -104,20 +104,21 @@ const NAV_SECTIONS = [
       { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '12', icon: 'edit',      minRole: 'admin' },
     ],
   },
-  {
-    category: 'SOCIAL MEDIA',
-    items: [
-      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '13', icon: 'barChart',  minRole: 'admin' },
-      { href: '/dashboard/content-plan',     label: 'Planejamento',           tag: '14', icon: 'list',      minRole: 'admin' },
-      { href: '/dashboard/publish',          label: 'Publicar Agora',         tag: '15', icon: 'send',      minRole: 'admin' },
-    ],
-  },
-  {
-    category: 'TRÁFEGO',
-    items: [
-      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '16', icon: 'megaphone', minRole: 'admin' },
-    ],
-  },
+  // ── OCULTO TEMPORARIAMENTE (Social Media + Tráfego) ──
+  // {
+  //   category: 'SOCIAL MEDIA',
+  //   items: [
+  //     { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '13', icon: 'barChart',  minRole: 'admin' },
+  //     { href: '/dashboard/content-plan',     label: 'Planejamento',           tag: '14', icon: 'list',      minRole: 'admin' },
+  //     { href: '/dashboard/publish',          label: 'Publicar Agora',         tag: '15', icon: 'send',      minRole: 'admin' },
+  //   ],
+  // },
+  // {
+  //   category: 'TRÁFEGO',
+  //   items: [
+  //     { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '16', icon: 'megaphone', minRole: 'admin' },
+  //   ],
+  // },
   {
     category: 'SISTEMA',
     items: [
