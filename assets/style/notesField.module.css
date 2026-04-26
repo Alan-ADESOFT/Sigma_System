@@ -1,0 +1,260 @@
+/* ============================================================
+   notesField.module.css
+   Campo de Notas com markdown rendering em modo view.
+   ============================================================ */
+
+.wrap {
+  margin-bottom: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.label svg { color: var(--text-muted); }
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.savingTag {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--warning);
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(249, 115, 22, 0.08);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  animation: savingPulse 1.4s ease-in-out infinite;
+}
+@keyframes savingPulse {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1;   }
+}
+
+.savedTag {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--success);
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.editBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.editBtn:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+/* ── Modo VIEW (markdown renderizado) ────────────────────── */
+.viewBox {
+  background: rgba(10, 10, 10, 0.5);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 16px 20px;
+  cursor: text;
+  transition: all 0.15s;
+  min-height: 60px;
+}
+.viewBox:hover {
+  border-color: var(--border-subtle);
+  background: rgba(10, 10, 10, 0.7);
+}
+
+/* Render do markdown */
+.rendered {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.rendered h1,
+.rendered h2,
+.rendered h3 {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  margin: 18px 0 10px;
+  line-height: 1.3;
+}
+.rendered h1:first-child,
+.rendered h2:first-child,
+.rendered h3:first-child { margin-top: 0; }
+
+.rendered h1 { font-size: 1.15rem; }
+.rendered h2 {
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--brand-400);
+  padding-top: 14px;
+  margin-top: 16px;
+  border-top: 1px solid var(--border-default);
+}
+.rendered h2:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+.rendered h3 { font-size: 0.95rem; }
+
+.rendered p {
+  margin: 0 0 10px;
+  color: var(--text-secondary);
+}
+.rendered p:last-child { margin-bottom: 0; }
+
+.rendered strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+.rendered em {
+  color: var(--text-primary);
+  font-style: italic;
+}
+.rendered code {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-default);
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: var(--brand-400);
+}
+
+.rendered ul,
+.rendered ol {
+  padding-left: 22px;
+  margin: 0 0 12px;
+}
+.rendered li {
+  margin-bottom: 5px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.rendered li::marker { color: var(--brand-500); }
+
+.rendered a {
+  color: var(--brand-300);
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(255, 0, 51, 0.25);
+}
+.rendered a:hover {
+  color: var(--brand-400);
+  border-bottom-color: var(--brand-400);
+}
+
+/* ── Modo EDIT ──────────────────────────────────────────── */
+.editorBox {
+  background: rgba(10, 10, 10, 0.7);
+  border: 1px solid rgba(255, 0, 51, 0.25);
+  border-radius: 8px;
+  overflow: hidden;
+  animation: editIn 0.18s ease-out;
+}
+@keyframes editIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.textarea {
+  width: 100%;
+  min-height: 180px;
+  padding: 14px 18px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  outline: none;
+  resize: vertical;
+  line-height: 1.6;
+}
+.textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.editorHint {
+  padding: 8px 18px;
+  border-top: 1px solid var(--border-default);
+  background: rgba(0, 0, 0, 0.3);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.editorHint code {
+  font-family: var(--font-mono);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-default);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--text-secondary);
+}
+
+/* ── Empty state ──────────────────────────────────────── */
+.emptyState {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 22px 16px;
+  background: rgba(10, 10, 10, 0.4);
+  border: 1px dashed var(--border-default);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.emptyState:hover {
+  border-color: var(--border-hover);
+  color: var(--text-secondary);
+  background: rgba(255, 0, 51, 0.02);
+}
