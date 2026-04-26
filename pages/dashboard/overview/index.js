@@ -229,6 +229,69 @@ function CardSkeleton() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   COMERCIAL EM DESTAQUE — 3 cards horizontais com KPIs do módulo comercial
+═══════════════════════════════════════════════════════════════════════════ */
+
+function ComercialHighlight() {
+  const router = useRouter();
+  const [kpis, setKpis] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/comercial/dashboard/kpis?period=month')
+      .then(r => r.json())
+      .then(j => { if (j.success) setKpis(j.kpis); })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, []);
+
+  if (!loaded) return null;
+  if (!kpis) return null;
+
+  function fmtBRL(n) {
+    return Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 });
+  }
+
+  return (
+    <div>
+      <div className={styles.sectionHeader}>
+        <span className="label-micro" style={{ color: '#ff0033' }}>○ COMERCIAL EM DESTAQUE</span>
+        <div className={styles.sectionLine} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+        <div
+          className="glass-card glass-card-hover"
+          style={{ padding: 18, cursor: 'pointer' }}
+          onClick={() => router.push('/dashboard/comercial/captacao')}
+        >
+          <div className="kpi-label">Leads captados (mês)</div>
+          <div className="kpi-value">{kpis.leadsCapturedMonth || 0}</div>
+          <div className="kpi-label" style={{ opacity: 0.7 }}>{kpis.leadsImportedMonth || 0} no pipeline</div>
+        </div>
+        <div
+          className="glass-card glass-card-hover"
+          style={{ padding: 18, cursor: 'pointer' }}
+          onClick={() => router.push('/dashboard/comercial/pipeline')}
+        >
+          <div className="kpi-label">Pipeline ativo</div>
+          <div className="kpi-value">{fmtBRL(kpis.pipelineEstimatedValue || 0)}</div>
+          <div className="kpi-label" style={{ opacity: 0.7 }}>{kpis.pipelineTotalLeads || 0} leads</div>
+        </div>
+        <div
+          className="glass-card glass-card-hover"
+          style={{ padding: 18, cursor: 'pointer' }}
+          onClick={() => router.push('/dashboard/comercial/propostas')}
+        >
+          <div className="kpi-label">Propostas vistas (mês)</div>
+          <div className="kpi-value">{kpis.proposalsViewedMonth || 0}</div>
+          <div className="kpi-label" style={{ opacity: 0.7 }}>de {kpis.proposalsSentMonth || 0} enviadas</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    PAGE
 ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -353,6 +416,11 @@ export default function OverviewPage() {
             </>
           )}
         </div>
+
+        <div className="divider-sweep" style={{ margin: '28px 0' }} />
+
+        {/* ═══════ COMERCIAL EM DESTAQUE ═══════ */}
+        <ComercialHighlight />
 
         <div className="divider-sweep" style={{ margin: '28px 0' }} />
 

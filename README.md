@@ -245,3 +245,73 @@ O brandbook completo esta em `/brandbook/`:
 - `05-ai-instructions.md` — Instrucoes para geracao de UI com IA
 
 Tokens CSS em `:root` no `globals.css`. Nunca usar hex hard-coded nos componentes.
+
+---
+
+## Gerador de Imagem
+
+Modulo de geracao de imagens com brandbook por cliente, suportando 4 provedores:
+- **Imagen 4** (Google Vertex AI) — fotorrealismo + texto, otimo pra brand
+- **GPT Image 1** (OpenAI) — rapido, segue instrucao em linguagem natural
+- **Flux 1.1 Pro** (fal.ai) — editorial cinematografico
+- **Nano Banana** (Google Gemini) — barato, otimo pra ideacao
+
+### Configuracao
+
+1. Configure as chaves em `/dashboard/settings/image` (todas criptografadas AES-256-GCM)
+2. Crie um brandbook por cliente em `/dashboard/clients/[id]` aba **Brandbook**
+   (3 caminhos: gerar com IA, upload PDF/HTML, manual)
+3. Use `/dashboard/image` pra gerar — o brandbook ativo e injetado automaticamente
+
+### Fluxo tecnico
+
+```
+POST /api/image/generate
+  -> cria image_jobs row (status='queued')
+  -> notifica imageJobEmitter (in-memory)
+
+server/imageWorker.js (em background)
+  -> optimizePrompt (cache MD5 hash, 24h padrao)
+  -> calls infra/api/imageProviders/{vertex,openai,fal,gemini}
+  -> salva imagem em public/uploads/generated/{tenantId}/{yyyy-mm}/
+  -> gera thumbnail 256px webp
+  -> marca job done + notifica sininho
+```
+
+### Estrutura de arquivos
+
+- `models/agentes/imagecreator/` — pipeline (PromptEngineer, BrandbookExtractor, costCalculator, errorMessages)
+- `infra/api/imageProviders/` — adapters dos 4 provedores (interface unificada)
+- `infra/encryption.js` — AES-256-GCM com auth tag pra API keys
+- `infra/cache.js` — cache em memoria com TTL
+- `infra/imageRateLimit.js` — 3 camadas: concurrent + hourly + daily
+- `infra/promptSanitizer.js` — detecta prompt injection patterns
+- `server/imageWorker.js` — worker em background com polling adaptativo (2/5/10s)
+- `pages/api/image/` — endpoints REST (~17 arquivos)
+- `pages/dashboard/image/` — workspace, visualizacao full, historico admin
+
+### Limites padrao
+
+- Admin: 50 imagens/dia, 30/hora
+- User: 30 imagens/dia, 10/hora
+- 5 geracoes simultaneas por tenant
+- 100 req/min por IP (proteca de burst)
+- 20 templates por cliente
+- Historico admin: 7 dias
+
+### Variaveis de ambiente
+
+- `IMAGE_ENCRYPTION_KEY` (obrigatorio em prod) — base64 32 bytes, gere com `openssl rand -base64 32`
+- `GOOGLE_VERTEX_PROJECT_ID`, `GOOGLE_VERTEX_LOCATION` — fallback global
+- `FAL_KEY`, `GEMINI_API_KEY` — fallback global
+- `IMAGE_WORKER_ENABLED` — `false` desliga o worker (uso em CI/build)
+- `IMAGE_MAX_REFERENCE_BYTES` (10 MB), `IMAGE_MAX_BRANDBOOK_BYTES` (25 MB)
+
+### Diagnostico em producao
+
+```bash
+curl -H "x-internal-token: $INTERNAL_API_TOKEN" https://app.example.com/api/image/_health
+```
+
+Retorna snapshot do worker (jobs processados, erros, fila atual, cache hit rate, ultimo cleanup).
+

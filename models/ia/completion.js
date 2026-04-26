@@ -101,6 +101,11 @@ async function* runCompletionStream(modelLevel, systemPrompt, userMessage, maxTo
   const providerTag = provider === 'Anthropic' ? '🟣 ANTHROPIC' : '🟢 OPENAI';
   console.log(`[INFO][Completion:Stream] ──── ${providerTag} ──── Iniciando streaming`, { modelLevel, model });
 
+  // Anthropic exige user message não-vazio. OpenAI tolera, mas padronizamos.
+  const safeUserMessage = (userMessage && String(userMessage).trim())
+    ? userMessage
+    : 'Continue.';
+
   let fullText = '';
 
   if (provider === 'OpenAI') {
@@ -117,7 +122,7 @@ async function* runCompletionStream(modelLevel, systemPrompt, userMessage, maxTo
         stream: true,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage },
+          { role: 'user', content: safeUserMessage },
         ],
       }),
     });
@@ -174,7 +179,7 @@ async function* runCompletionStream(modelLevel, systemPrompt, userMessage, maxTo
         max_tokens: maxTokens,
         stream: true,
         system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }],
+        messages: [{ role: 'user', content: safeUserMessage }],
       }),
     });
 

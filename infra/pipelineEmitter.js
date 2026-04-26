@@ -12,8 +12,20 @@
 
 const { EventEmitter } = require('events');
 
-/** @type {Map<string, EventEmitter>} */
-const JOB_EMITTERS = new Map();
+/**
+ * @type {Map<string, EventEmitter>}
+ *
+ * Em Next.js dev, cada vez que uma rota é compilada o webpack-internal
+ * recarrega os módulos em um novo contexto. Isso faria o Map ser uma
+ * instância nova, perdendo todos os emitters criados em outras rotas
+ * (sintoma: "Job não encontrado" em SSE imediatamente após criar o job).
+ *
+ * Solução: ancorar o Map em globalThis, que é compartilhado entre
+ * recompiles. Em produção (build), o módulo é singleton de qualquer
+ * forma, então o globalThis é apenas um no-op.
+ */
+const JOB_EMITTERS = globalThis.__SIGMA_JOB_EMITTERS__
+  || (globalThis.__SIGMA_JOB_EMITTERS__ = new Map());
 
 // ─── API pública ─────────────────────────────────────────────────────────────
 

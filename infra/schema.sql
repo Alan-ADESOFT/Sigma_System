@@ -1060,6 +1060,137 @@ CREATE INDEX IF NOT EXISTS idx_task_recurrences_tenant ON task_recurrences(tenan
 CREATE INDEX IF NOT EXISTS idx_task_recurrences_active ON task_recurrences(is_active);
 
 -- ============================================================
+-- 43. CONTENT PLANNING (planejamento mensal de conteúdo)
+-- ============================================================
+-- Migration espelhada em infra/migrations/sprint_content_planning.sql
+-- Tabelas:
+--   · content_plan_statuses     — colunas configuráveis do Kanban
+--   · content_plans             — planejamento mensal por cliente
+--   · content_plan_creatives    — peças/criativos do planejamento
+--   · content_plan_share_tokens — links públicos de aprovação (PIN opcional)
+--   · content_plan_versions     — histórico de versões (snapshots)
+--   · content_plan_activity     — log de atividades (sininho)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS content_plan_statuses (
+  id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  key         TEXT NOT NULL,
+  label       TEXT NOT NULL,
+  color       TEXT NOT NULL DEFAULT '#94A3B8',
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  is_default  BOOLEAN NOT NULL DEFAULT false,
+  is_terminal BOOLEAN NOT NULL DEFAULT false,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(tenant_id, key)
+);
+CREATE INDEX IF NOT EXISTS idx_cp_statuses_tenant ON content_plan_statuses(tenant_id, sort_order);
+
+CREATE TABLE IF NOT EXISTS content_plans (
+  id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  client_id       TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+  title           TEXT NOT NULL,
+  month_reference DATE,
+  objective       TEXT,
+  central_promise TEXT,
+  strategy_notes  TEXT,
+  status_id       TEXT REFERENCES content_plan_statuses(id) ON DELETE SET NULL,
+  owner_id        TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+  due_date        DATE,
+  is_template     BOOLEAN NOT NULL DEFAULT false,
+  template_source TEXT REFERENCES content_plans(id) ON DELETE SET NULL,
+  metadata        JSONB NOT NULL DEFAULT '{}',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_cp_plans_tenant   ON content_plans(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_cp_plans_client   ON content_plans(client_id);
+CREATE INDEX IF NOT EXISTS idx_cp_plans_status   ON content_plans(status_id);
+CREATE INDEX IF NOT EXISTS idx_cp_plans_template ON content_plans(tenant_id, is_template);
+CREATE INDEX IF NOT EXISTS idx_cp_plans_kanban   ON content_plans(tenant_id, status_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS content_plan_creatives (
+  id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  plan_id         TEXT NOT NULL REFERENCES content_plans(id) ON DELETE CASCADE,
+  sort_order      INTEGER NOT NULL DEFAULT 0,
+  type            TEXT NOT NULL DEFAULT 'post',
+  scheduled_for   DATE,
+  scheduled_time  TEXT,
+  media_urls      JSONB NOT NULL DEFAULT '[]',
+  video_url       TEXT,
+  cover_url       TEXT,
+  caption         TEXT,
+  cta             TEXT,
+  hashtags        TEXT,
+  internal_notes  TEXT,
+  copy_session_id TEXT,
+  client_decision TEXT,
+  client_rating   INTEGER,
+  client_reason   TEXT,
+  client_notes    TEXT,
+  decided_at      TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_cp_creatives_plan   ON content_plan_creatives(plan_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_cp_creatives_tenant ON content_plan_creatives(tenant_id);
+
+CREATE TABLE IF NOT EXISTS content_plan_share_tokens (
+  id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  plan_id         TEXT NOT NULL REFERENCES content_plans(id) ON DELETE CASCADE,
+  token           TEXT NOT NULL UNIQUE,
+  password_hash   TEXT,
+  status          TEXT NOT NULL DEFAULT 'active',
+  expires_at      TIMESTAMPTZ NOT NULL,
+  created_by      TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+  first_opened_at TIMESTAMPTZ,
+  last_opened_at  TIMESTAMPTZ,
+  open_count      INTEGER NOT NULL DEFAULT 0,
+  ip_first        TEXT,
+  user_agent      TEXT,
+  metadata        JSONB NOT NULL DEFAULT '{}',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_cp_tokens_plan    ON content_plan_share_tokens(plan_id);
+CREATE INDEX IF NOT EXISTS idx_cp_tokens_token   ON content_plan_share_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_cp_tokens_expires ON content_plan_share_tokens(expires_at);
+
+CREATE TABLE IF NOT EXISTS content_plan_versions (
+  id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  plan_id     TEXT NOT NULL REFERENCES content_plans(id) ON DELETE CASCADE,
+  version_no  INTEGER NOT NULL,
+  label       TEXT,
+  snapshot    JSONB NOT NULL,
+  created_by  TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+  trigger     TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(plan_id, version_no)
+);
+CREATE INDEX IF NOT EXISTS idx_cp_versions_plan ON content_plan_versions(plan_id, version_no DESC);
+
+CREATE TABLE IF NOT EXISTS content_plan_activity (
+  id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  plan_id     TEXT NOT NULL REFERENCES content_plans(id) ON DELETE CASCADE,
+  creative_id TEXT REFERENCES content_plan_creatives(id) ON DELETE SET NULL,
+  actor_type  TEXT NOT NULL,
+  actor_id    TEXT,
+  event_type  TEXT NOT NULL,
+  payload     JSONB NOT NULL DEFAULT '{}',
+  read        BOOLEAN NOT NULL DEFAULT false,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_cp_activity_tenant ON content_plan_activity(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cp_activity_plan   ON content_plan_activity(plan_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cp_activity_unread ON content_plan_activity(tenant_id, read, created_at DESC);
+
+-- ============================================================
 -- SPRINT REFERRAL — Sistema de Indicação (pós-onboarding)
 -- ============================================================
 -- Cliente termina onboarding → gera link único → indicado vê
@@ -1113,6 +1244,164 @@ ALTER TABLE referral_config ADD COLUMN IF NOT EXISTS whatsapp_message     TEXT;
 CREATE INDEX IF NOT EXISTS idx_referral_config_tenant ON referral_config(tenant_id);
 
 -- ============================================================
+-- SPRINT ADS — Modulo Meta Marketing API (Etapa 1/3)
+-- Espelhado em infra/migrations/202604_ads_module.sql
+-- ============================================================
+
+-- ============================================================
+-- 44. CLIENT_ADS_ACCOUNTS — conta Meta Ads por cliente (Sprint Ads)
+-- ============================================================
+-- 1 conta de Ads por marketing_clients (UNIQUE(client_id)), espelha
+-- o padrao de instagram_accounts.
+CREATE TABLE IF NOT EXISTS client_ads_accounts (
+    id                    TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id             TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    client_id             TEXT NOT NULL UNIQUE REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    -- IDs Meta
+    ads_account_id        TEXT NOT NULL,           -- act_XXXXXXXXX (com prefixo act_)
+    business_id           TEXT,                    -- Business Manager ID (opcional)
+    page_id               TEXT,                    -- Facebook Page ID (necessario para Ad Creative)
+    instagram_actor_id    TEXT,                    -- IG User ID conectado a esta conta de ads
+    -- Token
+    access_token          TEXT NOT NULL,           -- long-lived (60d) ou system user (eterno)
+    token_type            TEXT NOT NULL DEFAULT 'oauth',  -- 'oauth' | 'manual' | 'system_user'
+    token_expires_at      TIMESTAMPTZ,             -- NULL = nao expira (system_user)
+    -- Metadados da conta
+    account_name          TEXT,
+    currency              TEXT DEFAULT 'BRL',
+    timezone_name         TEXT,
+    account_status        INTEGER,                 -- 1=ACTIVE, 2=DISABLED, etc
+    amount_spent          NUMERIC(14,2),
+    balance               NUMERIC(14,2),
+    -- Health
+    last_health_check_at  TIMESTAMPTZ,
+    health_status         TEXT DEFAULT 'unknown',  -- 'healthy' | 'expiring_soon' | 'expired' | 'invalid' | 'unknown'
+    health_error          TEXT,
+    -- Auditoria
+    connected_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_refreshed_at     TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_client_ads_accounts_tenant       ON client_ads_accounts(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_client_ads_accounts_client       ON client_ads_accounts(client_id);
+CREATE INDEX IF NOT EXISTS idx_client_ads_accounts_expires      ON client_ads_accounts(token_expires_at) WHERE token_expires_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_client_ads_accounts_health       ON client_ads_accounts(health_status);
+
+-- ============================================================
+-- 45. ADS_INSIGHTS_CACHE — cache TTL de chamadas a Insights API
+-- ============================================================
+-- TTL e gerenciado em codigo (expires_at). Lookup por (client_id, cache_key).
+CREATE TABLE IF NOT EXISTS ads_insights_cache (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    client_id       TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    cache_key       TEXT NOT NULL,                 -- hash do (level + target_id + range + breakdowns)
+    level           TEXT NOT NULL,                 -- 'account' | 'campaign' | 'adset' | 'ad'
+    target_id       TEXT NOT NULL,
+    date_start      DATE NOT NULL,
+    date_end        DATE NOT NULL,
+    breakdowns      TEXT,                          -- 'age,gender' | 'publisher_platform' | NULL
+    data            JSONB NOT NULL,
+    fetched_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at      TIMESTAMPTZ NOT NULL,          -- fetched_at + TTL
+    UNIQUE(client_id, cache_key)
+);
+CREATE INDEX IF NOT EXISTS idx_ads_insights_cache_tenant    ON ads_insights_cache(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_ads_insights_cache_client    ON ads_insights_cache(client_id);
+CREATE INDEX IF NOT EXISTS idx_ads_insights_cache_expires   ON ads_insights_cache(expires_at);
+CREATE INDEX IF NOT EXISTS idx_ads_insights_cache_lookup    ON ads_insights_cache(client_id, cache_key);
+
+-- ============================================================
+-- 46. ADS_AI_REPORTS — relatorios de IA (on_demand, weekly_cron, anomaly)
+-- ============================================================
+-- Cada linha guarda input_snapshot + output completo para reproducibilidade.
+CREATE TABLE IF NOT EXISTS ads_ai_reports (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    client_id       TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    scope           TEXT NOT NULL,                 -- 'account' | 'campaign' | 'adset' | 'ad'
+    target_id       TEXT,                          -- NULL para scope=account
+    target_name     TEXT,
+    date_start      DATE NOT NULL,
+    date_end        DATE NOT NULL,
+    trigger_type    TEXT NOT NULL DEFAULT 'on_demand',  -- 'on_demand' | 'weekly_cron' | 'anomaly'
+    -- Snapshot dos dados que foram analisados (pra reproducibilidade)
+    input_snapshot  JSONB NOT NULL,
+    -- Output
+    diagnosis       TEXT NOT NULL,                 -- Markdown
+    recommendations JSONB,                         -- [{action, priority, reason}, ...]
+    flowchart_path  JSONB,                         -- caminho percorrido no fluxograma
+    -- Tracking
+    model_used      TEXT,
+    tokens_used     INTEGER,
+    cost_usd        NUMERIC(10,6),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ads_ai_reports_tenant    ON ads_ai_reports(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_ads_ai_reports_client    ON ads_ai_reports(client_id);
+CREATE INDEX IF NOT EXISTS idx_ads_ai_reports_created   ON ads_ai_reports(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ads_ai_reports_trigger   ON ads_ai_reports(trigger_type);
+
+-- ============================================================
+-- 47. ADS_ANOMALIES — anomalias detectadas pelo cron diario
+-- ============================================================
+CREATE TABLE IF NOT EXISTS ads_anomalies (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    client_id       TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    scope           TEXT NOT NULL,                 -- 'campaign' | 'adset' | 'ad'
+    target_id       TEXT NOT NULL,
+    target_name     TEXT,
+    anomaly_type    TEXT NOT NULL,                 -- 'cpa_spike' | 'roas_drop' | 'frequency_high' | 'no_sales_3d' | 'budget_burn'
+    severity        TEXT NOT NULL DEFAULT 'medium',-- 'low' | 'medium' | 'high'
+    metric_name     TEXT NOT NULL,
+    metric_value    NUMERIC(14,4) NOT NULL,
+    baseline_value  NUMERIC(14,4),
+    delta_pct       NUMERIC(10,2),
+    description     TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'open',  -- 'open' | 'acknowledged' | 'resolved'
+    detected_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    acknowledged_at TIMESTAMPTZ,
+    resolved_at     TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ads_anomalies_tenant     ON ads_anomalies(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_ads_anomalies_client     ON ads_anomalies(client_id);
+CREATE INDEX IF NOT EXISTS idx_ads_anomalies_status     ON ads_anomalies(status);
+CREATE INDEX IF NOT EXISTS idx_ads_anomalies_detected   ON ads_anomalies(detected_at DESC);
+
+-- ============================================================
+-- 48. ADS_PUBLIC_REPORT_TOKENS — tokens publicos de relatorio
+-- ============================================================
+-- Espelha o padrao de client_form_tokens, com tracking de acessos.
+CREATE TABLE IF NOT EXISTS ads_public_report_tokens (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    client_id       TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    token           TEXT NOT NULL UNIQUE,          -- gerado via crypto.randomBytes(24).toString('hex')
+    status          TEXT NOT NULL DEFAULT 'active',-- 'active' | 'revoked' | 'expired'
+    expires_at      TIMESTAMPTZ,                   -- NULL = sem expiracao
+    -- Configuracao do relatorio
+    config          JSONB NOT NULL DEFAULT '{}',   -- { showCampaignList, showChart, defaultDateRange, allowExport }
+    -- Tracking de acessos
+    views_count     INTEGER NOT NULL DEFAULT 0,
+    last_viewed_at  TIMESTAMPTZ,
+    last_viewed_ip  TEXT,
+    -- Auditoria
+    created_by      TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    revoked_at      TIMESTAMPTZ,
+    revoked_reason  TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_ads_public_tokens_tenant    ON ads_public_report_tokens(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_ads_public_tokens_client    ON ads_public_report_tokens(client_id);
+CREATE INDEX IF NOT EXISTS idx_ads_public_tokens_token     ON ads_public_report_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_ads_public_tokens_status    ON ads_public_report_tokens(status);
+
+-- ============================================================
 -- CLEANUP (tabelas descontinuadas)
 -- ============================================================
 DROP TABLE IF EXISTS stage_quality_scores;
@@ -1144,7 +1433,12 @@ BEGIN
         'task_comments','meetings','task_templates','task_bot_config',
         'task_recurrences',
         'finance_categories',
-        'referrals','referral_config'
+        'content_plan_statuses','content_plans','content_plan_creatives','content_plan_share_tokens',
+        'referrals','referral_config',
+        'comercial_lead_lists','comercial_pipeline_columns','comercial_pipeline_leads',
+        'comercial_prospects','comercial_proposals',
+        'comercial_message_templates',
+        'client_ads_accounts','ads_anomalies','ads_public_report_tokens'
     ])
     LOOP
         EXECUTE format('
@@ -1186,6 +1480,25 @@ END $$;
 -- SELECT 'settings' as source, key as id, LEFT(value,80) as preview
 --   FROM settings
 --   WHERE tenant_id='<id>' AND key LIKE 'prompt_library_%';
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- SPRINT ADS — Chaves de configuração adicionadas (tabela: settings)
+-- Não requerem migration estrutural — tabela settings é key-value por design.
+-- ─────────────────────────────────────────────────────────────────────────────
+-- ads_model_strong            → model ID para diagnostico on-demand (default: AI_MODEL_STRONG)
+-- ads_model_medium            → model ID para explicacoes curtas (default: AI_MODEL_MEDIUM)
+-- ads_model_weekly            → model ID do relatorio semanal automatico (default: 'claude-sonnet-4-5')
+-- ads_ai_weekly_enabled       → 'true' | 'false' — ativa relatorio semanal automatico
+-- ads_anomaly_detection       → 'true' | 'false' — ativa cron de deteccao
+-- ads_anomaly_cpa_threshold   → multiplicador para alertar CPA (default: '3')
+-- ads_anomaly_roas_drop_pct   → % de queda de ROAS pra alertar (default: '40')
+-- ads_anomaly_frequency_max   → frequencia maxima antes de alertar (default: '3.5')
+-- ads_cache_ttl_today_minutes → TTL do cache para dados de hoje (default: '60')
+-- ads_cache_ttl_history_hours → TTL do cache para dados historicos (default: '24')
+-- ads_token_refresh_days_ahead → quantos dias antes do expires_at refrescar (default: '15')
+-- ads_meta_app_id             → INSTAGRAM_APP_ID (reutilizado, ja em .env)
+-- ads_meta_app_secret         → INSTAGRAM_APP_SECRET (reutilizado, ja em .env)
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- ============================================================
@@ -1249,3 +1562,518 @@ CREATE INDEX IF NOT EXISTS idx_settings_tenant_key
 -- rate_limit_log: queries de janela de tempo
 CREATE INDEX IF NOT EXISTS idx_rll_tenant_action_time
   ON rate_limit_log(tenant_id, action, created_at DESC);
+
+-- ============================================================
+-- SPRINT COMERCIAL — Captação + Kanban (Sprint 1)
+-- Espelhado em infra/migrations/20260425_comercial_sprint1.sql
+-- ============================================================
+
+-- ── 1. Listas geradas (TTL 5 dias) ──────────────────────────
+CREATE TABLE IF NOT EXISTS comercial_lead_lists (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    source      TEXT NOT NULL DEFAULT 'apify',  -- 'apify' | 'csv' | 'manual'
+    filters     JSONB DEFAULT '{}',
+    status      TEXT NOT NULL DEFAULT 'pending', -- pending|running|completed|failed
+    total_leads INTEGER NOT NULL DEFAULT 0,
+    apify_run_id   TEXT,
+    error_message  TEXT,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    created_by  TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_lead_lists_tenant  ON comercial_lead_lists(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_lead_lists_expires ON comercial_lead_lists(expires_at) WHERE status != 'failed';
+
+-- ── 2. Leads dentro das listas ──────────────────────────────
+CREATE TABLE IF NOT EXISTS comercial_leads (
+    id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id     TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    list_id       TEXT NOT NULL REFERENCES comercial_lead_lists(id) ON DELETE CASCADE,
+    company_name  TEXT NOT NULL,
+    phone         TEXT,
+    website       TEXT,
+    google_rating NUMERIC(3,2),
+    review_count  INTEGER DEFAULT 0,
+    address       TEXT,
+    city          TEXT,
+    state         TEXT,
+    niche         TEXT,
+    has_website     BOOLEAN DEFAULT false,
+    instagram_handle TEXT,
+    sigma_score   INTEGER,
+    raw_data      JSONB DEFAULT '{}',
+    imported_to_pipeline BOOLEAN NOT NULL DEFAULT false,
+    pipeline_lead_id  TEXT,  -- FK setada após import; sem REFERENCES pra evitar dependência circular
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_leads_list      ON comercial_leads(list_id);
+CREATE INDEX IF NOT EXISTS idx_leads_tenant    ON comercial_leads(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_leads_imported  ON comercial_leads(imported_to_pipeline);
+
+-- ── 3. Colunas customizáveis do Kanban ──────────────────────
+CREATE TABLE IF NOT EXISTS comercial_pipeline_columns (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    color       TEXT NOT NULL DEFAULT '#6366F1',
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    is_system   BOOLEAN NOT NULL DEFAULT false,
+    system_role TEXT,  -- 'start' | 'won' | 'lost' | NULL
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(tenant_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_pipe_cols_tenant ON comercial_pipeline_columns(tenant_id, sort_order);
+
+-- ── 4. Leads no pipeline (entidade autônoma do scraping) ─────
+CREATE TABLE IF NOT EXISTS comercial_pipeline_leads (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    lead_id         TEXT REFERENCES comercial_leads(id) ON DELETE SET NULL,
+    column_id       TEXT NOT NULL REFERENCES comercial_pipeline_columns(id) ON DELETE RESTRICT,
+    assigned_to     TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    company_name    TEXT NOT NULL,
+    contact_name    TEXT,
+    phone           TEXT,
+    email           TEXT,
+    website         TEXT,
+    instagram       TEXT,
+    niche           TEXT,
+    city            TEXT,
+    state           TEXT,
+    estimated_value NUMERIC(12,2),
+    notes           TEXT,
+    links           JSONB DEFAULT '[]',
+    google_rating   NUMERIC(3,2),
+    review_count    INTEGER,
+    sigma_score     INTEGER,
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    last_activity_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by      TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_pipe_leads_tenant   ON comercial_pipeline_leads(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_pipe_leads_column   ON comercial_pipeline_leads(column_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_pipe_leads_assigned ON comercial_pipeline_leads(assigned_to);
+
+-- ============================================================
+-- SPRINT COMERCIAL 2 — Análise IA + Propostas + Tracking público
+-- Espelhado em infra/migrations/20260426_comercial_sprint2.sql
+-- ============================================================
+
+-- ── 0. Colunas de cache em comercial_pipeline_leads ──────────
+ALTER TABLE comercial_pipeline_leads
+  ADD COLUMN IF NOT EXISTS ai_analysis     TEXT;
+ALTER TABLE comercial_pipeline_leads
+  ADD COLUMN IF NOT EXISTS ai_analyzed_at  TIMESTAMPTZ;
+ALTER TABLE comercial_pipeline_leads
+  ADD COLUMN IF NOT EXISTS ai_sigma_score  INTEGER;
+
+-- ── 1. Histórico de análises IA ─────────────────────────────
+CREATE TABLE IF NOT EXISTS comercial_lead_analyses (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    pipeline_lead_id TEXT NOT NULL REFERENCES comercial_pipeline_leads(id) ON DELETE CASCADE,
+    analysis_text   TEXT NOT NULL,
+    sigma_score     INTEGER,
+    citations       JSONB DEFAULT '[]',
+    sources_used    JSONB DEFAULT '{}',
+    model_used      TEXT,
+    tokens_input    INTEGER,
+    tokens_output   INTEGER,
+    duration_ms     INTEGER,
+    created_by      TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_lead_analyses_lead   ON comercial_lead_analyses(pipeline_lead_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_lead_analyses_tenant ON comercial_lead_analyses(tenant_id);
+
+-- ── 2. Prospects ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS comercial_prospects (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    company_name    TEXT NOT NULL,
+    contact_name    TEXT,
+    phone           TEXT,
+    email           TEXT,
+    website         TEXT,
+    instagram       TEXT,
+    niche           TEXT,
+    city            TEXT,
+    state           TEXT,
+    source          TEXT NOT NULL DEFAULT 'manual',
+    pipeline_lead_id TEXT REFERENCES comercial_pipeline_leads(id) ON DELETE SET NULL,
+    created_by      TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_prospects_tenant   ON comercial_prospects(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_prospects_pipeline ON comercial_prospects(pipeline_lead_id);
+
+-- ── 3. Propostas ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS comercial_proposals (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    prospect_id     TEXT NOT NULL REFERENCES comercial_prospects(id) ON DELETE CASCADE,
+    slug            TEXT NOT NULL UNIQUE,
+    data            JSONB NOT NULL DEFAULT '{}',
+    status          TEXT NOT NULL DEFAULT 'draft',
+    expires_at      TIMESTAMPTZ,
+    published_at    TIMESTAMPTZ,
+    view_count      INTEGER NOT NULL DEFAULT 0,
+    unique_view_count INTEGER NOT NULL DEFAULT 0,
+    last_viewed_at  TIMESTAMPTZ,
+    total_time_seconds INTEGER NOT NULL DEFAULT 0,
+    max_scroll_pct  INTEGER NOT NULL DEFAULT 0,
+    created_by      TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_proposals_slug    ON comercial_proposals(slug);
+CREATE INDEX IF NOT EXISTS idx_proposals_tenant         ON comercial_proposals(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_proposals_prospect       ON comercial_proposals(prospect_id);
+CREATE INDEX IF NOT EXISTS idx_proposals_status_expires ON comercial_proposals(status, expires_at);
+
+-- ── 4. Tracking de visualizações públicas ───────────────────
+CREATE TABLE IF NOT EXISTS comercial_proposal_views (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    proposal_id     TEXT NOT NULL REFERENCES comercial_proposals(id) ON DELETE CASCADE,
+    visitor_hash    TEXT NOT NULL,
+    user_agent      TEXT,
+    referer         TEXT,
+    started_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_ping_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ended_at        TIMESTAMPTZ,
+    time_seconds    INTEGER NOT NULL DEFAULT 0,
+    max_scroll_pct  INTEGER NOT NULL DEFAULT 0,
+    is_unique       BOOLEAN NOT NULL DEFAULT true
+);
+CREATE INDEX IF NOT EXISTS idx_proposal_views_proposal ON comercial_proposal_views(proposal_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_proposal_views_visitor  ON comercial_proposal_views(proposal_id, visitor_hash);
+
+-- ============================================================
+-- SPRINT COMERCIAL 3 — Dashboard + WhatsApp + Extras
+-- Espelhado em infra/migrations/20260427_comercial_sprint3.sql
+-- ============================================================
+
+-- ── 1. Timeline de atividades ───────────────────────────────
+CREATE TABLE IF NOT EXISTS comercial_lead_activities (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    pipeline_lead_id TEXT NOT NULL REFERENCES comercial_pipeline_leads(id) ON DELETE CASCADE,
+    type            TEXT NOT NULL,
+    content         TEXT,
+    metadata        JSONB DEFAULT '{}',
+    created_by      TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_lead_activities_lead    ON comercial_lead_activities(pipeline_lead_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_lead_activities_tenant  ON comercial_lead_activities(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_lead_activities_type    ON comercial_lead_activities(type);
+
+-- ── 2. Templates de mensagem ────────────────────────────────
+CREATE TABLE IF NOT EXISTS comercial_message_templates (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    category    TEXT NOT NULL DEFAULT 'custom',
+    channel     TEXT NOT NULL DEFAULT 'whatsapp',
+    content     TEXT NOT NULL,
+    variables   JSONB DEFAULT '[]',
+    is_default  BOOLEAN NOT NULL DEFAULT false,
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    active      BOOLEAN NOT NULL DEFAULT true,
+    created_by  TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(tenant_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_msg_templates_tenant ON comercial_message_templates(tenant_id, category, sort_order);
+
+-- ── 3. Colunas won/lost em pipeline_leads ───────────────────
+ALTER TABLE comercial_pipeline_leads ADD COLUMN IF NOT EXISTS won_at      TIMESTAMPTZ;
+ALTER TABLE comercial_pipeline_leads ADD COLUMN IF NOT EXISTS lost_at     TIMESTAMPTZ;
+ALTER TABLE comercial_pipeline_leads ADD COLUMN IF NOT EXISTS lost_reason TEXT;
+ALTER TABLE comercial_pipeline_leads ADD COLUMN IF NOT EXISTS client_id   TEXT REFERENCES marketing_clients(id) ON DELETE SET NULL;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- SPRINT GERADOR DE IMAGEM
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 6 tabelas: client_brandbooks, image_folders, image_jobs, image_templates,
+--           image_settings, image_audit_log
+-- Função: cleanup_image_jobs()
+-- Multi-tenant: todas as tabelas filtram por tenant_id
+-- ───────────────────────────────────────────────────────────────────────────
+-- Mapeamento de tipos vs. spec original (consistência com schema atual):
+--   · IDs em TEXT (gen_random_uuid()::text) — convenção do codebase
+--   · "user_id"   → REFERENCES tenants(id)           (não existe tabela users)
+--   · "client_id" → REFERENCES marketing_clients(id) (não existe tabela clients)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+
+-- ─── CLIENT_BRANDBOOKS ─────────────────────────────────────────────────────
+-- Brandbook estruturado por cliente (paleta, tipografia, tom, regras).
+-- Origem: gerado por IA, extraído de PDF/HTML, ou criado manualmente.
+-- Apenas 1 brandbook ativo por cliente (garantido por partial unique index).
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS client_brandbooks (
+    id                TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id         TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    client_id         TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    source            TEXT NOT NULL CHECK (source IN ('ai_generated','pdf_upload','html_upload','manual')),
+    file_url          TEXT,
+    file_name         TEXT,
+    file_size         INTEGER,
+    mime_type         TEXT,
+    extracted_text    TEXT,
+    structured_data   JSONB NOT NULL DEFAULT '{}',
+    is_active         BOOLEAN NOT NULL DEFAULT true,
+    created_by        TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE client_brandbooks IS 'Brandbook estruturado por cliente (paleta, tipografia, tom). Apenas 1 ativo por cliente.';
+
+CREATE INDEX IF NOT EXISTS idx_brandbooks_client_active
+    ON client_brandbooks(client_id) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_brandbooks_tenant
+    ON client_brandbooks(tenant_id);
+
+
+-- ─── IMAGE_FOLDERS ─────────────────────────────────────────────────────────
+-- Pastas planas (sem hierarquia) para organizar imagens dentro de cada cliente.
+-- Estilo CopyCreator: o cliente é o escopo, a pasta agrupa gerações.
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS image_folders (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    client_id   TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
+    color       TEXT,
+    created_by  TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (client_id, name)
+);
+COMMENT ON TABLE image_folders IS 'Pastas planas para organizar gerações de imagem dentro de cada cliente.';
+
+CREATE INDEX IF NOT EXISTS idx_folders_client
+    ON image_folders(client_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_folders_tenant
+    ON image_folders(tenant_id);
+
+
+-- ─── IMAGE_TEMPLATES ───────────────────────────────────────────────────────
+-- Templates reutilizáveis criados a partir de uma geração existente.
+-- Limite (20 por cliente) é validado na camada de aplicação, não no SQL.
+-- A FK source_job_id → image_jobs(id) é adicionada via ALTER abaixo, pois
+-- image_jobs é criada depois (referência circular: jobs.template_id ↔
+-- templates.source_job_id).
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS image_templates (
+    id                  TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id           TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    client_id           TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    source_job_id       TEXT, -- FK definida via ALTER após criação de image_jobs
+    name                TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 100),
+    description         TEXT,
+    format              TEXT NOT NULL,
+    aspect_ratio        TEXT NOT NULL,
+    model               TEXT NOT NULL,
+    raw_description     TEXT NOT NULL,
+    optimized_prompt    TEXT,
+    observations        TEXT,
+    negative_prompt     TEXT,
+    preview_image_url   TEXT,
+    usage_count         INTEGER NOT NULL DEFAULT 0,
+    last_used_at        TIMESTAMPTZ,
+    created_by          TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (client_id, name)
+);
+COMMENT ON TABLE image_templates IS 'Templates reutilizáveis para geração de imagem (clones de jobs existentes).';
+
+CREATE INDEX IF NOT EXISTS idx_templates_client_recent
+    ON image_templates(client_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_templates_tenant
+    ON image_templates(tenant_id);
+
+
+-- ─── IMAGE_JOBS ────────────────────────────────────────────────────────────
+-- Fila e histórico de gerações. Cada chamada vira 1 registro.
+-- Lifecycle: queued → running → done | error | cancelled.
+-- O worker em background consome registros com status='queued' (idx_jobs_queue).
+-- Soft delete via deleted_at (todos os índices "quentes" filtram IS NULL).
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS image_jobs (
+    id                      TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id               TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    client_id               TEXT REFERENCES marketing_clients(id) ON DELETE SET NULL,
+    folder_id               TEXT REFERENCES image_folders(id) ON DELETE SET NULL,
+    user_id                 TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    status                  TEXT NOT NULL DEFAULT 'queued'
+                              CHECK (status IN ('queued','running','done','error','cancelled')),
+    format                  TEXT NOT NULL,
+    aspect_ratio            TEXT NOT NULL,
+    width                   INTEGER,
+    height                  INTEGER,
+    model                   TEXT NOT NULL,
+    provider                TEXT NOT NULL,
+    brandbook_id            TEXT REFERENCES client_brandbooks(id) ON DELETE SET NULL,
+    brandbook_used          BOOLEAN NOT NULL DEFAULT false,
+    template_id             TEXT REFERENCES image_templates(id) ON DELETE SET NULL,
+    raw_description         TEXT NOT NULL,
+    optimized_prompt        TEXT,
+    prompt_hash             TEXT,
+    observations            TEXT,
+    negative_prompt         TEXT,
+    reference_image_urls    JSONB NOT NULL DEFAULT '[]',
+    result_image_url        TEXT,
+    result_thumbnail_url    TEXT,
+    result_metadata         JSONB DEFAULT '{}',
+    error_message           TEXT,
+    error_code              TEXT,
+    duration_ms             INTEGER,
+    tokens_input            INTEGER DEFAULT 0,
+    tokens_output           INTEGER DEFAULT 0,
+    cost_usd                NUMERIC(10,6) DEFAULT 0,
+    is_template_saved       BOOLEAN NOT NULL DEFAULT false,
+    is_starred              BOOLEAN NOT NULL DEFAULT false,
+    deleted_at              TIMESTAMPTZ,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at              TIMESTAMPTZ,
+    completed_at            TIMESTAMPTZ
+);
+COMMENT ON TABLE image_jobs IS 'Fila e histórico de gerações de imagem. Status queued/running/done/error/cancelled.';
+
+-- FK circular pendente: image_templates.source_job_id → image_jobs(id)
+DO $$ BEGIN
+    ALTER TABLE image_templates
+        ADD CONSTRAINT fk_image_templates_source_job
+        FOREIGN KEY (source_job_id) REFERENCES image_jobs(id) ON DELETE SET NULL;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Índices "quentes" (soft delete sempre filtrado)
+CREATE INDEX IF NOT EXISTS idx_jobs_tenant_user_recent
+    ON image_jobs(tenant_id, user_id, created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_jobs_folder_recent
+    ON image_jobs(folder_id, created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_jobs_client_recent
+    ON image_jobs(client_id, created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_jobs_tenant_recent
+    ON image_jobs(tenant_id, created_at DESC) WHERE deleted_at IS NULL;
+
+-- Worker: pega o próximo job FIFO da fila
+CREATE INDEX IF NOT EXISTS idx_jobs_queue
+    ON image_jobs(status, created_at) WHERE status IN ('queued','running');
+
+-- Reuso de prompt otimizado pelo Prompt Engineer (cache por hash)
+CREATE INDEX IF NOT EXISTS idx_jobs_prompt_hash_recent
+    ON image_jobs(prompt_hash, created_at DESC)
+    WHERE optimized_prompt IS NOT NULL AND deleted_at IS NULL;
+
+-- Cleanup cron: alvos finalizados ou já em soft delete
+CREATE INDEX IF NOT EXISTS idx_jobs_cleanup
+    ON image_jobs(created_at)
+    WHERE deleted_at IS NOT NULL OR status IN ('done','error');
+
+
+-- ─── IMAGE_SETTINGS ────────────────────────────────────────────────────────
+-- Configuração singleton por tenant: modelos default, credenciais
+-- criptografadas (AES-256-GCM), limites de uso e cleanup.
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS image_settings (
+    tenant_id                       TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+    default_model                   TEXT NOT NULL DEFAULT 'imagen-4',
+    prompt_engineer_model           TEXT NOT NULL DEFAULT 'gpt-4o-mini',
+    brandbook_extractor_model       TEXT NOT NULL DEFAULT 'gpt-4o-mini',
+    vertex_credentials_encrypted    TEXT,
+    vertex_project_id               TEXT,
+    vertex_location                 TEXT DEFAULT 'us-central1',
+    openai_api_key_encrypted        TEXT,
+    fal_api_key_encrypted           TEXT,
+    gemini_api_key_encrypted        TEXT,
+    enabled_models                  JSONB NOT NULL DEFAULT '["imagen-4","gpt-image-1","flux-1.1-pro","nano-banana"]',
+    daily_limit_admin               INTEGER NOT NULL DEFAULT 50,
+    daily_limit_user                INTEGER NOT NULL DEFAULT 30,
+    hourly_limit_admin              INTEGER NOT NULL DEFAULT 30,
+    hourly_limit_user               INTEGER NOT NULL DEFAULT 10,
+    concurrent_limit_per_tenant     INTEGER NOT NULL DEFAULT 5,
+    max_template_per_client         INTEGER NOT NULL DEFAULT 20,
+    brandbook_required              BOOLEAN NOT NULL DEFAULT false,
+    auto_cleanup_days               INTEGER NOT NULL DEFAULT 7,
+    prompt_reuse_window_hours       INTEGER NOT NULL DEFAULT 24,
+    created_at                      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at                      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE image_settings IS 'Configuração singleton por tenant do gerador de imagem (modelos, credenciais, limites).';
+
+
+-- ─── IMAGE_AUDIT_LOG ───────────────────────────────────────────────────────
+-- Registro append-only de ações sensíveis: troca de chaves, alteração de
+-- limites, conteúdo bloqueado, prompt suspeito, hit de rate limit, etc.
+-- Não armazena dados sensíveis em "details" — apenas contexto da ação.
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS image_audit_log (
+    id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id      TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    action       TEXT NOT NULL,
+    details      JSONB DEFAULT '{}',
+    ip_address   TEXT,
+    user_agent   TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE image_audit_log IS 'Auditoria append-only de ações sensíveis no módulo de geração de imagem.';
+
+CREATE INDEX IF NOT EXISTS idx_audit_tenant_recent
+    ON image_audit_log(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_action
+    ON image_audit_log(action, created_at DESC);
+
+
+-- ─── FUNÇÃO: cleanup_image_jobs() ──────────────────────────────────────────
+-- Não é chamada por trigger automático (Neon serverless não roda jobs
+-- internos). Será invocada por cron externo (server/imageWorker.js).
+--   · Remove jobs finalizados com mais de 7 dias
+--   · Remove auditoria com mais de 90 dias
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION cleanup_image_jobs()
+RETURNS void AS $$
+BEGIN
+    DELETE FROM image_jobs
+     WHERE created_at < now() - interval '7 days'
+       AND status IN ('done','error','cancelled');
+
+    DELETE FROM image_audit_log
+     WHERE created_at < now() - interval '90 days';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ─── TRIGGERS updated_at ───────────────────────────────────────────────────
+-- image_jobs e image_audit_log NÃO entram: o primeiro tem lifecycle próprio
+-- (started_at/completed_at), o segundo é append-only.
+-- ───────────────────────────────────────────────────────────────────────────
+DO $$
+DECLARE
+    t TEXT;
+BEGIN
+    FOR t IN SELECT unnest(ARRAY[
+        'client_brandbooks','image_folders','image_templates','image_settings'
+    ])
+    LOOP
+        EXECUTE format('
+            DROP TRIGGER IF EXISTS trg_%s_updated_at ON %s;
+            CREATE TRIGGER trg_%s_updated_at
+            BEFORE UPDATE ON %s
+            FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+        ', t, t, t, t);
+    END LOOP;
+END $$;

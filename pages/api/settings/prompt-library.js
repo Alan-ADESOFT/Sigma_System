@@ -21,6 +21,22 @@ const { DEFAULT_GENERATE_SYSTEM, DEFAULT_MODIFY_SYSTEM } = require('../../../mod
 const { STRUCTURE_SYSTEM } = require('../../../models/copy/structurePrompt');
 const { MARKDOWN_INSTRUCTIONS } = require('../../../models/ia/markdownHelper');
 const { DEFAULT_SYSTEM_PT, DEFAULT_SYSTEM_EN } = require('../../../models/jarvis/systemPrompt');
+const { DEFAULT_LEAD_ANALYSIS_SYSTEM }       = require('../../../models/comercial/prompts/leadAnalysis');
+const { DEFAULT_PROPOSAL_DIAGNOSTIC_SYSTEM } = require('../../../models/comercial/prompts/proposalDiagnostic');
+const { DEFAULT_PROPOSAL_OPPORTUNITY_SYSTEM }= require('../../../models/comercial/prompts/proposalOpportunity');
+const { DEFAULT_PROPOSAL_PILLARS_SYSTEM }    = require('../../../models/comercial/prompts/proposalPillars');
+const { DEFAULT_PROPOSAL_PROJECTION_SYSTEM } = require('../../../models/comercial/prompts/proposalProjection');
+const { DEFAULT_CALL_SCRIPT_SYSTEM }         = require('../../../models/comercial/prompts/callScript');
+const {
+  DEFAULT_DIAGNOSIS_PROMPT: ADS_DEFAULT_DIAGNOSIS,
+  DEFAULT_WEEKLY_REPORT_PROMPT: ADS_DEFAULT_WEEKLY,
+  DEFAULT_ANOMALY_EXPLANATION_PROMPT: ADS_DEFAULT_ANOMALY,
+} = require('../../../models/ads/adsPrompts');
+
+// ── Gerador de Imagem ────────────────────────────────────────
+const { PROMPT_ENGINEER_SYSTEM }       = require('../../../models/agentes/imagecreator/prompts/promptEngineer');
+const { BRANDBOOK_EXTRACT_SYSTEM }     = require('../../../models/agentes/imagecreator/prompts/brandbookExtract');
+const { BRANDBOOK_FROM_TEXT_SYSTEM }   = require('../../../models/agentes/imagecreator/prompts/brandbookFromText');
 
 // ── Mapeamento completo ──────────────────────────────────────
 
@@ -52,12 +68,36 @@ const JARVIS_PROMPTS = [
   { id: 'jarvis_system_en', title: 'J.A.R.V.I.S — System Prompt (EN)',    description: 'Prompt de sistema do assistente de voz em ingles. Placeholders: {TENANT_NAME}, {USER_NAME}, {CURRENT_DATE}',    defaultPrompt: DEFAULT_SYSTEM_EN },
 ];
 
+const COMERCIAL_PROMPTS = [
+  { id: 'comercial_lead_analysis',        title: 'Comercial — Análise de Lead',          description: 'Análise IA de leads do pipeline comercial (positivos, negativos, ataque, abordagem, score). Placeholders: {LEAD_CONTEXT}, {COLLECTED_DATA}', defaultPrompt: DEFAULT_LEAD_ANALYSIS_SYSTEM },
+  { id: 'comercial_proposal_diagnostic',  title: 'Comercial — Diagnóstico da Proposta',  description: 'Gera os 3 parágrafos do diagnóstico da proposta personalizada. Placeholders: {LEAD_CONTEXT}, {LEAD_ANALYSIS}',                                       defaultPrompt: DEFAULT_PROPOSAL_DIAGNOSTIC_SYSTEM },
+  { id: 'comercial_proposal_opportunity', title: 'Comercial — Oportunidade da Proposta', description: 'Gera a seção de oportunidade conectando gap → ação Sigma → resultado. Placeholders: {LEAD_CONTEXT}, {LEAD_ANALYSIS}, {DIAGNOSTIC_TEXT}',          defaultPrompt: DEFAULT_PROPOSAL_OPPORTUNITY_SYSTEM },
+  { id: 'comercial_proposal_pillars',     title: 'Comercial — Pilares da Proposta',      description: 'Gera os 3 pilares (Estratégia, Conteúdo, Tráfego) personalizados em JSON. Placeholders: {LEAD_CONTEXT}, {LEAD_ANALYSIS}',                            defaultPrompt: DEFAULT_PROPOSAL_PILLARS_SYSTEM },
+  { id: 'comercial_proposal_projection',  title: 'Comercial — Projeção da Proposta',     description: 'Gera os 4 cards de stats da seção de projeção em JSON. Placeholder: {LEAD_CONTEXT}',                                                                defaultPrompt: DEFAULT_PROPOSAL_PROJECTION_SYSTEM },
+  { id: 'comercial_call_script',          title: 'Comercial — Script de Cold Call',      description: 'Gera roteiro de ligação fria (abertura + âncora + bridge + CTA + objeções). Variantes: consultive/direct/curious. Placeholders: {LEAD_CONTEXT}, {LEAD_ANALYSIS}, {VARIANT}', defaultPrompt: DEFAULT_CALL_SCRIPT_SYSTEM },
+];
+
+const ADS_PROMPTS = [
+  { id: 'ads_insights_diagnosis',   title: 'Ads — Diagnóstico (Framework)',     description: 'Aplica o fluxograma de decisão de tráfego pago sobre dados reais e gera diagnóstico + recomendações. Recebe KPIs, comparação e timeline diário.', defaultPrompt: ADS_DEFAULT_DIAGNOSIS },
+  { id: 'ads_weekly_report',        title: 'Ads — Relatório Semanal',           description: 'Relatório executivo automático gerado toda segunda-feira com KPIs da semana, top/bottom 3 e recomendações.',                                       defaultPrompt: ADS_DEFAULT_WEEKLY },
+  { id: 'ads_anomaly_explanation',  title: 'Ads — Explicação de Anomalia',      description: 'Explica em até 3 frases uma anomalia detectada automaticamente (CPA spike, ROAS drop, etc.) e a ação imediata recomendada.',                       defaultPrompt: ADS_DEFAULT_ANOMALY },
+];
+
+const IMAGE_PROMPTS = [
+  { id: 'image_prompt_engineer',     title: 'Imagem — Otimizador de Prompt',         description: 'Transforma a descrição bruta em um prompt visual profissional, adaptando o estilo ao modelo de destino (Imagen/GPT/Flux/Nano Banana). Injeta brandbook como contexto.', defaultPrompt: PROMPT_ENGINEER_SYSTEM },
+  { id: 'image_brandbook_extract',   title: 'Imagem — Extrator de Brandbook',         description: 'Estrutura texto bruto de PDF/HTML em JSON do brandbook (paleta, tipografia, tom, do/dont, refs).',                                                                       defaultPrompt: BRANDBOOK_EXTRACT_SYSTEM },
+  { id: 'image_brandbook_generate',  title: 'Imagem — Gerador de Brandbook por IA',   description: 'Cria brandbook estruturado a partir de descrição em texto livre da marca (com inferências coerentes).',                                                                  defaultPrompt: BRANDBOOK_FROM_TEXT_SYSTEM },
+];
+
 const CATEGORIES = [
-  { id: 'pipeline',    label: 'Pipeline de Agentes',    description: 'Prompts dos 7 agentes do pipeline estrategico',            icon: 'cpu' },
-  { id: 'copy',        label: 'Gerador de Copy',        description: 'Prompts do gerador de copies e legendas',                 icon: 'edit' },
-  { id: 'structures',  label: 'Gerador de Estruturas',  description: 'Prompt para criar templates de copy reutilizaveis',        icon: 'layout' },
-  { id: 'jarvis',      label: 'J.A.R.V.I.S',           description: 'Prompts de sistema do assistente de voz',                  icon: 'bot' },
-  { id: 'utils',       label: 'Utilitarios de IA',      description: 'Prompts auxiliares injetados automaticamente pelo sistema', icon: 'terminal' },
+  { id: 'pipeline',         label: 'Pipeline de Agentes',     description: 'Prompts dos 7 agentes do pipeline estrategico',            icon: 'cpu' },
+  { id: 'copy',             label: 'Gerador de Copy',         description: 'Prompts do gerador de copies e legendas',                 icon: 'edit' },
+  { id: 'structures',       label: 'Gerador de Estruturas',   description: 'Prompt para criar templates de copy reutilizaveis',        icon: 'layout' },
+  { id: 'jarvis',           label: 'J.A.R.V.I.S',            description: 'Prompts de sistema do assistente de voz',                  icon: 'bot' },
+  { id: 'utils',            label: 'Utilitarios de IA',       description: 'Prompts auxiliares injetados automaticamente pelo sistema', icon: 'terminal' },
+  { id: 'comercial',        label: 'Módulo Comercial',         description: 'Prompts da análise de leads e geração de propostas',       icon: 'briefcase' },
+  { id: 'ads',              label: 'Ads (Meta)',               description: 'Prompts de diagnóstico, relatório semanal e anomalias do módulo Ads', icon: 'megaphone' },
+  { id: 'image',            label: 'Gerador de Imagem',        description: 'Prompts do otimizador de prompt e do extrator/gerador de brandbook',  icon: 'image' },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -144,7 +184,7 @@ export default async function handler(req, res) {
             },
           });
         } else {
-          const allPrompts = [...COPY_PROMPTS, ...STRUCTURE_PROMPTS, ...JARVIS_PROMPTS, ...UTIL_PROMPTS];
+          const allPrompts = [...COPY_PROMPTS, ...STRUCTURE_PROMPTS, ...JARVIS_PROMPTS, ...UTIL_PROMPTS, ...COMERCIAL_PROMPTS, ...ADS_PROMPTS, ...IMAGE_PROMPTS];
           const p = allPrompts.find(x => x.id === id);
           if (!p) return res.status(404).json({ success: false, error: 'Prompt nao encontrado' });
           const override = await getSetting(tenantId, `prompt_library_${id}`);
@@ -165,7 +205,10 @@ export default async function handler(req, res) {
 
       // Lista completa
       const pipelineOverrides = await getPipelineOverrides(tenantId);
-      const genericIds = [...COPY_PROMPTS, ...STRUCTURE_PROMPTS, ...JARVIS_PROMPTS, ...UTIL_PROMPTS].map(p => p.id);
+      const genericIds = [
+        ...COPY_PROMPTS, ...STRUCTURE_PROMPTS, ...JARVIS_PROMPTS, ...UTIL_PROMPTS,
+        ...COMERCIAL_PROMPTS, ...ADS_PROMPTS, ...IMAGE_PROMPTS,
+      ].map(p => p.id);
       const settingsOverrides = await getSettingsOverrides(tenantId, genericIds);
 
       const categories = [
@@ -174,6 +217,9 @@ export default async function handler(req, res) {
         { ...CATEGORIES[2], prompts: buildGenericPrompts(STRUCTURE_PROMPTS, settingsOverrides) },
         { ...CATEGORIES[3], prompts: buildGenericPrompts(JARVIS_PROMPTS, settingsOverrides) },
         { ...CATEGORIES[4], prompts: buildGenericPrompts(UTIL_PROMPTS, settingsOverrides) },
+        { ...CATEGORIES[5], prompts: buildGenericPrompts(COMERCIAL_PROMPTS, settingsOverrides) },
+        { ...CATEGORIES[6], prompts: buildGenericPrompts(ADS_PROMPTS, settingsOverrides) },
+        { ...CATEGORIES[7], prompts: buildGenericPrompts(IMAGE_PROMPTS, settingsOverrides) },
       ];
 
       return res.json({ success: true, categories });

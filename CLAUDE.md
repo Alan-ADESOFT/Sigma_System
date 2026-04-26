@@ -11,10 +11,10 @@ The README at `README.md` documents the high-level feature set, env vars, and pi
 ## Commands
 
 ```bash
-npm run dev      # Next dev server on port 3001 (NOT 3000 — README is outdated)
+npm run dev      # Next dev server on port 3002
 npm run build    # Production build
-npm start        # Production server on port 3001
-npm run db:setup # POSTs http://localhost:3001/api/setup to bootstrap the DB
+npm start        # Production server on port 3002
+npm run db:setup # POSTs http://localhost:3002/api/setup to bootstrap the DB
 ```
 
 There are no tests, no lint script, and no typecheck — `eslint-config-next` is installed but not wired to a script.
@@ -150,9 +150,27 @@ DB-backed via `rate_limit_log` (no Redis). `infra/rateLimit.checkRateLimit(tenan
 
 ## Things to know before editing
 
-- **The README says port 3000; the package scripts use 3001.** `NEXT_PUBLIC_APP_URL`/`NEXT_PUBLIC_BASE_URL` in `.env.example` also say `3000`. When testing locally, use 3001 unless you change the script.
+- **Port: 3002** (legacy READMEs may say 3000 or 3001). `NEXT_PUBLIC_APP_URL`/`NEXT_PUBLIC_BASE_URL` and `PORT` in `.env`/`.env.example` all align to 3002. When testing locally, use http://localhost:3002.
 - The dashboard has a *lot* of pages and `pages/dashboard/clients/[id].js` alone is ~2700 lines. Read targeted sections rather than the whole file.
 - File uploads land in `public/uploads/` (gitignored). The `logos/` and `attachments/` subfolders need to exist before uploads work.
 - The `instrumentation.js` scheduler runs only when `NEXT_RUNTIME === 'nodejs'` and starts on dev server boot — be aware that long dev sessions will hit the Meta API on schedule for any due posts.
 - When adding a new agent prompt, place the file in `models/agentes/copycreator/prompts/`, register it in that directory's `index.js`, and add the entry to `pipelineConfig.PIPELINE_CONFIG` with correct `order`, `savesToKB`, `dependsOn`, and `outputPlaceholder`.
 - When calling the AI from a new feature, always pass `opts.tenantId` (and `clientId`/`operationType` when relevant) to `runCompletion` so token usage gets logged to `ai_token_usage`.
+
+### Gerador de Imagem
+
+- **Tabelas**: `client_brandbooks`, `image_folders`, `image_jobs`, `image_templates`, `image_settings`, `image_audit_log` (todas em `infra/schema.sql`, idempotente)
+- **Worker**: `server/imageWorker.js` roda dentro do `server/instrumentation.js` (mesmo padrão do Instagram publisher). Polling adaptativo 2s → 5s (5 ciclos) → 10s (20 ciclos); MAX_CONCURRENT=3. Smoke-test do encryption no boot — falha = não inicia worker.
+- **Encryption**: `infra/encryption.js` (AES-256-GCM com auth tag, IV aleatório, derivação scrypt em fallback). NUNCA cachear chaves em texto puro fora do processo.
+- **Cache**: `infra/cache.js` (Map+TTL, ancorado em globalThis pra sobreviver HMR). Helpers `cache.ImageKeys.*`. Invalidar SEMPRE no mutador.
+- **Rate limit**: `infra/imageRateLimit.js` (3 camadas: concurrent → hourly → daily) + IP rate limit em `/api/image/generate` (100/min via `rate_limit_log`).
+- **Prompt cache**: `models/agentes/imagecreator/promptEngineer.js` calcula MD5 antes de chamar LLM e busca em `image_jobs.optimized_prompt` (partial index `idx_jobs_prompt_hash_recent`). Cache hit = 0 tokens.
+- **Providers**: `infra/api/imageProviders/{vertex,openai,fal,gemini}.js`. Interface uniforme `generate(params)` retornando `{imageBuffer, mimeType, metadata}`. Erros padronizados via `Error.code` (CONTENT_BLOCKED, RATE_LIMITED, TIMEOUT, INVALID_INPUT, PROVIDER_ERROR).
+- **Friendly errors**: `models/agentes/imagecreator/errorMessages.js` mapeia code → mensagem pt-BR (usado em notificações e UI).
+- **Token tracking**: operations `image_prompt_engineer`, `image_brandbook_extract`, `image_brandbook_generate`, `image_generation` em `ai_token_usage`.
+- **Prompts editáveis** na biblioteca (`pages/api/settings/prompt-library.js`): `image_prompt_engineer`, `image_brandbook_extract`, `image_brandbook_generate` na categoria `image`.
+- **Cleanup**: cron interno do worker às 03:00 chama `cleanup_image_jobs()` (PL/pgSQL) + remove arquivos físicos de `public/uploads/generated/`. Endpoint manual `/api/setup/image-cleanup` protegido por `x-internal-token`.
+- **Health**: `GET /api/image/_health` (header `x-internal-token`) retorna snapshot do worker, fila ao vivo no banco, cache stats.
+- **Headers de segurança**: `next.config.js` aplica `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: SAMEORIGIN` em `/api/image/*` e `/dashboard/image/*`.
+- **Auth pattern**: `lib/api-auth.js` com `requireAuth(req)` + `isAdmin(user)` (usa `user.role === 'admin' || 'god'` — não há `is_admin` boolean).
+- **Atalhos UX**: Ctrl+Enter no campo de descrição = gerar; Esc no overlay = minimizar (continua em background); Ctrl+S no BrandbookEditor = salvar.

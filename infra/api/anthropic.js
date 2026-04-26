@@ -31,6 +31,9 @@ function getHeaders() {
 async function generateCompletion(model, systemPrompt, userMessage, maxTokens = 2000) {
   console.log('[INFO][Anthropic] Iniciando completion', { model, maxTokens, promptLength: systemPrompt.length });
 
+  // Anthropic exige user message não-vazio (erro 400 invalid_request_error)
+  const safeUserMessage = (userMessage && String(userMessage).trim()) ? userMessage : 'Continue.';
+
   const response = await fetch(`${ANTHROPIC_BASE}/messages`, {
     method: 'POST',
     headers: getHeaders(),
@@ -39,7 +42,7 @@ async function generateCompletion(model, systemPrompt, userMessage, maxTokens = 
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [
-        { role: 'user', content: userMessage },
+        { role: 'user', content: safeUserMessage },
       ],
     }),
   });

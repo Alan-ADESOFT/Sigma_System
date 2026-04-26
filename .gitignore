@@ -3,5 +3,7 @@ node_modules/
 .env
 .env.local
 public/uploads/
+storage/
 sessions/
 .DS_Store
+Sigma_proposta/

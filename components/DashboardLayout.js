@@ -89,47 +89,61 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    category: 'COMERCIAL',
+    items: [
+      { href: '/dashboard/comercial/dashboard', label: 'Dashboard Comercial', tag: '07', icon: 'barChart', minRole: 'admin' },
+      { href: '/dashboard/comercial/captacao',  label: 'Lista de Captação',  tag: '08', icon: 'search',   minRole: 'admin' },
+      { href: '/dashboard/comercial/pipeline',  label: 'Status da Captação',  tag: '09', icon: 'kanban',   minRole: 'admin' },
+      { href: '/dashboard/comercial/propostas', label: 'Gerador de Propostas', tag: '10', icon: 'fileText', minRole: 'admin' },
+    ],
+  },
+  {
     category: 'DADOS',
     items: [
-      { href: '/dashboard/clients',          label: 'Clientes',               tag: '07', icon: 'users',     minRole: 'user' },
-      { href: '/dashboard/database',         label: 'Base de Dados',          tag: '08', icon: 'database',  minRole: 'admin' },
-      { href: '/dashboard/indicacoes',       label: 'Indicações',             tag: '09', icon: 'share',     minRole: 'admin' },
+      { href: '/dashboard/clients',          label: 'Clientes',               tag: '11', icon: 'users',     minRole: 'user' },
+      { href: '/dashboard/database',         label: 'Base de Dados',          tag: '12', icon: 'database',  minRole: 'admin' },
+      { href: '/dashboard/indicacoes',       label: 'Indicações',             tag: '13', icon: 'share',     minRole: 'admin' },
     ],
   },
   {
     category: 'AGENTES DE IA',
     items: [
-      { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '10', icon: 'zap',       minRole: 'admin' },
-      { href: '/dashboard/jarvis',           label: 'J.A.R.V.I.S',           tag: '11', icon: 'bot',       minRole: 'admin' },
-      { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '12', icon: 'edit',      minRole: 'admin' },
+      { href: '/dashboard/tokens',           label: 'Dashboard de Tokens',    tag: '14', icon: 'zap',       minRole: 'admin' },
+      { href: '/dashboard/jarvis',           label: 'J.A.R.V.I.S',           tag: '15', icon: 'bot',       minRole: 'admin' },
+      { href: '/dashboard/social',           label: 'Gerador de Copy',        tag: '16',  icon: 'edit',      minRole: 'admin' },
+      { href: '/dashboard/image',            label: 'Gerador de Imagem',      tag: '16b', icon: 'image',     minRole: 'admin' },
     ],
   },
-  // ── OCULTO TEMPORARIAMENTE (Social Media + Tráfego) ──
-  // {
-  //   category: 'SOCIAL MEDIA',
-  //   items: [
-  //     { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '13', icon: 'barChart',  minRole: 'admin' },
-  //     { href: '/dashboard/content-plan',     label: 'Planejamento',           tag: '14', icon: 'list',      minRole: 'admin' },
-  //     { href: '/dashboard/publish',          label: 'Publicar Agora',         tag: '15', icon: 'send',      minRole: 'admin' },
-  //   ],
-  // },
-  // {
-  //   category: 'TRÁFEGO',
-  //   items: [
-  //     { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '16', icon: 'megaphone', minRole: 'admin' },
-  //   ],
-  // },
+  {
+    category: 'SOCIAL MEDIA',
+    items: [
+      { href: '/dashboard/social-dashboard', label: 'Dashboarding Social',    tag: '17', icon: 'barChart',  minRole: 'admin' },
+      { href: '/dashboard/content-planning', label: 'Planejamento Editorial', tag: '18', icon: 'list',      minRole: 'admin' },
+      { href: '/dashboard/content-plan',     label: 'Calendário Editorial',   tag: '19', icon: 'calendar',  minRole: 'admin' },
+      { href: '/dashboard/publish',          label: 'Publicar Agora',         tag: '20', icon: 'send',      minRole: 'admin' },
+    ],
+  },
+  {
+    category: 'TRÁFEGO',
+    items: [
+      { href: '/dashboard/ads',              label: 'Campanhas Ads',          tag: '21',  icon: 'megaphone', minRole: 'admin' },
+      { href: '/dashboard/ads/relatorios',   label: 'Relatórios Públicos',    tag: '21b', icon: 'link',      minRole: 'admin' },
+    ],
+  },
   {
     category: 'SISTEMA',
     items: [
-      { href: '/dashboard/settings/users',           label: 'Gestão de Usuários',    tag: '17', icon: 'users',     minRole: 'god' },
-      { href: '/dashboard/onboarding-config',       label: 'Config. Onboarding',    tag: '18', icon: 'calendar',  minRole: 'god' },
-      { href: '/dashboard/settings/pipeline',        label: 'Config. Pipeline',      tag: '19', icon: 'cpu',       minRole: 'god' },
-      { href: '/dashboard/settings/copy',            label: 'Config. Copy',          tag: '20', icon: 'edit2',     minRole: 'god' },
-      { href: '/dashboard/settings/jarvis',          label: 'Config. Jarvis',        tag: '21', icon: 'bot',       minRole: 'god' },
-      { href: '/dashboard/settings/tasks',           label: 'Config. Tarefas',       tag: '22', icon: 'settings',  minRole: 'god' },
-      { href: '/dashboard/settings/financeiro',      label: 'Config. Financeiro',    tag: '23', icon: 'chart',     minRole: 'god' },
-      { href: '/dashboard/settings/prompt-library',  label: 'Biblioteca de Prompts', tag: '24', icon: 'book',      minRole: 'god' },
+      { href: '/dashboard/settings/users',           label: 'Gestão de Usuários',    tag: '22', icon: 'users',     minRole: 'god' },
+      { href: '/dashboard/onboarding-config',       label: 'Config. Onboarding',    tag: '23', icon: 'calendar',  minRole: 'god' },
+      { href: '/dashboard/settings/pipeline',        label: 'Config. Pipeline',      tag: '24', icon: 'cpu',       minRole: 'god' },
+      { href: '/dashboard/settings/copy',            label: 'Config. Copy',          tag: '25', icon: 'edit2',     minRole: 'god' },
+      { href: '/dashboard/settings/jarvis',          label: 'Config. Jarvis',        tag: '26',  icon: 'bot',       minRole: 'god' },
+      { href: '/dashboard/settings/image',           label: 'Config. Imagem',        tag: '26b', icon: 'image',     minRole: 'god' },
+      { href: '/dashboard/settings/tasks',           label: 'Config. Tarefas',       tag: '27', icon: 'settings',  minRole: 'god' },
+      { href: '/dashboard/settings/financeiro',      label: 'Config. Financeiro',    tag: '28', icon: 'chart',     minRole: 'god' },
+      { href: '/dashboard/settings/prompt-library',  label: 'Biblioteca de Prompts', tag: '29', icon: 'book',      minRole: 'god' },
+      { href: '/dashboard/settings/comercial',       label: 'Config. Comercial',     tag: '30', icon: 'briefcase', minRole: 'god' },
+      { href: '/dashboard/settings/ads',             label: 'Config. Ads',           tag: '31', icon: 'sliders',   minRole: 'god' },
 
     ],
   },
@@ -282,6 +296,68 @@ const ICONS = {
       <rect x="3" y="11" width="18" height="10" rx="2" />
       <circle cx="9" cy="16" r="1" /><circle cx="15" cy="16" r="1" />
       <path d="M12 2v4" /><path d="M8 7h8" />
+    </svg>
+  ),
+  /* Ícone lupa — Captação */
+  search: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  ),
+  /* Ícone kanban — três colunas verticais */
+  kanban: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3"  y="4" width="5" height="16" rx="1" />
+      <rect x="10" y="4" width="5" height="10" rx="1" />
+      <rect x="17" y="4" width="4" height="14" rx="1" />
+    </svg>
+  ),
+  /* Ícone fileText — Propostas */
+  fileText: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="8"  y1="13" x2="16" y2="13" />
+      <line x1="8"  y1="17" x2="16" y2="17" />
+      <line x1="8"  y1="9"  x2="10" y2="9" />
+    </svg>
+  ),
+  /* Ícone link — corrente de hyperlink */
+  link: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  ),
+  /* Ícone sliders — controles de configuração */
+  sliders: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="4" y1="21" x2="4" y2="14" />
+      <line x1="4" y1="10" x2="4" y2="3" />
+      <line x1="12" y1="21" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12" y2="3" />
+      <line x1="20" y1="21" x2="20" y2="16" />
+      <line x1="20" y1="12" x2="20" y2="3" />
+      <line x1="1" y1="14" x2="7" y2="14" />
+      <line x1="9" y1="8" x2="15" y2="8" />
+      <line x1="17" y1="16" x2="23" y2="16" />
+    </svg>
+  ),
+  /* Ícone briefcase — Config Comercial */
+  briefcase: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="7" width="20" height="14" rx="2" />
+      <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="2" y1="13" x2="22" y2="13" />
+    </svg>
+  ),
+  /* Ícone image — Gerador de Imagem (moldura com sol e montanha) */
+  image: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <polyline points="21 15 16 10 5 21" />
     </svg>
   ),
   /* Ícone do botão de colapso — chevron esquerdo */
@@ -665,6 +741,10 @@ function NotificationBell() {
     // Sistema
     if (type === 'system')                       return '●';
     if (type === 'task_assigned')                return '→';
+    // Content Planning
+    if (type === 'content_plan_finalized')       return '✓';
+    if (type === 'content_plan_opened')          return '◉';
+    if (type === 'content_plan_rejected')        return '✕';
     return '●';
   }
 
@@ -706,6 +786,10 @@ function NotificationBell() {
     if (type === 'jarvis_action')                return 'var(--info)';
     if (type === 'system')                       return 'var(--info)';
     if (type === 'task_assigned')                return 'var(--info)';
+    // Content Planning
+    if (type === 'content_plan_finalized')       return 'var(--success)';
+    if (type === 'content_plan_opened')          return 'var(--info)';
+    if (type === 'content_plan_rejected')        return 'var(--warning)';
     return 'var(--info)';
   }
 
@@ -1168,11 +1252,29 @@ export default function DashboardLayout({ children, activeTab }) {
 
               {/* Links individuais da seção */}
               {visibleItems.map(item => {
-                // Match exato OU prefixo seguido de "/" — evita que /dashboard/social
-                // case com /dashboard/social-dashboard
-                const isActive = item.href === '/dashboard'
-                  ? router.pathname === '/dashboard'
-                  : router.pathname === item.href || router.pathname.startsWith(item.href + '/');
+                // Estratégia "prefixo mais longo vence":
+                //   · Match exato sempre ativa o item.
+                //   · Match por prefixo só ativa se NÃO houver outro item no menu
+                //     cujo href seja um prefixo MAIS específico que também case.
+                //   Isso impede que "/dashboard/ads" e "/dashboard/ads/relatorios"
+                //   fiquem ambos marcados quando o usuário está no segundo.
+                let isActive;
+                if (item.href === '/dashboard') {
+                  isActive = router.pathname === '/dashboard';
+                } else if (router.pathname === item.href) {
+                  isActive = true;
+                } else if (router.pathname.startsWith(item.href + '/')) {
+                  const hasMoreSpecific = NAV_SECTIONS.some(s =>
+                    s.items.some(other =>
+                      other.href !== item.href &&
+                      other.href.length > item.href.length &&
+                      (router.pathname === other.href || router.pathname.startsWith(other.href + '/'))
+                    )
+                  );
+                  isActive = !hasMoreSpecific;
+                } else {
+                  isActive = false;
+                }
 
                 return (
                   <Link

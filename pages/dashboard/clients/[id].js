@@ -19,6 +19,11 @@ const StageModal = dynamic(() => import('../../../components/StageModal'), { loa
 const PipelineModal = dynamic(() => import('../../../components/PipelineModal'), { loading: () => null, ssr: false });
 const CreateTaskModal = dynamic(() => import('../../../components/CreateTaskModal'), { loading: () => null, ssr: false });
 const TaskDetailModal = dynamic(() => import('../../../components/TaskDetailModal'), { loading: () => null, ssr: false });
+const TabClientPlans = dynamic(() => import('../../../components/contentPlanning/TabClientPlans'), { loading: () => null, ssr: false });
+const BrandbookTab = dynamic(() => import('../../../components/image/BrandbookTab'), { loading: () => null, ssr: false });
+const AdsAccountConnector = dynamic(() => import('../../../components/ads/AdsAccountConnector'), { loading: () => null, ssr: false });
+import AdsHealthBadge from '../../../components/ads/AdsHealthBadge';
+import adsClientStyles from '../../../assets/style/adsClient.module.css';
 
 /* ═══════════════════════════════════════════════════════════
    CONSTANTS
@@ -28,11 +33,13 @@ const TABS = [
   { key: 'database',   label: 'Base de Dados', icon: 'M4 7h16M4 12h16M4 17h7' },
   { key: 'afazeres',   label: 'Afazeres',      icon: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11' },
   { key: 'anexos',     label: 'Anexos',        icon: 'M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48' },
+  { key: 'brandbook',  label: 'Brandbook',     icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' },
   { key: 'financeiro', label: 'Financeiro',    icon: 'M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' },
   { key: 'observacoes',label: 'Observações',   icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' },
   { key: 'respostas',  label: 'Respostas',     icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
-  // OCULTO TEMPORARIAMENTE
-  // { key: 'instagram',  label: 'Instagram',     icon: 'M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37zM7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm10 3.5a1 1 0 1 0 1 1 1 1 0 0 0-1-1z' },
+  { key: 'instagram',  label: 'Instagram',     icon: 'M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37zM7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm10 3.5a1 1 0 1 0 1 1 1 1 0 0 0-1-1z' },
+  { key: 'ads',        label: 'Ads',           icon: 'M22 2L11 13M22 2L15 22l-4-9-9-4 22-7z' },
+  { key: 'planejamentos', label: 'Planejamentos', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z' },
 ];
 
 const STAGES_META = [
@@ -3396,6 +3403,214 @@ function TabInstagram({ clientId }) {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   TAB ADS — conexão Meta Ads + resumo
+═══════════════════════════════════════════════════════════ */
+function TabAds({ clientId }) {
+  const { notify } = useNotification();
+  const router = useRouter();
+  const [account, setAccount] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [healthChecking, setHealthChecking] = useState(false);
+
+  const loadAccount = useCallback(async () => {
+    if (!clientId) return;
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/ads/accounts/by-client/${clientId}`);
+      const d = await r.json();
+      setAccount(d.success ? d.account : null);
+    } catch {
+      notify('Falha ao carregar conta de Ads', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [clientId, notify]);
+
+  const loadSummary = useCallback(async () => {
+    if (!clientId || !account) return;
+    setLoadingSummary(true);
+    try {
+      const r = await fetch('/api/ads/dashboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, datePreset: 'last_30d' }),
+      });
+      const d = await r.json();
+      if (d.success) setSummary(d);
+    } catch {
+      // silencioso — resumo é nice-to-have
+    } finally {
+      setLoadingSummary(false);
+    }
+  }, [clientId, account]);
+
+  useEffect(() => { loadAccount(); }, [loadAccount]);
+  useEffect(() => { if (account) loadSummary(); }, [account, loadSummary]);
+
+  // Sincroniza retorno do callback OAuth via query (?connected=true)
+  useEffect(() => {
+    if (!router.isReady) return;
+    if (router.query.tab === 'ads' && router.query.connected === 'true') {
+      notify('Conta de Ads conectada', 'success');
+      loadAccount();
+      const { connected: _c, error: _e, ...rest } = router.query;
+      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+    }
+  }, [router.isReady, router.query.connected]);
+
+  async function handleHealthCheck() {
+    setHealthChecking(true);
+    try {
+      const r = await fetch('/api/ads/accounts/health-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId }),
+      });
+      const d = await r.json();
+      if (!d.success) throw new Error(d.error);
+      setAccount(d.account);
+      notify('Status atualizado', 'success');
+    } catch (e) {
+      notify(e.message, 'error');
+    } finally {
+      setHealthChecking(false);
+    }
+  }
+
+  async function handleRemove() {
+    if (!account) return;
+    try {
+      const r = await fetch(`/api/ads/accounts/${account.id}`, { method: 'DELETE' });
+      const d = await r.json();
+      if (!d.success) throw new Error(d.error);
+      notify('Conta de Ads removida', 'success');
+      setAccount(null);
+      setConfirmRemove(false);
+    } catch (e) {
+      notify(e.message, 'error');
+    }
+  }
+
+  if (loading) {
+    return (
+      <div style={{ padding: '40px 0', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+        Carregando conta de Ads...
+      </div>
+    );
+  }
+
+  /* ─── ESTADO: NÃO CONECTADO ─── */
+  if (!account) {
+    return (
+      <div className="animate-fade-in-up">
+        <AdsAccountConnector clientId={clientId} onConnected={loadAccount} />
+      </div>
+    );
+  }
+
+  /* ─── ESTADO: CONECTADO ─── */
+  const sumKpi = summary?.kpiSummary;
+  const fmtBRL = (v) => v == null ? '—' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 2 }).format(v);
+  const fmtNum = (v) => v == null ? '—' : new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(v);
+
+  return (
+    <div className="animate-fade-in-up">
+      <div className={`glass-card ${adsClientStyles.statusCard}`}>
+        <div className={adsClientStyles.statusRow}>
+          <div className={adsClientStyles.metaIcon} aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 2L11 13" /><path d="M22 2L15 22l-4-9-9-4 22-7z" />
+            </svg>
+          </div>
+          <div className={adsClientStyles.statusInfo}>
+            <div className={adsClientStyles.statusName}>
+              {account.accountName || 'Conta de Ads'}
+            </div>
+            <div className={adsClientStyles.statusMeta}>
+              {account.adsAccountId} · {account.currency || 'BRL'}
+              {account.timezoneName ? ` · ${account.timezoneName}` : ''}
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <AdsHealthBadge status={account.healthStatus} expiresAt={account.tokenExpiresAt} />
+            </div>
+          </div>
+          <div className={adsClientStyles.statusActions}>
+            <Link href={`/dashboard/ads?clientId=${clientId}`} className="sigma-btn-primary">
+              Ver dashboard
+            </Link>
+            <button type="button" className="btn btn-secondary" disabled={healthChecking} onClick={handleHealthCheck}>
+              {healthChecking ? 'Verificando...' : 'Health check'}
+            </button>
+            {!confirmRemove ? (
+              <button type="button" className="btn btn-secondary" onClick={() => setConfirmRemove(true)}>
+                Remover
+              </button>
+            ) : (
+              <>
+                <button type="button" className="btn btn-secondary" onClick={() => setConfirmRemove(false)}>
+                  Cancelar
+                </button>
+                <button type="button" className="btn btn-danger" onClick={handleRemove}>
+                  Confirmar
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* MINI KPIs ÚLTIMOS 30 DIAS */}
+        <div>
+          <div className={adsClientStyles.sectionHeading}>Últimos 30 dias</div>
+          {loadingSummary && !sumKpi ? (
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)', padding: '12px 0' }}>
+              Carregando resumo…
+            </div>
+          ) : sumKpi ? (
+            <div className={adsClientStyles.miniKpiGrid}>
+              <div className={adsClientStyles.miniKpi}>
+                <div className={adsClientStyles.miniKpiLabel}>Investimento</div>
+                <div className={adsClientStyles.miniKpiValue}>{fmtBRL(sumKpi.totalSpend)}</div>
+              </div>
+              <div className={adsClientStyles.miniKpi}>
+                <div className={adsClientStyles.miniKpiLabel}>Cliques</div>
+                <div className={adsClientStyles.miniKpiValue}>{fmtNum(sumKpi.totalClicks)}</div>
+              </div>
+              <div className={adsClientStyles.miniKpi}>
+                <div className={adsClientStyles.miniKpiLabel}>ROAS</div>
+                <div className={adsClientStyles.miniKpiValue}>{(sumKpi.roas || 0).toFixed(2)}x</div>
+              </div>
+              <div className={adsClientStyles.miniKpi}>
+                <div className={adsClientStyles.miniKpiLabel}>Conversões</div>
+                <div className={adsClientStyles.miniKpiValue}>{fmtNum(sumKpi.totalConversions)}</div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-muted)', padding: '12px 0' }}>
+              Sem dados disponíveis
+            </div>
+          )}
+        </div>
+
+        <div className={adsClientStyles.linkRow}>
+          <span className={adsClientStyles.linkRowText}>
+            Dados em tempo real via Meta Marketing API · cache 1h
+          </span>
+          <Link href={`/dashboard/ads?clientId=${clientId}`} className={adsClientStyles.linkArrow}>
+            Ir para o dashboard completo
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+            </svg>
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
    PÁGINA PRINCIPAL
 ═══════════════════════════════════════════════════════════ */
 export default function ClientInfoPage() {
@@ -3556,11 +3771,13 @@ export default function ClientInfoPage() {
         )}
         {activeTab === 'afazeres'   && <TabTarefas clientId={client.id} />}
         {activeTab === 'anexos'     && <TabAnexos clientId={client.id} />}
+        {activeTab === 'brandbook'  && <BrandbookTab clientId={client.id} />}
         {activeTab === 'financeiro' && <TabFinanceiro clientId={client.id} clientServices={client.services || []} />}
         {activeTab === 'observacoes'&& <TabObservacoes clientId={client.id} />}
         {activeTab === 'respostas'  && <TabRespostas clientId={client.id} client={client} />}
-        {/* OCULTO TEMPORARIAMENTE */}
-        {/* {activeTab === 'instagram'  && <TabInstagram clientId={client.id} />} */}
+        {activeTab === 'instagram'  && <TabInstagram clientId={client.id} />}
+        {activeTab === 'ads'        && <TabAds clientId={client.id} />}
+        {activeTab === 'planejamentos' && <TabClientPlans clientId={client.id} />}
       </div>
 
       {/* Pipeline Modal */}

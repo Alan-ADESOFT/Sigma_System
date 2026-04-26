@@ -21,21 +21,29 @@
 async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
 
-  // OCULTO TEMPORARIAMENTE — Scheduler legado (contents → meta-publish)
-  // try {
-  //   const { startScheduler } = require('../models/scheduler.service');
-  //   startScheduler();
-  // } catch (err) {
-  //   console.error('[ERRO][instrumentation] scheduler.service:', err.message);
-  // }
+  // Scheduler legado (contents → meta-publish)
+  try {
+    const { startScheduler } = require('../models/scheduler.service');
+    startScheduler();
+  } catch (err) {
+    console.error('[ERRO][instrumentation] scheduler.service:', err.message);
+  }
 
-  // OCULTO TEMPORARIAMENTE — Instagram publisher (instagram_scheduled_posts) — 10 min
-  // try {
-  //   const { startInstagramPublisher } = require('./instagramPublisher');
-  //   startInstagramPublisher();
-  // } catch (err) {
-  //   console.error('[ERRO][instrumentation] instagramPublisher:', err.message);
-  // }
+  // Instagram publisher novo (instagram_scheduled_posts) — 10 min
+  try {
+    const { startInstagramPublisher } = require('./instagramPublisher');
+    startInstagramPublisher();
+  } catch (err) {
+    console.error('[ERRO][instrumentation] instagramPublisher:', err.message);
+  }
+
+  // Worker do Gerador de Imagem — fila image_jobs + cleanup diário 03:00
+  try {
+    const { startImageWorker } = require('./imageWorker');
+    startImageWorker();
+  } catch (err) {
+    console.error('[ERRO][instrumentation] imageWorker:', err.message);
+  }
 }
 
 module.exports = { register };
