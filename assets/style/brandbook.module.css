@@ -1,0 +1,538 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   brandbook.module.css
+   Estilos do BrandbookTab e BrandbookEditor (dentro da página de cliente).
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.tab {
+  padding: 4px 0 32px;
+}
+
+/* ─── Estado vazio (sem brandbook) ─── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 36px 28px;
+}
+
+.emptyIcon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(255, 0, 51, 0.08);
+  border: 1px solid rgba(255, 0, 51, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand-300);
+  margin-bottom: 12px;
+}
+
+.emptyTitle {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.emptySub {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  max-width: 540px;
+  margin-bottom: 24px;
+}
+
+.optionsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  width: 100%;
+  max-width: 760px;
+}
+
+.optionCard {
+  padding: 18px 16px 20px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.optionIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(255, 0, 51, 0.06);
+  border: 1px solid rgba(255, 0, 51, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand-300);
+}
+
+.optionTitle {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+}
+
+.optionDesc {
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  flex: 1;
+}
+
+.optionBtn {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+/* ─── Header do editor (com brandbook ativo) ─── */
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  margin-bottom: 14px;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.activeBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  color: var(--success);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sourceTag {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.headerActions {
+  display: flex;
+  gap: 8px;
+  position: relative;
+}
+
+.replaceMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: linear-gradient(145deg, rgba(17, 17, 17, 0.99), rgba(10, 10, 10, 0.99));
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  min-width: 200px;
+  z-index: 50;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+.replaceMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  transition: all 0.12s;
+}
+
+.replaceMenuItem:hover {
+  background: rgba(255, 0, 51, 0.05);
+  color: var(--text-primary);
+}
+
+/* ─── Editor: seções ─── */
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.section {
+  padding: 18px 20px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+.sectionHint {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: -6px;
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+/* Paleta */
+.palette {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.colorField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.colorFieldLabel {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.colorRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.colorSwatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.colorInput {
+  flex: 1;
+  padding: 7px 10px;
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.colorInput:focus {
+  border-color: rgba(255, 0, 51, 0.4);
+}
+
+.neutralRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* Tipografia */
+.typoRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 720px) {
+  .typoRow { grid-template-columns: 1fr; }
+}
+
+.weightChips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Tag input (chips) */
+.tagInput {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 10px;
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  min-height: 42px;
+}
+
+.tagInput:focus-within {
+  border-color: rgba(255, 0, 51, 0.4);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(255, 0, 51, 0.06);
+  border: 1px solid rgba(255, 0, 51, 0.2);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.tag button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tag button:hover {
+  color: var(--error);
+}
+
+.tagInputField {
+  flex: 1;
+  min-width: 120px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+}
+
+/* Lista editável (do/dont/refs) */
+.listField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.listRow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.listIndex {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  background: rgba(10, 10, 10, 0.6);
+  border: 1px solid var(--border-default);
+}
+
+.listIndex.do { color: var(--success); border-color: rgba(34, 197, 94, 0.25); }
+.listIndex.dont { color: var(--error); border-color: rgba(255, 26, 77, 0.25); }
+
+.listInput {
+  flex: 1;
+  padding: 7px 10px;
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.listInput:focus {
+  border-color: rgba(255, 0, 51, 0.4);
+}
+
+.listRemove {
+  background: none;
+  border: 1px solid var(--border-default);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.listRemove:hover {
+  color: var(--error);
+  border-color: rgba(255, 26, 77, 0.3);
+}
+
+.addListBtn {
+  align-self: flex-start;
+  margin-top: 4px;
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px dashed var(--border-default);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.addListBtn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+/* Sticky save bar */
+.saveBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: linear-gradient(145deg, rgba(17, 17, 17, 0.97), rgba(10, 10, 10, 0.99));
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  margin-top: 4px;
+}
+
+.saveBarLeft {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.saveBarLeft.dirty { color: var(--warning); }
+.saveBarLeft.saved { color: var(--success); }
+
+/* ─── Modais brandbook ─── */
+.modalOverlay {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(5, 5, 5, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+
+.modalCard {
+  width: 100%;
+  max-width: 560px;
+  padding: 24px;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.modalTitle {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.modalSub {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin-bottom: 16px;
+}
+
+.dropZone {
+  border: 1px dashed var(--border-default);
+  border-radius: 8px;
+  padding: 32px 20px;
+  text-align: center;
+  background: rgba(10, 10, 10, 0.6);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.dropZone.over {
+  border-color: var(--brand-500);
+  color: var(--text-primary);
+  background: rgba(255, 0, 51, 0.04);
+}
+
+.dropZone .filename {
+  margin-top: 8px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.loadingInline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-top: 12px;
+}
