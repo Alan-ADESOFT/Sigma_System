@@ -1,0 +1,231 @@
+/* ============================================================
+   ADS — Página pública /relatorio-ads/[token]
+   ============================================================ */
+
+.page {
+  min-height: 100vh;
+  background: var(--surface-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 28px 64px;
+}
+
+/* ── Topbar ───────────────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 0 22px;
+  border-bottom: 1px solid var(--border-default);
+  margin-bottom: 24px;
+}
+.brandRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.clientLogo {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid var(--border-default);
+}
+.clientLogoPlaceholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: rgba(255, 0, 51, 0.08);
+  border: 1px solid rgba(255, 0, 51, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--brand-300);
+}
+.clientName {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+.reportLabel {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.dateSelect {
+  background: rgba(10, 10, 10, 0.7);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 9px 12px;
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+}
+.dateSelect:focus { border-color: var(--border-hover); }
+
+/* ── Period banner ─────────────────────────────────────────── */
+.periodBanner {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  margin-bottom: 18px;
+}
+
+/* Subheading reutilizável */
+.sectionHeading {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sectionHeading::before {
+  content: '';
+  width: 3px;
+  height: 14px;
+  background: linear-gradient(180deg, var(--brand-500), var(--brand-700));
+  border-radius: 2px;
+}
+
+/* ── Campaigns table ───────────────────────────────────────── */
+.campaignsCard { padding: 18px 22px; }
+.tableWrap { overflow-x: auto; }
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+.table thead th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-default);
+}
+.table tbody td {
+  padding: 11px 12px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+.emptyTable {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 32px 0;
+}
+
+/* ── Loading / invalid states ──────────────────────────────── */
+.centerState {
+  text-align: center;
+  padding: 100px 20px;
+}
+.spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 0, 51, 0.18);
+  border-top-color: var(--brand-500);
+  margin: 0 auto 18px;
+  animation: ads_pub_spin 0.9s linear infinite;
+}
+@keyframes ads_pub_spin { to { transform: rotate(360deg); } }
+.centerText {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.invalidIcon {
+  font-size: 32px;
+  color: var(--error);
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  background: rgba(255, 0, 51, 0.08);
+  border: 1px solid rgba(255, 0, 51, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.invalidTitle {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+}
+.invalidText {
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  max-width: 480px;
+  margin: 0 auto 12px;
+  line-height: 1.55;
+}
+.muted {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.errorBox {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--error);
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: rgba(255, 0, 51, 0.06);
+  border: 1px solid rgba(255, 0, 51, 0.25);
+  margin-bottom: 18px;
+}
+
+/* ── Footer ───────────────────────────────────────────────── */
+.footer {
+  margin-top: 48px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-default);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+}
+.footerBrand {
+  color: var(--brand-300);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}

@@ -1,3 +1,17 @@
+/**
+ * @deprecated Substituído por models/ads/adsService.js (Sprint Ads — Etapa 2).
+ *
+ * Este arquivo é mantido apenas para os endpoints legados:
+ *   · pages/api/ads-campaigns.js
+ *   · pages/api/ads-insights.js
+ *   · pages/api/ads-actions.js
+ *
+ * Esses endpoints ainda usam o modelo antigo (accounts.ads_token = 1 conta por
+ * tenant) e serão removidos quando a Etapa 3 (Frontend) estiver completa e o
+ * frontend tiver migrado para os endpoints novos em /api/ads/*.
+ *
+ * NÃO use este service em código novo.
+ */
 const GRAPH_BASE = 'https://graph.facebook.com';
 const GRAPH_VERSION = 'v25.0';
 
