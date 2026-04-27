@@ -457,26 +457,52 @@ async function processJob(job) {
 
     let maxImages = await getMaxImageInputs(chosenModel);
 
-    // ── Auto-redirect (sprint v1.1): se há refs MAS modelo escolhido não
-    // aceita image input, troca pra modelo que aceita. Vale pra qualquer
-    // modo (character, scene, inspiration) — sem isso as refs são ignoradas
-    // e o resultado é genérico (problema reportado pelo user).
+    // ── Auto-redirect (sprint v1.1, expandido v1.2): troca o modelo escolhido
+    // se ele NÃO ACEITA imagens (maxImages === 0) OU se aceita MENOS imagens
+    // que o usuário enviou (corte silencioso, problema reportado).
+    //
+    // Exemplos do bug v1.1:
+    //   · refs=5 + autoMode→fal/flux-kontext (max=1) → 4 refs descartadas
+    //   · refs=6 + autoMode→gpt-image-2 (max=4) → 2 refs descartadas
+    // v1.2: tenta upgrade pra Nano Banana 2 (max=14) antes de cortar.
     const hasAnyRef = refs.length > 0;
     const hasCharRef = refs.some(r => r.mode === 'character');
-    if (hasAnyRef && maxImages === 0) {
+    const wouldCutRefs = hasAnyRef && maxImages > 0 && maxImages < refs.length;
+    if (hasAnyRef && (maxImages === 0 || wouldCutRefs)) {
       const enabled = settings.enabled_models || [];
-      // Prioridade depende do tipo de ref: character → Flux Kontext (especialista
-      // em preservar pessoa). Inspiration only → Nano Banana 2 (multi-imagem versátil).
-      const FALLBACKS = hasCharRef
-        ? ['fal-ai/flux-pro/kontext', 'gemini-3.1-flash-image-preview', 'gpt-image-1', 'imagen-3.0-capability-001']
-        : ['gemini-3.1-flash-image-preview', 'fal-ai/flux-pro/kontext', 'gpt-image-1', 'imagen-3.0-capability-001'];
-      const replacement = FALLBACKS.find(m => enabled.includes(m));
-      if (replacement) {
+      // Prioridade ajustada v1.2: Nano Banana 2 PRIMEIRO (max=14, sem corte
+      // pra qualquer cenário). Flux Kontext só como fallback de char+single ref.
+      const FALLBACKS = hasCharRef && refs.length === 1
+        ? ['fal-ai/flux-pro/kontext', 'gemini-3.1-flash-image-preview', 'gpt-image-2', 'gpt-image-1']
+        : ['gemini-3.1-flash-image-preview', 'gpt-image-2', 'fal-ai/flux-pro/kontext', 'gpt-image-1'];
+      // Filtra só modelos que aguentam todas as refs
+      const candidates = [];
+      for (const m of FALLBACKS) {
+        if (!enabled.includes(m)) continue;
+        const cap = await getMaxImageInputs(m);
+        if (cap >= refs.length) {
+          candidates.push({ model: m, cap });
+        }
+      }
+      const replacement = candidates[0]?.model
+        // se ninguém aguenta tudo, pega o de maior capacidade
+        || (await (async () => {
+          let best = null;
+          for (const m of FALLBACKS) {
+            if (!enabled.includes(m)) continue;
+            const cap = await getMaxImageInputs(m);
+            if (!best || cap > best.cap) best = { model: m, cap };
+          }
+          return best?.model;
+        })());
+      if (replacement && replacement !== chosenModel) {
         const originalModel = chosenModel;
         chosenModel = replacement;
         provider = providerForModel(chosenModel);
         maxImages = await getMaxImageInputs(chosenModel);
-        const reason = `Modelo "${originalModel}" não aceita imagens — trocado por "${chosenModel}" pra usar as ${refs.length} ref(s) enviadas.`;
+        const reason = maxImages === 0
+          ? `Modelo "${originalModel}" não aceita imagens — trocado por "${chosenModel}".`
+          : `Modelo "${originalModel}" aceitava só ${(await getMaxImageInputs(originalModel))} imagens mas você enviou ${refs.length} — trocado por "${chosenModel}" (cap=${maxImages}) pra preservar todas.`;
         console.log('[INFO][Worker] auto-redirect por incompatibilidade de refs', {
           from: originalModel, to: chosenModel, refsCount: refs.length, hasCharRef,
         });
@@ -493,9 +519,9 @@ async function processJob(job) {
           provider,
           smartDecision,
         });
-      } else {
-        console.warn('[WARN][Worker] modelo escolhido não aceita refs e nenhum fallback habilitado', {
-          model: chosenModel, enabled,
+      } else if (!replacement) {
+        console.warn('[WARN][Worker] sem fallback habilitado pras refs enviadas', {
+          model: chosenModel, refsCount: refs.length, enabled,
         });
       }
     }

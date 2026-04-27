@@ -98,7 +98,8 @@ function decide({ rawDescription, refs = [], enabledModels = [], openAIResolved 
     };
   }
 
-  // A. Char + face + edit pequeno → GPT Image (alta fidelidade + edit)
+  // A. Char + face + edit pequeno → GPT Image (alta fidelidade + edit, aceita 4 refs)
+  // Continua valendo com múltiplas refs (gpt-image-2 max=4).
   if (hasChar && hasFace && isSmallEdit(rawDescription) && isGptEnabledOrAuto()) {
     return pick(
       gptImageActual(), 0.92,
@@ -107,21 +108,27 @@ function decide({ rawDescription, refs = [], enabledModels = [], openAIResolved 
     );
   }
 
-  // B. Char + face → Flux Kontext Pro (especialista em preservar pessoa)
-  if (hasChar && hasFace && enabled.includes(FLUX_KONTEXT)) {
+  // B. Char + face com 1 ref ÚNICA → Flux Kontext Pro (especialista em preservar pessoa).
+  // CRÍTICO: Flux Kontext aceita só 1 image input. Com múltiplas refs, escolher
+  // Flux desperdiça as outras (cortadas pelo loadImageInputsForProvider). Por
+  // isso só usamos quando refs.length === 1.
+  if (hasChar && hasFace && refsCount === 1 && enabled.includes(FLUX_KONTEXT)) {
     return pick(
       FLUX_KONTEXT, 0.95,
-      'Pessoa identificável a preservar — Flux Kontext Pro é especialista em consistência de identidade.',
+      'Pessoa identificável a preservar (1 ref) — Flux Kontext Pro é especialista em consistência de identidade.',
       'image-edit',
     );
   }
 
-  // C. 3+ refs OU char+scene → Nano Banana 2 (multi-imagem nativo)
-  if ((hasChar && hasScene) || refsCount >= 3) {
+  // C. Múltiplas refs (2+) OU char+scene → Nano Banana 2 (até 14 refs).
+  // Antes era 3+; abaixei pra 2+ porque a alternativa pra char+face com 2-4 refs
+  // (gpt-image-2 max=4 ou flux-kontext max=1) pode cortar refs. Nano Banana 2
+  // não corta nada até 14.
+  if ((hasChar && hasScene) || refsCount >= 2) {
     if (enabled.includes(FALLBACK_MODEL)) {
       return pick(
         FALLBACK_MODEL, 0.9,
-        'Múltiplas referências combinadas — Nano Banana 2 nativo em multi-imagem.',
+        `Múltiplas referências (${refsCount}) — Nano Banana 2 nativo em multi-imagem (até 14 refs sem corte).`,
         'multi-image',
       );
     }
