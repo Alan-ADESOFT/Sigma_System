@@ -125,6 +125,12 @@ export default function ImageDetailModal({
     }
   }
 
+  // v1.2: detecção de divergência de brandbook. Se o job foi disparado com
+  // brandbook ativo (brandbook_id setado) mas brandbook_used=false, alguma
+  // coisa abortou a injeção (cache divergente, erro de query, etc).
+  // Mostra banner pra o user saber que precisa regenerar.
+  const brandbookDivergence = !!job.brandbook_id && !job.brandbook_used;
+
   // Refs com modo (formato novo) ou plano (legado)
   const refsArray = (() => {
     try {
@@ -202,6 +208,30 @@ export default function ImageDetailModal({
             </button>
           </div>
 
+          {brandbookDivergence && (
+            <div style={{
+              padding: '8px 12px',
+              background: 'rgba(245, 158, 11, 0.08)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              borderRadius: 4,
+              fontSize: '0.7rem',
+              color: '#f59e0b',
+              fontFamily: 'var(--font-sans)',
+              lineHeight: 1.4,
+              display: 'flex',
+              gap: 8,
+              alignItems: 'flex-start',
+            }}>
+              <Icon name="alert" size={12} />
+              <div>
+                <strong>BRANDBOOK NÃO INJETADO.</strong> Este job estava ligado a um brandbook
+                mas o prompt não foi gerado a partir dele (provavelmente cache divergente
+                ou erro). Clique em <strong>Variação</strong> ou regere a imagem com bypass
+                de cache pra garantir que a marca seja respeitada.
+              </div>
+            </div>
+          )}
+
           <div className={styles.detailField}>
             <span className={styles.detailFieldLabel}>Descrição</span>
             <span className={styles.detailFieldValue}>{job.raw_description}</span>
@@ -267,7 +297,9 @@ export default function ImageDetailModal({
             <div className={styles.detailField}>
               <span className={styles.detailFieldLabel}>Brandbook usado</span>
               <span className={`${styles.detailFieldValue} mono`}>
-                {job.brandbook_used ? 'Sim' : 'Não'}
+                {job.brandbook_used
+                  ? `Sim${job.client_name ? ` · ${job.client_name}` : ''}`
+                  : (job.brandbook_id ? 'Não (divergência)' : 'Não')}
               </span>
             </div>
             <div className={styles.detailField}>

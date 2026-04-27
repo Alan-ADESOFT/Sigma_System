@@ -2123,8 +2123,9 @@ ALTER TABLE image_settings ADD COLUMN IF NOT EXISTS title_generator_model TEXT N
 
 -- 7. Default de enabled_models pro lineup novo. Tenants existentes mantêm o
 --    array atual até alterarem manualmente em Configurações → Imagem.
+--    v1.2: lineup reduzido a 3 (Nano Banana 2 / GPT Image 2 / Flux Kontext).
 ALTER TABLE image_settings ALTER COLUMN enabled_models SET DEFAULT
-  '["gemini-3.1-flash-image-preview","fal-ai/flux-pro/kontext","gpt-image-1","imagen-4.0-generate-001"]'::jsonb;
+  '["gemini-3.1-flash-image-preview","gpt-image-2","fal-ai/flux-pro/kontext"]'::jsonb;
 
 -- 8. Brandbook fixed references (3-5 imagens da marca, sempre injetadas).
 --    fixed_references: [{url, label}] (até 5)
@@ -2200,3 +2201,16 @@ ON CONFLICT (model_id) DO UPDATE SET
   cost_per_image_high = EXCLUDED.cost_per_image_high,
   best_for            = EXCLUDED.best_for,
   deprecated_at       = EXCLUDED.deprecated_at;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- SPRINT GERADOR DE IMAGEM v1.2 — Auto-classificação refs + autoMode
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 1. Refs auto-classificadas via Vision (gpt-4o-mini). Persiste o output do
+--    refClassifier por job pra debug e pra evitar reclassificar em retries.
+ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS auto_classified_refs JSONB DEFAULT '[]';
+
+-- 2. Resolved OpenAI image model (cache do probe runtime do worker).
+--    Worker faz HEAD/dry-run pra gpt-image-2 → fallback gpt-image-1.5 → gpt-image-1.
+--    Cacheado aqui pra não probrar a cada boot.
+ALTER TABLE image_settings ADD COLUMN IF NOT EXISTS openai_image_model_resolved TEXT;

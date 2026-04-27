@@ -20,11 +20,35 @@ const { getOrCreate: getSettings } = require('../../imageSettings.model');
 const { PROMPT_ENGINEER_SYSTEM, buildUserMessage } = require('./prompts/promptEngineer');
 
 /**
+ * Hash do conteúdo do brandbook (paleta + tipografia + fixed_references).
+ * v1.2: incluído no hash do prompt pra invalidar cache quando o user
+ * edita o MESMO brandbookId — `id` igual mas content novo deve gerar prompt
+ * novo, senão cache devolve prompt antigo com cores antigas.
+ */
+function brandbookContentHash(bb) {
+  if (!bb) return '';
+  const sd = typeof bb.structured_data === 'string'
+    ? safeParse(bb.structured_data)
+    : (bb.structured_data || {});
+  const fr = (() => {
+    try {
+      return Array.isArray(bb.fixed_references)
+        ? bb.fixed_references
+        : JSON.parse(bb.fixed_references || '[]');
+    } catch { return []; }
+  })();
+  const payload = JSON.stringify({ sd, fr });
+  return crypto.createHash('md5').update(payload).digest('hex').slice(0, 12);
+}
+
+/**
  * Hash determinístico do "input semântico" do prompt — ignora detalhes
  * que não mudam o significado do prompt final.
  *
  * Sprint v1.1: refsKey agora considera modo + descrição (cache invalida
  * corretamente quando user troca foto OU modo).
+ * Sprint v1.2: brandbookContent invalida cache quando user edita brandbook
+ * (mesmo id, conteúdo novo).
  */
 function calculateHash(input) {
   // Concatena descrições com modo prefixado pra distinguir o mesmo conteúdo
@@ -56,16 +80,17 @@ function calculateHash(input) {
     : '';
 
   const payload = JSON.stringify({
-    raw:       (input.rawDescription || '').trim().toLowerCase(),
-    brandbook: input.brandbookId || null,
-    format:    input.format,
-    aspect:    input.aspectRatio,
-    model:     input.model,
-    obs:       (input.observations || '').trim().toLowerCase(),
-    neg:       (input.negativePrompt || '').trim().toLowerCase(),
-    refs:      refsKey,
-    fixed:     fixedKey,
-    smart:     input.smartDecision?.primary_model || null,
+    raw:        (input.rawDescription || '').trim().toLowerCase(),
+    brandbook:  input.brandbookId || null,
+    bbContent:  input.brandbookContentHash || '',  // v1.2 — invalida quando user edita o mesmo brandbook
+    format:     input.format,
+    aspect:     input.aspectRatio,
+    model:      input.model,
+    obs:        (input.observations || '').trim().toLowerCase(),
+    neg:        (input.negativePrompt || '').trim().toLowerCase(),
+    refs:       refsKey,
+    fixed:      fixedKey,
+    smart:      input.smartDecision?.primary_model || null,
   });
   return crypto.createHash('md5').update(payload).digest('hex');
 }
@@ -120,9 +145,11 @@ async function optimizePrompt(args) {
   const cacheWindowHours = settings.prompt_reuse_window_hours || 24;
   const llmModel = settings.prompt_engineer_model || 'gpt-4o-mini';
 
+  const bbHash = brandbookContentHash(brandbook);
   const hash = calculateHash({
     rawDescription,
     brandbookId: brandbook?.id,
+    brandbookContentHash: bbHash,
     format, aspectRatio, model,
     observations, negativePrompt,
     referenceDescriptionsByMode, referenceDescriptions,
@@ -133,16 +160,27 @@ async function optimizePrompt(args) {
   // 1. Cache lookup — pula se bypassCache=true (variação fresca / edição)
   const cached = bypassCache
     ? null
-    : await searchByPromptHash(hash, tenantId, cacheWindowHours);
-  if (cached?.optimized_prompt) {
+    : await searchByPromptHash(hash, tenantId, cacheWindowHours, brandbook?.id || null);
+
+  // VALIDAÇÃO v1.2 (defesa em profundidade): mesmo o hash já cobrindo brandbookId
+  // + content, se por algum motivo a query retornar uma linha cujo brandbook_id
+  // diverge do brandbook ativo agora, ignorar o cache e gerar prompt fresh.
+  // Cobre o caso de hash collision MD5 entre contextos brandbook diferentes.
+  const expectedBbId = brandbook?.id || null;
+  const cachedBbId = cached?.brandbook_id || null;
+  if (cached && expectedBbId !== cachedBbId) {
+    console.warn('[WARN][PromptEngineer] cache hit ignorado por divergência de brandbook', {
+      jobId, hash, expected: expectedBbId, got: cachedBbId,
+    });
+  } else if (cached?.optimized_prompt) {
     console.log('[INFO][PromptEngineer] cache hit', {
       tenantId, jobId, hash, age: cached.created_at,
     });
-    // VALIDAÇÃO: se brandbook ativo, garantir que cache vem de geração com brandbook
     if (brandbook?.id) {
       console.log('[INFO][PromptEngineer] Brandbook injetado no prompt (via cache)', {
         brandbookId: brandbook.id,
         cachedFromBrandbook: cached.brandbook_id,
+        contentHash: bbHash,
       });
     }
     return {

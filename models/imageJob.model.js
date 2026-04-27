@@ -129,13 +129,15 @@ async function updateJobStatus(id, status, fields = {}) {
     timedOut:            'timed_out',
     model:               'model',
     provider:            'provider',
+    // Sprint v1.2 — abril 2026
+    autoClassifiedRefs:  'auto_classified_refs',
   };
 
   for (const [jsKey, dbCol] of Object.entries(map)) {
     if (fields[jsKey] === undefined) continue;
     let val = fields[jsKey];
-    if (jsKey === 'resultMetadata' || jsKey === 'smartDecision') {
-      val = JSON.stringify(val || (jsKey === 'smartDecision' ? null : {}));
+    if (jsKey === 'resultMetadata' || jsKey === 'smartDecision' || jsKey === 'autoClassifiedRefs') {
+      val = JSON.stringify(val || (jsKey === 'smartDecision' ? null : (jsKey === 'autoClassifiedRefs' ? [] : {})));
     }
     params.push(val);
     sets.push(`${dbCol} = $${params.length}`);
@@ -263,11 +265,17 @@ async function countJobs(opts = {}) {
  * Busca optimized_prompt em cache pela hash MD5 (rolling window por horas).
  * Usado pelo Prompt Engineer para evitar gastar tokens em prompts repetidos.
  *
+ * v1.2: filtra também por brandbook_id (defesa em profundidade — o hash já
+ * inclui brandbookId+content, mas em caso de colisão a divergência de
+ * brandbook causaria injeção de prompt errado, então filtramos aqui também).
+ * `IS NOT DISTINCT FROM` casa null=null e id=id corretamente.
+ *
  * @param {string} hash
  * @param {string} tenantId
  * @param {number} [hoursWindow=24]
+ * @param {string|null} [brandbookId=null]
  */
-async function searchByPromptHash(hash, tenantId, hoursWindow = 24) {
+async function searchByPromptHash(hash, tenantId, hoursWindow = 24, brandbookId = null) {
   if (!hash) return null;
   return queryOne(
     `SELECT optimized_prompt, prompt_hash, model, format, brandbook_id, created_at
@@ -276,10 +284,11 @@ async function searchByPromptHash(hash, tenantId, hoursWindow = 24) {
         AND tenant_id = $2
         AND optimized_prompt IS NOT NULL
         AND deleted_at IS NULL
+        AND brandbook_id IS NOT DISTINCT FROM $4
         AND created_at > now() - ($3 || ' hours')::interval
       ORDER BY created_at DESC
       LIMIT 1`,
-    [hash, tenantId, String(hoursWindow)]
+    [hash, tenantId, String(hoursWindow), brandbookId]
   );
 }
 
