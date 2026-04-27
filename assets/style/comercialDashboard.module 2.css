@@ -1,0 +1,349 @@
+/* ============================================================
+   comercialDashboard.module.css
+   Dashboard Comercial — KPIs / funil / leaderboard / charts.
+   Reusa .kpi-grid, .kpi-card, .glass-card de globals.css.
+   ============================================================ */
+
+.page { min-height: 100vh; padding: 24px 32px 80px; }
+
+.headerRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.headerActions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.periodToggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+}
+.periodBtn {
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  transition: all 0.15s;
+}
+.periodBtn:hover { color: var(--text-secondary); }
+.periodBtnActive {
+  background: rgba(255, 0, 51, 0.08);
+  color: var(--brand-400);
+}
+
+.kpiSubrow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+/* Grid 2 colunas (funil + tempo médio) */
+.row2 {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+@media (max-width: 980px) {
+  .row2 { grid-template-columns: 1fr; }
+}
+
+.panel {
+  padding: 20px 22px;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.panelTitle {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.panelMeta {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+/* Funil */
+.funnelList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.funnelRow {
+  display: grid;
+  grid-template-columns: 130px 1fr 80px 70px;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 8px 6px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.funnelRow:hover { background: rgba(255, 255, 255, 0.02); }
+.funnelLabel {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.funnelDot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.funnelBarWrap {
+  height: 22px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  border: 1px solid var(--border-default);
+  position: relative;
+  overflow: hidden;
+}
+.funnelBar {
+  height: 100%;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #fff;
+  transition: width 0.4s ease-out;
+  min-width: 6%;
+}
+.funnelCount {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.funnelConv {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-align: right;
+  letter-spacing: 0.04em;
+}
+
+/* Time-in-column bars */
+.timeList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.timeRow {
+  display: grid;
+  grid-template-columns: 1fr 60px;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+}
+.timeLabel {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+.timeLabel .barTrack {
+  margin-top: 6px;
+  height: 5px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+.timeLabel .barFill {
+  height: 100%;
+  border-radius: 2px;
+}
+.timeValue {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Leaderboard */
+.leaderboardWrap {
+  padding: 0;
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+.leaderboardTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+}
+.leaderboardTable thead th {
+  text-align: left;
+  padding: 14px 16px;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-default);
+}
+.leaderboardTable td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+.leaderboardTable tr:last-child td { border-bottom: none; }
+.leaderboardTable tr:hover { background: rgba(255, 255, 255, 0.015); }
+
+.posCell {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  text-align: center;
+  width: 60px;
+}
+.medal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  margin: 0 auto;
+}
+.medalGold   { background: rgba(255, 215, 0, 0.12); color: #ffd700; border: 1px solid rgba(255, 215, 0, 0.4); }
+.medalSilver { background: rgba(192, 192, 192, 0.12); color: #c0c0c0; border: 1px solid rgba(192, 192, 192, 0.4); }
+.medalBronze { background: rgba(205, 127, 50, 0.14); color: #cd7f32; border: 1px solid rgba(205, 127, 50, 0.4); }
+
+.userCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.userCell .avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: rgba(255, 0, 51, 0.08);
+  border: 1px solid rgba(255, 0, 51, 0.25);
+  color: var(--brand-400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.userCell .avatar img { width: 100%; height: 100%; object-fit: cover; }
+.userCell .name {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.scoreCell {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--brand-400);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Top proposals */
+.topPropList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.topPropCard {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  transition: border-color 0.15s;
+}
+.topPropCard:hover { border-color: var(--border-hover); }
+.topPropName {
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.topPropSlug {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.topPropMetric {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.topPropMetric .label {
+  display: block;
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 2px;
+}
+
+/* Empty state */
+.emptyDashboard {
+  padding: 64px 32px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.emptyDashboard h3 {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  letter-spacing: 0.06em;
+}
+.emptyDashboard p {
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  max-width: 420px;
+  margin: 0 auto 16px;
+}

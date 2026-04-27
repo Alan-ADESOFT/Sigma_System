@@ -20,6 +20,18 @@ const OP_LABELS = {
   copy_modify: 'Modificacao de copy',
   web_search: 'Pesquisa web',
   apply_modification: 'Modificacao com IA',
+  // ── Gerador de Imagem (sprint v1.1) ────────────────────────────────────
+  image_generation:                       'Imagem — Geração',
+  image_prompt_engineer:                  'Imagem — Prompt Engineer',
+  image_smart_selector:                   'Imagem — Smart Selector',
+  image_title_generator:                  'Imagem — Gerador de Títulos',
+  image_improvement_analysis:             'Imagem — Análise de Melhoria',
+  image_reference_describe_inspiration:   'Imagem — Vision (inspiration)',
+  image_reference_describe_character:     'Imagem — Vision (character)',
+  image_reference_describe_scene:         'Imagem — Vision (scene)',
+  image_brandbook_extract:                'Imagem — Brandbook Extract',
+  image_brandbook_generate:               'Imagem — Brandbook Generate',
+  image_brandbook_fixed_ref_describe:     'Imagem — Vision (fixed ref)',
   general: 'Outros',
 };
 
@@ -30,6 +42,17 @@ const OP_COLORS = {
   apply_modification: { bg: 'rgba(168,85,247,0.08)', color: '#a855f7' },
   web_search: { bg: 'rgba(249,115,22,0.08)', color: '#f97316' },
   stage_modify: { bg: 'rgba(59,130,246,0.08)', color: '#3b82f6' },
+  // Gerador de Imagem — paleta unificada (variações sutis pra distinguir)
+  image_generation:                       { bg: 'rgba(168,85,247,0.10)', color: '#a855f7' },
+  image_prompt_engineer:                  { bg: 'rgba(168,85,247,0.06)', color: '#9333ea' },
+  image_smart_selector:                   { bg: 'rgba(168,85,247,0.06)', color: '#7e22ce' },
+  image_title_generator:                  { bg: 'rgba(168,85,247,0.04)', color: '#a855f7' },
+  image_reference_describe_inspiration:   { bg: 'rgba(34,197,94,0.06)',  color: '#22c55e' },
+  image_reference_describe_character:     { bg: 'rgba(255,0,51,0.06)',   color: '#ff6680' },
+  image_reference_describe_scene:         { bg: 'rgba(59,130,246,0.06)', color: '#3b82f6' },
+  image_brandbook_extract:                { bg: 'rgba(245,158,11,0.06)', color: '#f59e0b' },
+  image_brandbook_generate:               { bg: 'rgba(245,158,11,0.06)', color: '#f59e0b' },
+  image_brandbook_fixed_ref_describe:     { bg: 'rgba(245,158,11,0.06)', color: '#f59e0b' },
   general: { bg: 'rgba(82,82,82,0.08)', color: '#525252' },
 };
 

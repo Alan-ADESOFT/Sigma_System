@@ -15,6 +15,9 @@ const { query, queryOne } = require('../infra/db');
 /**
  * Cria um novo job (status='queued' por default no schema).
  *
+ * Sprint v1.1 — abril 2026: aceita referenceImageMetadata (refs com modo)
+ * + parent_job_id/step_index/step_purpose pra pipelines multi-step.
+ *
  * @param {object} data
  * @param {string} data.tenantId
  * @param {string} [data.clientId]
@@ -32,7 +35,11 @@ const { query, queryOne } = require('../infra/db');
  * @param {string} data.rawDescription
  * @param {string} [data.observations]
  * @param {string} [data.negativePrompt]
- * @param {Array<string>} [data.referenceImageUrls]
+ * @param {Array<string>} [data.referenceImageUrls] - LEGADO (lista plana)
+ * @param {Array<{url, mode}>} [data.referenceImageMetadata] - novo (com modo)
+ * @param {string} [data.parentJobId] - pra multi-step
+ * @param {number} [data.stepIndex]
+ * @param {string} [data.stepPurpose]
  * @returns {Promise<object>} job criado
  */
 async function createJob(data) {
@@ -44,6 +51,9 @@ async function createJob(data) {
     templateId,
     rawDescription, observations, negativePrompt,
     referenceImageUrls,
+    referenceImageMetadata,
+    parentJobId, stepIndex, stepPurpose,
+    bypassCache,
   } = data;
 
   if (!tenantId || !userId || !format || !aspectRatio || !model || !provider || !rawDescription) {
@@ -58,14 +68,18 @@ async function createJob(data) {
         brandbook_id, brandbook_used,
         template_id,
         raw_description, observations, negative_prompt,
-        reference_image_urls)
+        reference_image_urls, reference_image_metadata,
+        parent_job_id, step_index, step_purpose,
+        bypass_cache)
      VALUES ($1, $2, $3, $4,
              $5, $6, $7, $8,
              $9, $10,
              $11, $12,
              $13,
              $14, $15, $16,
-             $17)
+             $17, $18,
+             $19, $20, $21,
+             $22)
      RETURNING *`,
     [
       tenantId, clientId || null, folderId || null, userId,
@@ -75,6 +89,11 @@ async function createJob(data) {
       templateId || null,
       rawDescription, observations || null, negativePrompt || null,
       JSON.stringify(referenceImageUrls || []),
+      JSON.stringify(referenceImageMetadata || []),
+      parentJobId || null,
+      typeof stepIndex === 'number' ? stepIndex : 0,
+      stepPurpose || null,
+      !!bypassCache,
     ]
   );
 }
@@ -103,12 +122,21 @@ async function updateJobStatus(id, status, fields = {}) {
     costUsd:             'cost_usd',
     startedAt:           'started_at',
     completedAt:         'completed_at',
+    // Sprint v1.1 — abril 2026
+    title:               'title',
+    titleUserEdited:     'title_user_edited',
+    smartDecision:       'smart_decision',
+    timedOut:            'timed_out',
+    model:               'model',
+    provider:            'provider',
   };
 
   for (const [jsKey, dbCol] of Object.entries(map)) {
     if (fields[jsKey] === undefined) continue;
     let val = fields[jsKey];
-    if (jsKey === 'resultMetadata') val = JSON.stringify(val || {});
+    if (jsKey === 'resultMetadata' || jsKey === 'smartDecision') {
+      val = JSON.stringify(val || (jsKey === 'smartDecision' ? null : {}));
+    }
     params.push(val);
     sets.push(`${dbCol} = $${params.length}`);
   }
@@ -394,9 +422,40 @@ async function markAsTemplateSaved(id, tenantId) {
   );
 }
 
+/**
+ * Atualiza o título de um job (manual via UI ou auto via title generator).
+ * Marca title_user_edited=true quando vem do user pra não sobrescrever depois.
+ *
+ * @param {string} id
+ * @param {string} tenantId
+ * @param {string} title
+ * @param {boolean} [userEdited=true] - false quando o gerador automático seta
+ */
+async function updateJobTitle(id, tenantId, title, userEdited = true) {
+  return queryOne(
+    `UPDATE image_jobs
+        SET title = $3, title_user_edited = $4
+      WHERE id = $1 AND tenant_id = $2
+      RETURNING id, title, title_user_edited`,
+    [id, tenantId, String(title || '').slice(0, 200), !!userEdited]
+  );
+}
+
+/**
+ * Conta jobs ativos GLOBAIS (todos os tenants) — usado pelo limite global
+ * de 5 jobs concorrentes do worker v1.1.
+ */
+async function countActiveJobsGlobal() {
+  const row = await queryOne(
+    `SELECT COUNT(*)::int AS n FROM image_jobs WHERE status IN ('queued','running')`
+  );
+  return row?.n || 0;
+}
+
 module.exports = {
   createJob,
   updateJobStatus,
+  updateJobTitle,
   getJobById,
   listJobs,
   countJobs,
@@ -404,6 +463,7 @@ module.exports = {
   softDeleteJob,
   getQueuedJobs,
   countActiveJobs,
+  countActiveJobsGlobal,
   countJobsByUserInWindow,
   markStarted,
   markCompleted,

@@ -37,6 +37,16 @@ const {
 const { PROMPT_ENGINEER_SYSTEM }       = require('../../../models/agentes/imagecreator/prompts/promptEngineer');
 const { BRANDBOOK_EXTRACT_SYSTEM }     = require('../../../models/agentes/imagecreator/prompts/brandbookExtract');
 const { BRANDBOOK_FROM_TEXT_SYSTEM }   = require('../../../models/agentes/imagecreator/prompts/brandbookFromText');
+// Sprint v1.1 — abril 2026: novos prompts editáveis
+const { SMART_SELECTOR_SYSTEM }        = require('../../../models/agentes/imagecreator/prompts/smartSelector');
+const {
+  INSPIRATION_INSTRUCTION,
+  CHARACTER_INSTRUCTION,
+  SCENE_INSTRUCTION,
+  FIXED_REF_INSTRUCTION,
+} = require('../../../models/agentes/imagecreator/referenceVision');
+
+const TITLE_GEN_DEFAULT = 'Você gera títulos curtos para imagens. Devolva APENAS um título de 3-5 palavras em português, sem aspas, sem pontuação final, sem explicações.';
 
 // ── Mapeamento completo ──────────────────────────────────────
 
@@ -84,9 +94,16 @@ const ADS_PROMPTS = [
 ];
 
 const IMAGE_PROMPTS = [
-  { id: 'image_prompt_engineer',     title: 'Imagem — Otimizador de Prompt',         description: 'Transforma a descrição bruta em um prompt visual profissional, adaptando o estilo ao modelo de destino (Imagen/GPT/Flux/Nano Banana). Injeta brandbook como contexto.', defaultPrompt: PROMPT_ENGINEER_SYSTEM },
-  { id: 'image_brandbook_extract',   title: 'Imagem — Extrator de Brandbook',         description: 'Estrutura texto bruto de PDF/HTML em JSON do brandbook (paleta, tipografia, tom, do/dont, refs).',                                                                       defaultPrompt: BRANDBOOK_EXTRACT_SYSTEM },
-  { id: 'image_brandbook_generate',  title: 'Imagem — Gerador de Brandbook por IA',   description: 'Cria brandbook estruturado a partir de descrição em texto livre da marca (com inferências coerentes).',                                                                  defaultPrompt: BRANDBOOK_FROM_TEXT_SYSTEM },
+  { id: 'image_prompt_engineer',     title: 'Imagem — Otimizador de Prompt',          description: 'Transforma a descrição bruta em um prompt visual profissional, adaptando o estilo ao modelo de destino (Nano Banana 2 / Flux Kontext / GPT Image 2 / Imagen 3 Cap / Imagen 4). Injeta brandbook + fixed refs + descrições de refs por modo.', defaultPrompt: PROMPT_ENGINEER_SYSTEM },
+  { id: 'image_brandbook_extract',   title: 'Imagem — Extrator de Brandbook',          description: 'Estrutura texto bruto de PDF/HTML em JSON do brandbook (paleta, tipografia, tom, do/dont, refs).',                                                                       defaultPrompt: BRANDBOOK_EXTRACT_SYSTEM },
+  { id: 'image_brandbook_generate',  title: 'Imagem — Gerador de Brandbook por IA',    description: 'Cria brandbook estruturado a partir de descrição em texto livre da marca (com inferências coerentes).',                                                                  defaultPrompt: BRANDBOOK_FROM_TEXT_SYSTEM },
+  // Sprint v1.1 — abril 2026: novos prompts editáveis
+  { id: 'image_smart_selector',      title: 'Imagem — Auto-seletor de Modelo',         description: 'Decide qual modelo usar para cada tarefa quando Smart Mode está ativo. Roda em ~$0.0005 por geração.',                                                                  defaultPrompt: SMART_SELECTOR_SYSTEM },
+  { id: 'image_title_generator',     title: 'Imagem — Gerador de Títulos',             description: 'Cria títulos curtos (3-5 palavras) para imagens geradas, exibidos nos cards.',                                                                                            defaultPrompt: TITLE_GEN_DEFAULT },
+  { id: 'image_reference_inspiration', title: 'Imagem — Vision (modo Inspiração)',     description: 'Descreve estilo visual de imagens de referência pra reuso de paleta/mood/composição (não descreve sujeitos específicos).',                                              defaultPrompt: INSPIRATION_INSTRUCTION },
+  { id: 'image_reference_character', title: 'Imagem — Vision (modo Personagem)',       description: 'Descreve sujeito da imagem traço por traço para que o gerador preserve a pessoa exata no resultado.',                                                                  defaultPrompt: CHARACTER_INSTRUCTION },
+  { id: 'image_reference_scene',     title: 'Imagem — Vision (modo Cenário)',          description: 'Descreve ambiente/cenário da imagem para usar como background na nova geração.',                                                                                       defaultPrompt: SCENE_INSTRUCTION },
+  { id: 'image_brandbook_fixed_ref', title: 'Imagem — Vision (Fixed Brand Ref)',       description: 'Descreve as referências fixas do brandbook que SEMPRE são injetadas em toda geração. Cache 30 dias por imagem.',                                                       defaultPrompt: FIXED_REF_INSTRUCTION },
 ];
 
 const CATEGORIES = [

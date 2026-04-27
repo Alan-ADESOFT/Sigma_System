@@ -23,26 +23,26 @@ const PROVIDERS = [
   {
     id: 'vertex',
     name: 'Google Vertex AI',
-    sub: 'Para Imagen 4 / Imagen 3. Use credenciais JSON de service account.',
+    sub: 'Para Imagen 4 e Imagen 3 Capability. Use credenciais JSON de service account.',
     statusKey: 'has_vertex_credentials',
     fields: ['vertex_project_id', 'vertex_location'],
   },
   {
     id: 'openai',
     name: 'OpenAI',
-    sub: 'Para gpt-image-1 (também usado para o Prompt Engineer).',
+    sub: 'Para GPT Image 2 (também usado para Prompt Engineer, Smart Selector e Title Generator).',
     statusKey: 'has_openai_key',
   },
   {
     id: 'fal',
     name: 'Fal.ai',
-    sub: 'Para Flux 1.1 Pro.',
+    sub: 'Para Flux Kontext Pro (especialista em preservar pessoa/personagem da referência).',
     statusKey: 'has_fal_key',
   },
   {
     id: 'gemini',
     name: 'Google Gemini',
-    sub: 'Para Nano Banana (gemini-2.0-flash-preview-image-generation).',
+    sub: 'Para Nano Banana 2 (multi-imagem nativo até 14 refs, tipografia precisa).',
     statusKey: 'has_gemini_key',
   },
 ];
@@ -53,11 +53,41 @@ const PROMPT_LLM_OPTIONS = [
   { id: 'gpt-4o',           label: 'GPT-4o ($$$)' },
 ];
 
+// Sprint v1.1 — abril 2026: lineup novo. Modelos antigos seguem suportados
+// no backend pra que jobs no histórico continuem abrindo, mas só os novos
+// aparecem no toggle.
 const ALL_MODELS = [
-  { id: 'imagen-4',     name: 'Imagen 4',      provider: 'vertex' },
-  { id: 'gpt-image-1',  name: 'GPT Image 1',   provider: 'openai' },
-  { id: 'flux-1.1-pro', name: 'Flux 1.1 Pro',  provider: 'fal' },
-  { id: 'nano-banana',  name: 'Nano Banana',   provider: 'gemini' },
+  {
+    id: 'gemini-3.1-flash-image-preview',
+    name: 'Nano Banana 2',
+    provider: 'gemini',
+    capabilities: '14 refs · image input · $0.04-0.15',
+  },
+  {
+    id: 'fal-ai/flux-pro/kontext',
+    name: 'Flux Kontext Pro',
+    provider: 'fal',
+    capabilities: '1 ref · preserva pessoa · $0.04',
+  },
+  {
+    id: 'gpt-image-1',
+    name: 'GPT Image 1',
+    provider: 'openai',
+    capabilities: 'Rápido, sem verificação de organização · $0.04-0.17',
+  },
+  {
+    id: 'imagen-3.0-capability-001',
+    name: 'Imagen 3 Capability',
+    provider: 'vertex',
+    capabilities: 'subject types · deprecated em Jun/2026 · $0.04',
+    legacy: true,
+  },
+  {
+    id: 'imagen-4.0-generate-001',
+    name: 'Imagen 4',
+    provider: 'vertex',
+    capabilities: 'text-only · $0.04',
+  },
 ];
 
 function Switch({ on, onChange, ariaLabel }) {
@@ -291,11 +321,16 @@ export default function SettingsImagePage() {
               value={data.default_model}
               onChange={e => saveField({ default_model: e.target.value })}
             >
+              {/* Inclui os modelos do lineup atual + o default_model atual
+                  caso ele seja legado (imagen-4 etc.) — evita ficar preso */}
               {ALL_MODELS.map(m => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
+              {data.default_model && !ALL_MODELS.some(m => m.id === data.default_model) && (
+                <option value={data.default_model}>{data.default_model} (legacy)</option>
+              )}
             </select>
-            <span className={styles.hint}>Usado por padrão ao abrir o workspace.</span>
+            <span className={styles.hint}>Usado por padrão ao abrir o workspace. Recomendamos atualizar pra um modelo do lineup novo.</span>
           </div>
 
           <div className={styles.fieldLabel} style={{ marginBottom: 8 }}>Habilitados no workspace</div>
@@ -305,13 +340,75 @@ export default function SettingsImagePage() {
               return (
                 <div key={m.id} className={`${styles.modelRow} ${on ? styles.active : ''}`}>
                   <div className={styles.modelInfo}>
-                    <div className={styles.modelName}>{m.name}</div>
-                    <div className={styles.modelSub}>via {m.provider}</div>
+                    <div className={styles.modelName}>
+                      {m.name}
+                      {m.legacy && <span style={{ marginLeft: 8, fontSize: '0.55rem', color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>legacy</span>}
+                    </div>
+                    <div className={styles.modelSub}>via {m.provider} · {m.capabilities}</div>
                   </div>
                   <Switch on={on} onChange={() => toggleModel(m.id)} ariaLabel={`Toggle ${m.name}`} />
                 </div>
               );
             })}
+          </div>
+        </Section>
+
+        {/* ─── Modo Inteligente ──────────────────────────────────── */}
+        <Section title="Modo Inteligente (avançado)" icon="sparkles" defaultOpen={false}>
+          <div className={styles.toggleRow}>
+            <div className={styles.toggleRowInfo}>
+              <div className={styles.fieldLabel}>Ativar Smart Mode</div>
+              <div className={styles.hint}>
+                Quando ativo, um agente LLM escolhe o melhor modelo pra cada tarefa baseado em refs, brandbook e descrição.
+                Quando desativado, usa heurística rápida (sem custo extra).
+                Custo adicional do Smart Mode: ~$0.0005 por geração.
+              </div>
+            </div>
+            <Switch
+              on={!!data.smart_mode_enabled}
+              onChange={v => saveField({ smart_mode_enabled: v })}
+              ariaLabel="Smart Mode"
+            />
+          </div>
+
+          {!!data.smart_mode_enabled && (
+            <div className={styles.field}>
+              <label className={styles.fieldLabel}>LLM do Smart Selector</label>
+              <select
+                className="select"
+                value={data.smart_mode_model || 'gpt-4o-mini'}
+                onChange={e => saveField({ smart_mode_model: e.target.value })}
+              >
+                {PROMPT_LLM_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+              </select>
+              <span className={styles.hint}>Modelo usado pra decidir qual modelo de imagem usar.</span>
+            </div>
+          )}
+        </Section>
+
+        {/* ─── Limites técnicos v1.1 ─────────────────────────────── */}
+        <Section title="Limites técnicos" icon="alert" defaultOpen={false}>
+          <div className={styles.field}>
+            <label className={styles.fieldLabel}>Timeout por geração</label>
+            <Slider
+              value={data.job_timeout_seconds || 90}
+              min={30} max={300} step={5}
+              suffix="s"
+              onChange={v => saveField({ job_timeout_seconds: v })}
+            />
+            <span className={styles.hint}>Jobs que ultrapassarem este tempo são cancelados (default 90s, máx 300s).</span>
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.fieldLabel}>LLM do gerador de títulos</label>
+            <select
+              className="select"
+              value={data.title_generator_model || 'gpt-4o-mini'}
+              onChange={e => saveField({ title_generator_model: e.target.value })}
+            >
+              {PROMPT_LLM_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+            <span className={styles.hint}>Modelo usado pra gerar títulos curtos das imagens (3-5 palavras).</span>
           </div>
         </Section>
 

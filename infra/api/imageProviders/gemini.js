@@ -1,44 +1,74 @@
 /**
- * @fileoverview Provider Nano Banana via Gemini API REST
- * @description Endpoint:
- *   https://generativelanguage.googleapis.com/v1beta/models/
- *   gemini-2.0-flash-preview-image-generation:generateContent?key={api_key}
+ * @fileoverview Provider Gemini (Nano Banana 2) — image generation com
+ * suporte a múltiplas imagens de referência nativamente.
  *
- * Auth via query param `?key=`. Mais barato dos 4 providers.
- * Não suporta seed determinístico nem negative_prompt.
+ * Sprint v1.1 — abril 2026:
+ *   · Modelo default: gemini-3.1-flash-image-preview (Nano Banana 2)
+ *   · Aceita até 14 imagens de referência via inlineData base64
+ *   · Mantém consistência de até 4 personagens em multi-imagem
+ *   · Suporta web search nativo (não exposto via UI nesta sprint)
+ *
+ * Endpoint:
+ *   https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}
+ *
+ * Compat reversa: gemini-2.0-flash-preview-image-generation (Nano Banana 1)
+ * ainda funciona — chamada cai no mesmo handler.
  */
 
+const { loadInternalUpload, detectMime, err, mapHttpStatus } = require('./_helpers');
+
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const DEFAULT_MODEL = 'gemini-2.0-flash-preview-image-generation';
+const DEFAULT_MODEL = 'gemini-3.1-flash-image-preview';
 
 function getApiKey(settings) {
   const key = settings?.gemini_api_key_decrypted || process.env.GEMINI_API_KEY;
-  if (!key) {
-    const err = new Error('Gemini: nenhuma API key disponível (tenant nem .env)');
-    err.code = 'INVALID_INPUT';
-    throw err;
-  }
+  if (!key) throw err('AUTHENTICATION_FAILED', 'Gemini: nenhuma API key disponível (tenant nem .env)');
   return key;
 }
 
 /**
- * Gera imagem via Nano Banana (Gemini Image Generation).
- * @param {object} params
- * @returns {Promise<{imageBuffer: Buffer, mimeType: string, metadata: object}>}
+ * Resolve o model ID definitivo (compat com IDs antigos).
  */
-async function generate(params) {
-  const { model, prompt, settings } = params;
-  const apiKey = getApiKey(settings);
-  const modelId = model && model !== 'nano-banana' ? model : DEFAULT_MODEL;
-  const url = `${BASE}/${modelId}:generateContent?key=${encodeURIComponent(apiKey)}`;
+function resolveModelId(model) {
+  if (!model) return DEFAULT_MODEL;
+  if (model === 'nano-banana') return 'gemini-2.0-flash-preview-image-generation';
+  return model;
+}
 
+async function generate(params) {
+  const { prompt, imageInputs, settings, signal, aspectRatio } = params;
+  const apiKey = getApiKey(settings);
+  const modelId = resolveModelId(params.model);
+
+  // Carrega buffers das imagens (até 14 — limite do Nano Banana 2).
+  const imageParts = [];
+  for (const img of (imageInputs || []).slice(0, 14)) {
+    const buffer = img.buffer || await loadInternalUpload(img.url);
+    if (!buffer) {
+      console.warn('[WARN][Gemini] ref ignorada (não pude carregar)', { url: img.url });
+      continue;
+    }
+    imageParts.push({
+      inlineData: {
+        mimeType: detectMime(buffer),
+        data: buffer.toString('base64'),
+      },
+    });
+  }
+
+  const url = `${BASE}/${modelId}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const body = {
     contents: [{
       role: 'user',
-      parts: [{ text: prompt }],
+      parts: [
+        { text: prompt },
+        ...imageParts,
+      ],
     }],
     generationConfig: {
       responseModalities: ['IMAGE'],
+      // aspect ratio é informativo — o Gemini não tem param formal pra aspect,
+      // o prompt inclui a instrução. Mantemos o controle aqui pra futuras versões.
     },
     safetySettings: [
       { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_ONLY_HIGH' },
@@ -48,39 +78,35 @@ async function generate(params) {
     ],
   };
 
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (e) {
+    if (e?.name === 'AbortError') throw err('TIMEOUT', 'Gemini: timeout');
+    throw err('PROVIDER_UNAVAILABLE', `Gemini: falha de rede (${e.message})`);
+  }
 
   if (!resp.ok) {
     const txt = await resp.text().catch(() => '');
-    const err = new Error(`Gemini: ${resp.status} ${txt.slice(0, 300)}`);
-    if (resp.status === 429) err.code = 'RATE_LIMITED';
-    else if (resp.status === 400 && /safety|policy|block/i.test(txt)) err.code = 'CONTENT_BLOCKED';
-    else err.code = 'PROVIDER_ERROR';
-    throw err;
+    const code = mapHttpStatus(resp.status, txt);
+    throw err(code, `Gemini: ${resp.status} ${txt.slice(0, 300)}`);
   }
 
   const data = await resp.json();
   const candidate = data.candidates?.[0];
 
-  // Caso de bloqueio: candidate.finishReason === 'SAFETY' ou 'RECITATION'
   if (candidate?.finishReason && candidate.finishReason !== 'STOP') {
-    const err = new Error(`Gemini: geração bloqueada (${candidate.finishReason})`);
-    err.code = 'CONTENT_BLOCKED';
-    throw err;
+    throw err('CONTENT_BLOCKED', `Gemini: geração bloqueada (${candidate.finishReason})`);
   }
 
-  // A imagem vem como inlineData dentro das parts
   const parts = candidate?.content?.parts || [];
   const imgPart = parts.find(p => p.inlineData?.data);
-  if (!imgPart) {
-    const err = new Error('Gemini: resposta sem inlineData de imagem');
-    err.code = 'PROVIDER_ERROR';
-    throw err;
-  }
+  if (!imgPart) throw err('PROVIDER_ERROR', 'Gemini: resposta sem inlineData de imagem');
 
   return {
     imageBuffer: Buffer.from(imgPart.inlineData.data, 'base64'),
@@ -88,27 +114,23 @@ async function generate(params) {
     metadata: {
       provider: 'gemini',
       model: modelId,
+      modelVersion: data.modelVersion || null,
       finish_reason: candidate?.finishReason || null,
-      safety_ratings: candidate?.safetyRatings || null,
+      refsUsed: imageParts.length,
+      aspectRatioRequested: aspectRatio || null,
     },
   };
 }
 
 /**
- * Testa chave via listagem de modelos do Gemini.
+ * Testa chave via listagem de modelos.
  */
 async function testKey(apiKey) {
-  if (!apiKey) {
-    const err = new Error('Gemini: chave vazia');
-    err.code = 'INVALID_INPUT';
-    throw err;
-  }
+  if (!apiKey) throw err('INVALID_INPUT', 'Gemini: chave vazia');
   const resp = await fetch(`${BASE}?key=${encodeURIComponent(apiKey)}`);
   if (!resp.ok) {
     const txt = await resp.text().catch(() => '');
-    const err = new Error(`Gemini: chave inválida (${resp.status}): ${txt.slice(0, 200)}`);
-    err.code = 'INVALID_INPUT';
-    throw err;
+    throw err('INVALID_INPUT', `Gemini: chave inválida (${resp.status}): ${txt.slice(0, 200)}`);
   }
   return true;
 }

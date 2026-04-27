@@ -3,10 +3,15 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Modal fullscreen para visualizar uma imagem específica + toda metadata.
  * Ações: Download, Variação, Salvar Template, Mover Pasta, Deletar.
+ *
+ * Sprint v1.1 — abril 2026:
+ *   · Título editável inline (PUT /api/image/jobs/[id]/title)
+ *   · Smart decision visível (modelo + reasoning + confidence)
+ *   · Reference mode dos refs aplicados
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNotification } from '../../context/NotificationContext';
 import { Icon } from './ImageIcons';
 import styles from '../../assets/style/imageGeneration.module.css';
@@ -23,8 +28,22 @@ export default function ImageDetailModal({
   onSaveTemplate,
   onDelete,
   onToggleStar,
+  onTitleUpdate,
+  onEditApplied,
 }) {
   const { notify } = useNotification();
+  const [title, setTitle] = useState(job?.title || '');
+  const [titleEditing, setTitleEditing] = useState(false);
+  const [titleSaving, setTitleSaving] = useState(false);
+  const [showEditInput, setShowEditInput] = useState(false);
+  const [editPrompt, setEditPrompt] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
+  useEffect(() => {
+    setTitle(job?.title || '');
+    setShowEditInput(false);
+    setEditPrompt('');
+  }, [job?.id, job?.title]);
 
   useEffect(() => {
     function onEsc(e) { if (e.key === 'Escape') onClose?.(); }
@@ -55,21 +74,85 @@ export default function ImageDetailModal({
     }
   }
 
+  async function applyEdit() {
+    if (!editPrompt.trim()) return;
+    setEditSubmitting(true);
+    try {
+      const res = await fetch(`/api/image/jobs/${job.id}/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ editPrompt: editPrompt.trim() }),
+      });
+      const json = await res.json();
+      if (res.status === 429) {
+        notify(json.error || 'Limite atingido', 'warning', 6000);
+        return;
+      }
+      if (!json.success) throw new Error(json.error || 'falha');
+      notify(`Edição em fila — usando ${json.data.model}`, 'success', 4000);
+      onEditApplied?.(json.data);
+      setShowEditInput(false);
+      setEditPrompt('');
+      onClose?.();
+    } catch (err) {
+      notify(`Erro: ${err.message}`, 'error');
+    } finally {
+      setEditSubmitting(false);
+    }
+  }
+
+  async function saveTitle() {
+    if (!title.trim() || title === job.title) {
+      setTitleEditing(false);
+      return;
+    }
+    setTitleSaving(true);
+    try {
+      const res = await fetch(`/api/image/jobs/${job.id}/title`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title.trim() }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'falha');
+      notify('Título salvo', 'success', 1500);
+      onTitleUpdate?.(json.data);
+      setTitleEditing(false);
+    } catch (err) {
+      notify(`Erro: ${err.message}`, 'error');
+    } finally {
+      setTitleSaving(false);
+    }
+  }
+
+  // Refs com modo (formato novo) ou plano (legado)
   const refsArray = (() => {
     try {
-      return Array.isArray(job.reference_image_urls)
+      const meta = Array.isArray(job.reference_image_metadata)
+        ? job.reference_image_metadata
+        : JSON.parse(job.reference_image_metadata || '[]');
+      if (Array.isArray(meta) && meta.length > 0) return meta;
+      const urls = Array.isArray(job.reference_image_urls)
         ? job.reference_image_urls
         : JSON.parse(job.reference_image_urls || '[]');
+      return (urls || []).map(url => ({ url, mode: 'inspiration' }));
     } catch { return []; }
+  })();
+
+  const smartDecision = (() => {
+    try {
+      return typeof job.smart_decision === 'string'
+        ? JSON.parse(job.smart_decision)
+        : job.smart_decision;
+    } catch { return null; }
   })();
 
   return (
     <div className={styles.detailOverlay} onClick={onClose} role="dialog" aria-modal="true">
       <div className={styles.detailCard} onClick={e => e.stopPropagation()}>
-        {/* Imagem grande */}
         <div className={styles.detailImageWrap}>
           {job.result_image_url ? (
-            <img src={job.result_image_url} alt={job.raw_description?.slice(0, 80) || 'Imagem'} className={styles.detailImage} />
+            <img src={job.result_image_url} alt={job.title || job.raw_description?.slice(0, 80) || 'Imagem'} className={styles.detailImage} />
           ) : (
             <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
               Imagem ainda não disponível
@@ -77,10 +160,43 @@ export default function ImageDetailModal({
           )}
         </div>
 
-        {/* Metadata */}
         <div className={styles.detailMeta}>
-          <div className={styles.detailMetaTitle}>
-            <span>{job.format} · {job.aspect_ratio}</span>
+          {/* Título editável + botão fechar */}
+          <div className={styles.detailMetaTitle} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {titleEditing ? (
+              <input
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                onBlur={saveTitle}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') saveTitle();
+                  if (e.key === 'Escape') { setTitle(job.title || ''); setTitleEditing(false); }
+                }}
+                autoFocus
+                style={{
+                  flex: 1, fontFamily: 'var(--font-sans)', fontSize: '0.85rem',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  color: 'var(--text-primary)', padding: '4px 8px', borderRadius: 4,
+                }}
+                maxLength={80}
+              />
+            ) : (
+              <span
+                onClick={() => setTitleEditing(true)}
+                title="Clique pra editar o título"
+                style={{
+                  flex: 1, cursor: 'pointer',
+                  color: job.title ? 'var(--text-primary)' : 'var(--text-muted)',
+                  fontStyle: job.title ? 'normal' : 'italic',
+                }}
+              >
+                {titleSaving ? 'Salvando...' : (job.title || 'Sem título — clique pra adicionar')}
+              </span>
+            )}
+            <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
+              {job.format} · {job.aspect_ratio}
+            </span>
             <button type="button" className="btn btn-icon btn-secondary" onClick={onClose} aria-label="Fechar">
               <Icon name="x" size={12} />
             </button>
@@ -109,6 +225,23 @@ export default function ImageDetailModal({
             </div>
           )}
 
+          {/* Smart decision (se houver) */}
+          {smartDecision && smartDecision.reasoning && (
+            <div className={styles.detailField}>
+              <span className={styles.detailFieldLabel}>
+                Decisão de modelo · {smartDecision.used_smart_mode ? 'Smart Mode' : 'Heurística'}
+                {typeof smartDecision.confidence === 'number' && (
+                  <span style={{ marginLeft: 6, color: 'var(--text-muted)' }}>
+                    ({Math.round(smartDecision.confidence * 100)}% confiança)
+                  </span>
+                )}
+              </span>
+              <span className={styles.detailFieldValue} style={{ fontStyle: 'italic' }}>
+                {smartDecision.reasoning}
+              </span>
+            </div>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className={styles.detailField}>
               <span className={styles.detailFieldLabel}>Modelo</span>
@@ -122,6 +255,7 @@ export default function ImageDetailModal({
               <span className={styles.detailFieldLabel}>Tempo</span>
               <span className={`${styles.detailFieldValue} mono`}>
                 {job.duration_ms ? `${(job.duration_ms / 1000).toFixed(1)}s` : '—'}
+                {job.timed_out && <span style={{ marginLeft: 6, color: '#f59e0b' }}>(timeout)</span>}
               </span>
             </div>
             <div className={styles.detailField}>
@@ -144,11 +278,58 @@ export default function ImageDetailModal({
 
           {refsArray.length > 0 && (
             <div className={styles.detailField}>
-              <span className={styles.detailFieldLabel}>Referências usadas</span>
+              <span className={styles.detailFieldLabel}>Referências usadas ({refsArray.length})</span>
               <div className={styles.detailRefsRow}>
-                {refsArray.map((url, i) => (
-                  <img key={i} src={url} alt={`Ref ${i + 1}`} />
+                {refsArray.map((r, i) => (
+                  <div key={i} style={{ position: 'relative', display: 'inline-block' }}>
+                    <img src={r.url} alt={`Ref ${i + 1}`} />
+                    <span style={{
+                      position: 'absolute', bottom: 2, left: 2, right: 2,
+                      background: 'rgba(0,0,0,0.7)', color: '#fff',
+                      fontFamily: 'var(--font-mono)', fontSize: '0.55rem',
+                      textAlign: 'center', padding: '1px 0', borderRadius: 2,
+                    }}>{r.mode || 'inspiration'}</span>
+                  </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Editor inline — sprint v1.1 */}
+          {showEditInput && (
+            <div style={{
+              padding: 12, marginTop: 4,
+              background: 'rgba(168, 85, 247, 0.05)',
+              border: '1px solid rgba(168, 85, 247, 0.2)',
+              borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 8,
+            }}>
+              <div style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: '#a855f7', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Editar com IA
+              </div>
+              <textarea
+                className="textarea"
+                rows={3}
+                value={editPrompt}
+                onChange={e => setEditPrompt(e.target.value)}
+                placeholder="Ex: trocar fundo pra azul · adicionar legenda 'Promoção 50% off' · remover o relógio do canto direito"
+                autoFocus
+                disabled={editSubmitting}
+                onKeyDown={e => {
+                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') applyEdit();
+                  if (e.key === 'Escape') { setShowEditInput(false); setEditPrompt(''); }
+                }}
+              />
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setShowEditInput(false); setEditPrompt(''); }} disabled={editSubmitting}>
+                  Cancelar
+                </button>
+                <button type="button" className="sigma-btn-primary btn-sm" onClick={applyEdit} disabled={editSubmitting || !editPrompt.trim()}>
+                  <Icon name="zap" size={11} />
+                  {editSubmitting ? 'Enviando...' : 'Aplicar edição'}
+                </button>
+              </div>
+              <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+                A imagem atual vira referência (modo Personagem) e o sistema escolhe Flux Kontext Pro / Nano Banana 2 pra preservar a composição enquanto aplica sua mudança.
               </div>
             </div>
           )}
@@ -158,9 +339,20 @@ export default function ImageDetailModal({
               <Icon name="download" size={11} />
               Download
             </button>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => onRegenerate?.(job)}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => onRegenerate?.(job)} title="Gera nova imagem com mesmo prompt mas seed/render diferente">
               <Icon name="refresh" size={11} />
               Variação
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setShowEditInput(v => !v)}
+              disabled={!job.result_image_url}
+              title="Aplica uma mudança específica usando esta imagem como referência"
+              style={showEditInput ? { background: 'rgba(168, 85, 247, 0.15)', borderColor: '#a855f7', color: '#a855f7' } : undefined}
+            >
+              <Icon name="edit" size={11} />
+              Editar com IA
             </button>
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => onSaveTemplate?.(job)}>
               <Icon name="layers" size={11} />

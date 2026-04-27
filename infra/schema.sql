@@ -2077,3 +2077,126 @@ BEGIN
         ', t, t, t, t);
     END LOOP;
 END $$;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- SPRINT GERADOR DE IMAGEM v1.1 — Reference Mode + lineup novo
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Tudo idempotente (ALTER ... IF NOT EXISTS) — pode reaplicar a vontade.
+-- Seguir o pattern: extender, nunca apagar colunas existentes (compat reversa
+-- com jobs antigos e modelos descontinuados).
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- 1. Título gerado por LLM, editável pelo usuário (3-5 palavras).
+ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS title_user_edited BOOLEAN NOT NULL DEFAULT false;
+
+-- 2. Reference mode por imagem ([{url, mode}] onde mode ∈
+--    'inspiration'|'character'|'scene'). Mantém reference_image_urls populado
+--    pra compat com jobs antigos.
+ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS reference_image_metadata JSONB DEFAULT '[]';
+
+-- 3. Decisão do Smart Mode (quando ativado em settings) ou heurística.
+--    Inclui primary_model, confidence, reasoning, reference_mode.
+ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS smart_decision JSONB DEFAULT NULL;
+
+-- 4. Multi-step (mantido — pipelines de várias etapas via Smart Mode).
+ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS parent_job_id TEXT REFERENCES image_jobs(id) ON DELETE SET NULL;
+ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS step_index SMALLINT DEFAULT 0;
+ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS step_purpose TEXT;
+CREATE INDEX IF NOT EXISTS idx_jobs_parent ON image_jobs(parent_job_id) WHERE parent_job_id IS NOT NULL;
+
+-- 5. Flag de timeout (job morto pelo controller após job_timeout_seconds).
+ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS timed_out BOOLEAN NOT NULL DEFAULT false;
+
+-- 5b. Bypass do cache do Prompt Engineer (variação fresca / edição).
+-- Quando true, ignora cache por hash e força nova chamada ao LLM —
+-- gera prompt novo (e portanto resultado visualmente distinto mesmo
+-- com mesmos inputs). Usado pelos botões "Variação fresca" e "Editar".
+ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS bypass_cache BOOLEAN NOT NULL DEFAULT false;
+
+-- 6. Settings novos: smart mode, timeout customizável, gerador de títulos.
+ALTER TABLE image_settings ADD COLUMN IF NOT EXISTS smart_mode_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE image_settings ADD COLUMN IF NOT EXISTS smart_mode_model TEXT NOT NULL DEFAULT 'gpt-4o-mini';
+ALTER TABLE image_settings ADD COLUMN IF NOT EXISTS job_timeout_seconds INTEGER NOT NULL DEFAULT 90;
+ALTER TABLE image_settings ADD COLUMN IF NOT EXISTS title_generator_model TEXT NOT NULL DEFAULT 'gpt-4o-mini';
+
+-- 7. Default de enabled_models pro lineup novo. Tenants existentes mantêm o
+--    array atual até alterarem manualmente em Configurações → Imagem.
+ALTER TABLE image_settings ALTER COLUMN enabled_models SET DEFAULT
+  '["gemini-3.1-flash-image-preview","fal-ai/flux-pro/kontext","gpt-image-1","imagen-4.0-generate-001"]'::jsonb;
+
+-- 8. Brandbook fixed references (3-5 imagens da marca, sempre injetadas).
+--    fixed_references: [{url, label}] (até 5)
+--    fixed_references_descriptions: [{url, label, description}] (cache da Vision)
+--    fixed_references_described_at: timestamp do último describe (TTL 30 dias).
+ALTER TABLE client_brandbooks ADD COLUMN IF NOT EXISTS fixed_references JSONB DEFAULT '[]';
+ALTER TABLE client_brandbooks ADD COLUMN IF NOT EXISTS fixed_references_descriptions JSONB DEFAULT '[]';
+ALTER TABLE client_brandbooks ADD COLUMN IF NOT EXISTS fixed_references_described_at TIMESTAMPTZ;
+
+-- 9. Tabela de capabilities por modelo (read-only, populada manualmente).
+--    Útil pra UI mostrar/disable modelos baseado em features e pra validação
+--    no backend antes de chamar o provider.
+CREATE TABLE IF NOT EXISTS image_model_capabilities (
+  model_id            TEXT PRIMARY KEY,
+  provider            TEXT NOT NULL,
+  display_name        TEXT NOT NULL,
+  description         TEXT,
+  supports_text_to_image  BOOLEAN DEFAULT true,
+  supports_image_input    BOOLEAN DEFAULT false,
+  max_image_inputs        INTEGER DEFAULT 0,
+  supports_mask           BOOLEAN DEFAULT false,
+  supports_subject_types  BOOLEAN DEFAULT false,
+  cost_per_image_low      NUMERIC(10,6),
+  cost_per_image_med      NUMERIC(10,6),
+  cost_per_image_high     NUMERIC(10,6),
+  best_for                TEXT[],
+  deprecated_at           DATE,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE image_model_capabilities IS 'Capabilities por modelo de imagem (informacional). Populada manualmente nesta migration.';
+
+-- Lineup v1.1 — abril 2026 (atualizado contra docs oficiais).
+INSERT INTO image_model_capabilities VALUES
+  ('gemini-3.1-flash-image-preview','gemini','Nano Banana 2',
+   'Multi-imagem (até 14 refs), tipografia, web search nativo',
+   true, true, 14, false, false,
+   0.045, 0.067, 0.151,
+   ARRAY['brand_work','multi_image','typography','versatile'],
+   NULL, now()),
+  ('fal-ai/flux-pro/kontext','fal','Flux Kontext Pro',
+   'Especialista em preservar pessoa exata da referência',
+   true, true, 1, false, false,
+   0.04, 0.04, 0.04,
+   ARRAY['character_consistency','editorial_photo','image_edit'],
+   NULL, now()),
+  ('gpt-image-2','openai','GPT Image 2',
+   'Edição com máscara precisa, alta fidelidade facial',
+   true, true, 4, true, false,
+   0.04, 0.08, 0.17,
+   ARRAY['image_edit','mask_edit','high_fidelity'],
+   NULL, now()),
+  ('imagen-3.0-capability-001','vertex','Imagen 3 Capability',
+   'Subject types tipados (PERSON/PRODUCT/ANIMAL) + face mesh',
+   true, true, 4, true, true,
+   0.04, 0.04, 0.04,
+   ARRAY['subject_types','product_shots','controlled_pose'],
+   '2026-06-24', now()),
+  ('imagen-4.0-generate-001','vertex','Imagen 4',
+   'Geração pura text-to-image, fallback geral',
+   true, false, 0, false, false,
+   0.04, 0.04, 0.06,
+   ARRAY['text_to_image','general'],
+   NULL, now())
+ON CONFLICT (model_id) DO UPDATE SET
+  display_name        = EXCLUDED.display_name,
+  description         = EXCLUDED.description,
+  supports_image_input = EXCLUDED.supports_image_input,
+  max_image_inputs    = EXCLUDED.max_image_inputs,
+  supports_mask       = EXCLUDED.supports_mask,
+  supports_subject_types = EXCLUDED.supports_subject_types,
+  cost_per_image_low  = EXCLUDED.cost_per_image_low,
+  cost_per_image_med  = EXCLUDED.cost_per_image_med,
+  cost_per_image_high = EXCLUDED.cost_per_image_high,
+  best_for            = EXCLUDED.best_for,
+  deprecated_at       = EXCLUDED.deprecated_at;

@@ -103,6 +103,11 @@ async function getPublic(tenantId) {
     has_openai_key:         !!s.openai_api_key_encrypted,
     has_fal_key:            !!s.fal_api_key_encrypted,
     has_gemini_key:         !!s.gemini_api_key_encrypted,
+    // Sprint v1.1 — abril 2026: novos campos de configuração
+    smart_mode_enabled:     !!s.smart_mode_enabled,
+    smart_mode_model:       s.smart_mode_model || 'gpt-4o-mini',
+    job_timeout_seconds:    s.job_timeout_seconds || 90,
+    title_generator_model:  s.title_generator_model || 'gpt-4o-mini',
     created_at:                 s.created_at,
     updated_at:                 s.updated_at,
   };
@@ -127,6 +132,9 @@ const ALLOWED_FIELDS = [
   'hourly_limit_admin', 'hourly_limit_user',
   'concurrent_limit_per_tenant', 'max_template_per_client',
   'brandbook_required', 'auto_cleanup_days', 'prompt_reuse_window_hours',
+  // Sprint v1.1 — abril 2026
+  'smart_mode_enabled', 'smart_mode_model',
+  'job_timeout_seconds', 'title_generator_model',
 ];
 
 async function update(tenantId, updates, opts = {}) {

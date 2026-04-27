@@ -5,22 +5,44 @@
  * indique ao usuário o próximo passo concreto.
  *
  * Codes vêm de infra/api/imageProviders/* (CONTENT_BLOCKED, RATE_LIMITED,
- * TIMEOUT, INVALID_INPUT, PROVIDER_ERROR) ou do próprio worker.
+ * TIMEOUT, INVALID_INPUT, PROVIDER_ERROR, ...) ou do próprio worker
+ * (TIMEOUT, MODEL_UNAVAILABLE, BRANDBOOK_FETCH_FAILED, ...).
+ *
+ * Sprint v1.1 — abril 2026: expandido com codes de timeout duro, modelo
+ * indisponível, autenticação falha, refs inválidas.
  */
 
 const FRIENDLY_BY_CODE = {
   CONTENT_BLOCKED:
-    'Conteúdo bloqueado pelo filtro de segurança do provedor — tente reformular o prompt sem termos sensíveis.',
+    'O conteúdo solicitado foi bloqueado pelo filtro de segurança do provedor. Tente reformular sua descrição evitando termos sensíveis (violência, conteúdo adulto, pessoas reais por nome).',
   RATE_LIMITED:
-    'O provedor de imagem atingiu o limite de requisições. Tente novamente em alguns minutos.',
+    'O provedor de imagem atingiu o limite temporário de uso. Aguarde 2-3 minutos e tente novamente, ou troque de modelo.',
   TIMEOUT:
-    'Falha de conexão com o provedor (timeout). Tente novamente em alguns minutos.',
+    'A geração demorou mais do que o esperado e foi cancelada (limite de 90 segundos). Isso geralmente indica sobrecarga no provedor. Tente novamente ou escolha outro modelo.',
   INVALID_INPUT:
-    'Configuração inválida — verifique os parâmetros e a chave de API do provedor.',
+    'Algo nas configurações está incorreto. Verifique se a chave de API do provedor está válida em Configurações → Imagem.',
   PROVIDER_ERROR:
-    'O provedor retornou um erro inesperado. Tente novamente; se persistir, troque o modelo.',
+    'O provedor de imagem retornou um erro inesperado. Tente novamente ou escolha outro modelo no seletor.',
+  PROVIDER_UNAVAILABLE:
+    'O provedor está temporariamente indisponível. Tente outro modelo ou aguarde alguns minutos.',
   TEMPLATE_LIMIT:
-    'Limite de templates por cliente atingido. Apague templates antigos para liberar espaço.',
+    'Você atingiu o limite de 20 templates por cliente. Apague templates antigos para liberar espaço.',
+  REFERENCE_TOO_LARGE:
+    'Uma das imagens de referência é muito grande. Reduza para menos de 10 MB cada.',
+  REFERENCE_INVALID:
+    'Não foi possível processar uma das imagens de referência. Use JPG, PNG ou WebP válidos.',
+  IMAGE_INPUT_NOT_SUPPORTED:
+    'O modelo escolhido não aceita imagens como entrada com este modo. Mude o modo da referência ou escolha outro modelo (Nano Banana 2 ou Flux Kontext suportam).',
+  AUTHENTICATION_FAILED:
+    'A chave de API do provedor não está funcionando. Acesse Configurações → Imagem e atualize a chave.',
+  INSUFFICIENT_QUOTA:
+    'Sua conta no provedor não tem créditos suficientes. Verifique seu painel no provedor escolhido.',
+  MODEL_UNAVAILABLE:
+    'Este modelo não está mais disponível ou não foi habilitado no seu projeto. Escolha outro modelo.',
+  SMART_SELECTOR_FAILED:
+    'O modo inteligente não conseguiu decidir o melhor modelo. Tentamos com o modelo padrão.',
+  BRANDBOOK_FETCH_FAILED:
+    'Não foi possível carregar o brandbook do cliente. A geração continuou sem ele.',
 };
 
 /**
@@ -33,7 +55,7 @@ const FRIENDLY_BY_CODE = {
  */
 function friendlyMessage(code, rawMessage = '') {
   if (FRIENDLY_BY_CODE[code]) return FRIENDLY_BY_CODE[code];
-  // Para INVALID_INPUT cru sem mapeamento, dá pra ser mais útil:
+  // Fallback útil pra INVALID_INPUT cru sem mapeamento
   if (code === 'INVALID_INPUT' && rawMessage) {
     return `Configuração inválida: ${String(rawMessage).slice(0, 200)}`;
   }

@@ -236,6 +236,12 @@ export default function ImageGeneratorModal({
     }
     setSubmitting(true);
     try {
+      // Sprint v1.1 — abril 2026: ReferenceUploader devolve [{url, mode}].
+      // Mantemos referenceImages (formato novo). Se algum chamador passar
+      // strings legadas, normaliza pra { url, mode: 'inspiration' }.
+      const refsNormalized = (referenceUrls || []).map(r =>
+        typeof r === 'string' ? { url: r, mode: 'inspiration' } : r
+      );
       const body = {
         rawDescription: description.trim(),
         clientId: client?.id || null,
@@ -244,7 +250,7 @@ export default function ImageGeneratorModal({
         aspectRatio,
         model,
         observations: observations.trim() || null,
-        referenceImageUrls: referenceUrls,
+        referenceImages: refsNormalized,
         useBrandbook: !ignoreBrandbook,
       };
 

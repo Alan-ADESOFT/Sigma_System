@@ -1,0 +1,451 @@
+/* ============================================================
+   systemModal.module.css
+   Padrão SIGMA — modais com IconBox + título + descrição.
+   Espelha o estilo das telas de Planejamento (Novo / Editar / Excluir).
+
+   Estrutura:
+     <div .backdrop>
+       <div .modal>
+         <div .header>
+           <div .iconBox>...</div>
+           <div .headerText>
+             <h2 .title>...</h2>
+             <p .description>...</p>
+           </div>
+           <button .closeBtn>×</button>
+         </div>
+         <div .body>...</div>
+         <div .actions>
+           <button .btnSecondary>CANCELAR</button>
+           <button .btnPrimary>AÇÃO</button>
+         </div>
+       </div>
+     </div>
+
+   Tudo via CSS variables — zero hex hardcoded em valores brand.
+   ============================================================ */
+
+/* ── Backdrop ── */
+.backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(6px);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: bgFade 0.2s ease-out;
+}
+@keyframes bgFade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── Modal container ── */
+.modal {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  max-height: 92vh;
+  overflow-y: auto;
+  background: linear-gradient(145deg, rgba(17, 17, 17, 0.99), rgba(10, 10, 10, 0.99));
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+  padding: 24px 28px 22px;
+}
+.modalSm { max-width: 520px; }
+.modalLg { max-width: 760px; }
+.modalXl { max-width: 920px; }
+
+/* ── Header (IconBox + textos + close) ── */
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding-right: 32px; /* espaço pro close button */
+  position: relative;
+}
+
+.iconBox {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(255, 0, 51, 0.10);
+  border: 1px solid rgba(255, 0, 51, 0.30);
+  color: var(--brand-500);
+  transition: all 0.2s;
+}
+.iconBoxSuccess {
+  background: rgba(34, 197, 94, 0.10);
+  border-color: rgba(34, 197, 94, 0.30);
+  color: var(--success);
+}
+.iconBoxWarning {
+  background: rgba(249, 115, 22, 0.10);
+  border-color: rgba(249, 115, 22, 0.30);
+  color: var(--warning);
+}
+.iconBoxInfo {
+  background: rgba(59, 130, 246, 0.10);
+  border-color: rgba(59, 130, 246, 0.30);
+  color: var(--info);
+}
+
+.headerText {
+  flex: 1;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.title {
+  font-family: var(--font-sans);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.description {
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  font-weight: 400;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.closeBtn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.closeBtn:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.04); }
+.closeBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Body ── */
+.body {
+  /* Sem padding extra — usa diretamente o padding do .modal */
+}
+
+/* ── Field padrão ── */
+.field {
+  margin-bottom: 16px;
+}
+.field:last-child { margin-bottom: 0; }
+
+.fieldLabel {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.fieldLabel .required {
+  color: var(--brand-500);
+  margin-left: 2px;
+}
+
+.fieldInput {
+  width: 100%;
+  padding: 11px 14px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  outline: none;
+  transition: all 0.18s;
+}
+.fieldInput::placeholder { color: var(--text-muted); opacity: 0.6; }
+.fieldInput:focus {
+  border-color: rgba(255, 0, 51, 0.4);
+  background: rgba(0, 0, 0, 0.7);
+}
+.fieldInput:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.fieldTextarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 11px 14px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  outline: none;
+  resize: vertical;
+  transition: all 0.18s;
+  line-height: 1.5;
+}
+.fieldTextarea::placeholder { color: var(--text-muted); opacity: 0.6; }
+.fieldTextarea:focus {
+  border-color: rgba(255, 0, 51, 0.4);
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.fieldSelect {
+  width: 100%;
+  padding: 11px 14px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+}
+.fieldSelect:focus { border-color: rgba(255, 0, 51, 0.4); }
+
+.fieldError {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--brand-400);
+  letter-spacing: 0.04em;
+}
+
+.fieldHint {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+/* Layout em grid de campos */
+.row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.row3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+.row21 {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+}
+.row12 {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 12px;
+}
+@media (max-width: 540px) {
+  .row2, .row3, .row21, .row12 { grid-template-columns: 1fr; }
+}
+
+/* ── Section divider (estratégia, opcional, etc.) ── */
+.sectionTitle {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--brand-500);
+  margin: 22px 0 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-default);
+}
+.sectionTitle:first-child { padding-top: 0; border-top: none; margin-top: 0; }
+
+/* ── Warning Box (interno em confirmes destrutivos) ── */
+.warningBox {
+  margin: 18px 0;
+  padding: 18px 20px;
+  background: rgba(255, 0, 51, 0.04);
+  border: 1px solid rgba(255, 0, 51, 0.25);
+  border-radius: 8px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.warningBoxIcon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 0, 51, 0.10);
+  border: 1px solid rgba(255, 0, 51, 0.30);
+  color: var(--brand-500);
+}
+
+.warningBoxContent { flex: 1; min-width: 0; }
+
+.warningBoxTitle {
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+.warningBoxTitle .highlight {
+  color: var(--brand-500);
+  font-weight: 700;
+}
+
+.warningBoxText {
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.warningBoxCascade {
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+/* Variant: warning (laranja) e info (azul) box internos */
+.infoBox {
+  margin: 14px 0;
+  padding: 12px 16px;
+  background: rgba(59, 130, 246, 0.04);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--info);
+  letter-spacing: 0.02em;
+}
+.warnInlineBox {
+  margin: 14px 0;
+  padding: 12px 16px;
+  background: rgba(249, 115, 22, 0.04);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--warning);
+  letter-spacing: 0.02em;
+}
+
+/* ── Actions (rodapé com botões) ── */
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-default);
+}
+
+/* ── Botões padrão sistema ── */
+.btnPrimary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 22px;
+  border-radius: 4px;
+  background: var(--brand-500);
+  border: 1px solid var(--brand-500);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+.btnPrimary:hover:not(:disabled) {
+  background: var(--brand-400);
+  border-color: var(--brand-400);
+  box-shadow: 0 0 16px rgba(255, 0, 51, 0.3);
+}
+.btnPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(0.3);
+}
+
+.btnSecondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 22px;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+.btnSecondary:hover:not(:disabled) {
+  border-color: var(--border-hover);
+  background: rgba(255, 255, 255, 0.03);
+}
+.btnSecondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Variante "outline danger" pra contextos destrutivos secundários */
+.btnDanger {
+  background: transparent;
+  border: 1px solid rgba(255, 0, 51, 0.4);
+  color: var(--brand-400);
+}
+.btnDanger:hover:not(:disabled) {
+  background: rgba(255, 0, 51, 0.06);
+  border-color: var(--brand-500);
+  color: var(--brand-500);
+}
+
+/* ── Animação de entrada ── */
+.modalEnter {
+  animation: modalIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}

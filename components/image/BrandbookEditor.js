@@ -138,6 +138,189 @@ function ListField({ items = [], onChange, kind = 'do', placeholder }) {
   );
 }
 
+// ── Fixed References (sprint v1.1) ─────────────────────────────────────────
+// Até 5 imagens da marca que SEMPRE são injetadas como contexto visual em
+// toda geração desse cliente. Independentes do JSON estruturado — usa
+// endpoint dedicado (/api/image/brandbook/[clientId]/fixed-refs).
+function FixedRefsSection({ clientId, brandbookId }) {
+  const { notify } = useNotification();
+  const fileRef = useRef(null);
+  const [refs, setRefs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [draftLabel, setDraftLabel] = useState('');
+  const [editingIdx, setEditingIdx] = useState(null);
+
+  useEffect(() => {
+    if (!clientId) { setLoading(false); return; }
+    setLoading(true);
+    fetch(`/api/image/brandbook/${clientId}/fixed-refs`)
+      .then(r => r.json())
+      .then(j => {
+        if (j.success) setRefs(j.data?.fixedRefs || []);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [clientId, brandbookId]);
+
+  async function persist(next) {
+    setRefs(next);
+    try {
+      const res = await fetch(`/api/image/brandbook/${clientId}/fixed-refs`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fixedRefs: next }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
+      notify('Referências fixas salvas', 'success', 1500);
+    } catch (err) {
+      notify(`Erro: ${err.message}`, 'error');
+    }
+  }
+
+  async function uploadAndAdd(file, label) {
+    if (refs.length >= 5) { notify('Máximo 5 referências fixas', 'warning'); return; }
+    if (!label || label.length > 50) { notify('Label obrigatório (max 50 chars)', 'error'); return; }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!json.success || !json.url) throw new Error(json.error || 'falha no upload');
+      const url = json.url.startsWith('/') ? json.url : new URL(json.url).pathname;
+      await persist([...refs, { url, label }]);
+      setDraftLabel('');
+    } catch (err) {
+      notify(`Erro: ${err.message}`, 'error');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function remove(idx) {
+    persist(refs.filter((_, i) => i !== idx));
+  }
+
+  function updateLabel(idx, label) {
+    const next = refs.slice();
+    next[idx] = { ...next[idx], label };
+    persist(next);
+  }
+
+  return (
+    <div className={`glass-card ${styles.section}`}>
+      <div className={styles.sectionTitle}><Icon name="image" size={12} /> Referências fixas da marca</div>
+      <div className={styles.sectionHint}>
+        Até 5 imagens que entram em <strong>toda geração de imagem</strong> deste cliente como contexto visual.
+        Use pra modelos da marca, produtos hero, fotos de campanha aprovada.
+      </div>
+
+      {loading ? (
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Carregando...</div>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginTop: 10 }}>
+            {refs.map((r, i) => (
+              <div key={r.url + i} style={{
+                position: 'relative',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 6,
+                overflow: 'hidden',
+                padding: 8,
+              }}>
+                <img src={r.url} alt={r.label || `Ref ${i + 1}`} style={{
+                  width: '100%', aspectRatio: '1/1', objectFit: 'cover', borderRadius: 4, marginBottom: 6,
+                }} />
+                {editingIdx === i ? (
+                  <input
+                    autoFocus
+                    defaultValue={r.label || ''}
+                    onBlur={e => { updateLabel(i, e.target.value); setEditingIdx(null); }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { updateLabel(i, e.target.value); setEditingIdx(null); }
+                      if (e.key === 'Escape') setEditingIdx(null);
+                    }}
+                    maxLength={50}
+                    className="sigma-input"
+                    style={{ fontSize: '0.65rem', padding: '3px 6px' }}
+                  />
+                ) : (
+                  <div
+                    onClick={() => setEditingIdx(i)}
+                    title="Clique pra editar"
+                    style={{
+                      fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary)',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}
+                  >{r.label || 'sem label'}</div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => remove(i)}
+                  aria-label="Remover"
+                  style={{
+                    position: 'absolute', top: 4, right: 4,
+                    background: 'rgba(0,0,0,0.7)', color: '#fff',
+                    border: 'none', borderRadius: '50%', width: 22, height: 22,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                ><Icon name="x" size={11} /></button>
+              </div>
+            ))}
+
+            {refs.length < 5 && (
+              <div style={{
+                background: 'rgba(255,255,255,0.02)',
+                border: '1px dashed rgba(255,255,255,0.15)',
+                borderRadius: 6,
+                padding: 10,
+                display: 'flex', flexDirection: 'column', gap: 6,
+              }}>
+                <input
+                  className="sigma-input"
+                  placeholder="Label (ex: Modelo principal)"
+                  value={draftLabel}
+                  onChange={e => setDraftLabel(e.target.value)}
+                  maxLength={50}
+                  style={{ fontSize: '0.7rem' }}
+                />
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) uploadAndAdd(file, draftLabel.trim());
+                    e.target.value = '';
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={uploading || !draftLabel.trim()}
+                  onClick={() => fileRef.current?.click()}
+                  style={{ width: '100%' }}
+                >
+                  {uploading ? '...' : <><Icon name="plus" size={11} /> Adicionar imagem</>}
+                </button>
+              </div>
+            )}
+          </div>
+          <div style={{ marginTop: 8, fontSize: '0.62rem', color: 'var(--text-muted)' }}>
+            {refs.length}/5 referências fixas
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function BrandbookEditor({ brandbook, clientId, onSaved, seedStructuredData }) {
   const { notify } = useNotification();
   const [data, setData] = useState(() => parseStructured(brandbook?.structured_data || seedStructuredData));
@@ -348,6 +531,11 @@ export default function BrandbookEditor({ brandbook, clientId, onSaved, seedStru
           placeholder="Qualquer observação adicional sobre a identidade visual..."
         />
       </div>
+
+      {/* Fixed Refs (sprint v1.1) */}
+      {clientId && brandbook?.id && (
+        <FixedRefsSection clientId={clientId} brandbookId={brandbook.id} />
+      )}
 
       {/* Save bar */}
       <div className={styles.saveBar}>

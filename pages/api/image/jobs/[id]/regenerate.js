@@ -1,8 +1,12 @@
 /**
  * @fileoverview POST /api/image/jobs/:id/regenerate — re-roda um job
  * @description Cria um novo job copiando os parâmetros do original mas
- * passando por toda a validação/rate limit de novo. Útil quando o resultado
- * não satisfez ou queremos uma nova "tentativa" com seed diferente.
+ * passando por toda a validação/rate limit de novo.
+ *
+ * Sprint v1.1 — abril 2026:
+ *   · Preserva reference_image_metadata (com modos) — antes só copiava URLs planas
+ *   · bypassCache=true por padrão (variação deve ser fresca, prompt novo)
+ *     o usuário pode passar bypassCache=false explicitamente pra forçar reuso
  */
 
 const { resolveTenantId } = require('../../../../../infra/get-tenant-id');
@@ -32,7 +36,6 @@ export default async function handler(req, res) {
     return res.status(404).json({ success: false, error: 'Job original não encontrado' });
   }
 
-  // Rate limit
   const settings = await getSettings(tenantId);
   const rl = await checkImageRateLimit({
     tenantId, userId: user.id, isAdmin: isAdmin(user), settings, req,
@@ -45,9 +48,9 @@ export default async function handler(req, res) {
     });
   }
 
-  // Pega overrides do body (opcional)
-  const { observations, model, format } = req.body || {};
+  const { observations, model, format, bypassCache } = req.body || {};
 
+  // Refs: preserva metadata (com modos) se existir, fallback pras URLs planas
   const refUrls = (() => {
     try {
       return Array.isArray(orig.reference_image_urls)
@@ -55,18 +58,28 @@ export default async function handler(req, res) {
         : JSON.parse(orig.reference_image_urls || '[]');
     } catch { return []; }
   })();
+  const refMetadata = (() => {
+    try {
+      const meta = Array.isArray(orig.reference_image_metadata)
+        ? orig.reference_image_metadata
+        : JSON.parse(orig.reference_image_metadata || '[]');
+      if (Array.isArray(meta) && meta.length > 0) return meta;
+      // Fallback: deriva de refUrls com modo 'inspiration'
+      return refUrls.map(url => ({ url, mode: 'inspiration' }));
+    } catch { return []; }
+  })();
 
   const newJob = await createJob({
     tenantId,
     clientId:    orig.client_id,
     folderId:    orig.folder_id,
-    userId:      user.id, // o regenerator vira "dono" do novo job
+    userId:      user.id,
     format:      format || orig.format,
     aspectRatio: orig.aspect_ratio,
     width:       orig.width,
     height:      orig.height,
     model:       model || orig.model,
-    provider:    orig.provider, // worker ajusta se model mudar de provider
+    provider:    orig.provider,
     brandbookId:   orig.brandbook_id,
     brandbookUsed: orig.brandbook_used,
     templateId:    orig.template_id,
@@ -74,10 +87,13 @@ export default async function handler(req, res) {
     observations:   observations !== undefined ? observations : orig.observations,
     negativePrompt: orig.negative_prompt,
     referenceImageUrls: refUrls,
+    referenceImageMetadata: refMetadata,
+    parentJobId: orig.id,                      // linka como filho do original
+    bypassCache: bypassCache !== false,        // default true — variação fresca
   });
 
   console.log('[INFO][API:image/regenerate] novo job criado', {
-    originalId: id, newId: newJob.id, userId: user.id,
+    originalId: id, newId: newJob.id, userId: user.id, bypassCache: newJob.bypass_cache,
   });
 
   try { notifyNewJob(newJob.id); } catch {}

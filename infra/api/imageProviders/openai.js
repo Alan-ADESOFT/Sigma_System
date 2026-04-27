@@ -1,89 +1,92 @@
 /**
- * @fileoverview Provider gpt-image-1 via OpenAI Images API
- * @description Endpoint: POST /v1/images/generations
- * Auth: Bearer com chave do tenant (decriptada) ou fallback OPENAI_API_KEY.
+ * @fileoverview Provider GPT Image 2 (OpenAI Images API)
+ * @description
+ *   · Sem refs: POST /v1/images/generations (JSON)
+ *   · Com refs: POST /v1/images/edits (multipart/form-data, image[] x N)
  *
- * Tamanhos aceitos: 1024x1024 | 1024x1536 | 1536x1024 (auto-mapeado).
- * Quality: low | medium | high (afeta custo).
+ * Sprint v1.1 — abril 2026:
+ *   · Modelo default: gpt-image-2
+ *   · Aceita até 4 imagens em image[]
+ *   · Suporta máscara opcional (não exposta na UI ainda)
+ *   · Não tem `input_fidelity` (sempre roda em high automático)
+ *
+ * Compat reversa: model='gpt-image-1' continua funcionando, mesma API.
  */
 
-const ENDPOINT = 'https://api.openai.com/v1/images/generations';
+// FormData/Blob são globais no Node 18+ — não precisa de pkg externo.
+const { loadInternalUpload, err, mapHttpStatus } = require('./_helpers');
 
-/**
- * Mapeia (width, height) → size string aceito pelo OpenAI.
- */
-function mapSize(width, height) {
-  const w = width || 1024;
-  const h = height || 1024;
-  if (w === h) return '1024x1024';
-  if (w > h) return '1536x1024';
-  return '1024x1536';
-}
-
-/**
- * Resolve qualidade a partir das settings (default 'medium').
- */
-function resolveQuality(settings) {
-  const q = settings?.image_quality || 'medium';
-  return ['low', 'medium', 'high'].includes(q) ? q : 'medium';
-}
+const ENDPOINT_GEN  = 'https://api.openai.com/v1/images/generations';
+const ENDPOINT_EDIT = 'https://api.openai.com/v1/images/edits';
 
 function getApiKey(settings) {
   const key = settings?.openai_api_key_decrypted || process.env.OPENAI_API_KEY;
-  if (!key) {
-    const err = new Error('OpenAI: nenhuma API key disponível (tenant nem .env)');
-    err.code = 'INVALID_INPUT';
-    throw err;
-  }
+  if (!key) throw err('AUTHENTICATION_FAILED', 'OpenAI: nenhuma API key disponível');
   return key;
 }
 
 /**
- * Gera imagem via gpt-image-1.
- * @param {object} params
- * @returns {Promise<{imageBuffer: Buffer, mimeType: string, metadata: object}>}
+ * Mapeia aspectRatio → size aceito pela API.
+ * GPT Image 2 aceita: '1024x1024', '1536x1024', '1024x1536', 'auto'.
  */
-async function generate(params) {
-  const { model, prompt, width, height, settings } = params;
-  const apiKey = getApiKey(settings);
-  const size = mapSize(width, height);
-  const quality = resolveQuality(settings);
+function mapSize(aspectRatio, width, height) {
+  if (aspectRatio === '1:1') return '1024x1024';
+  if (aspectRatio === '16:9' || aspectRatio === '3:2' || aspectRatio === '4:3') return '1536x1024';
+  if (aspectRatio === '9:16' || aspectRatio === '4:5' || aspectRatio === '3:4') return '1024x1536';
+  // Fallback por dimensões
+  if (width && height) {
+    if (width === height) return '1024x1024';
+    return width > height ? '1536x1024' : '1024x1536';
+  }
+  return 'auto';
+}
 
+function resolveQuality(quality) {
+  if (['low', 'medium', 'high', 'auto'].includes(quality)) return quality;
+  return 'auto';
+}
+
+function resolveModelId(model) {
+  if (!model) return 'gpt-image-2';
+  return model;
+}
+
+async function generateFresh({ prompt, apiKey, signal, params }) {
   const body = {
-    model: model || 'gpt-image-1',
+    model: resolveModelId(params.model),
     prompt,
-    size,
-    quality,
+    size: mapSize(params.aspectRatio, params.width, params.height),
+    quality: resolveQuality(params.quality),
     n: 1,
     output_format: 'png',
   };
 
-  const resp = await fetch(ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  let resp;
+  try {
+    resp = await fetch(ENDPOINT_GEN, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (e) {
+    if (e?.name === 'AbortError') throw err('TIMEOUT', 'OpenAI: timeout');
+    throw err('PROVIDER_UNAVAILABLE', `OpenAI: falha de rede (${e.message})`);
+  }
 
   if (!resp.ok) {
     const errBody = await resp.json().catch(() => ({}));
     const msg = errBody?.error?.message || `HTTP ${resp.status}`;
-    const err = new Error(`OpenAI Images: ${msg}`);
-    if (resp.status === 429) err.code = 'RATE_LIMITED';
-    else if (resp.status === 400 && /safety|policy|content/i.test(msg)) err.code = 'CONTENT_BLOCKED';
-    else err.code = 'PROVIDER_ERROR';
-    throw err;
+    const code = mapHttpStatus(resp.status, msg);
+    throw err(code, `OpenAI Images: ${msg}`);
   }
 
   const data = await resp.json();
   const item = data.data?.[0];
-  if (!item?.b64_json) {
-    const err = new Error('OpenAI Images: resposta sem b64_json');
-    err.code = 'PROVIDER_ERROR';
-    throw err;
-  }
+  if (!item?.b64_json) throw err('PROVIDER_ERROR', 'OpenAI Images: resposta sem b64_json');
 
   return {
     imageBuffer: Buffer.from(item.b64_json, 'base64'),
@@ -91,30 +94,99 @@ async function generate(params) {
     metadata: {
       provider: 'openai',
       model: body.model,
-      size,
-      quality,
+      mode: 'fresh',
+      size: body.size,
+      quality: body.quality,
       revised_prompt: item.revised_prompt || null,
     },
   };
 }
 
+async function generateEdit({ prompt, apiKey, imageInputs, signal, params }) {
+  // FormData global do Node 18+. fetch() seta Content-Type: multipart/form-data
+  // com boundary automático — NÃO setar manualmente.
+  const form = new FormData();
+  form.append('model', resolveModelId(params.model));
+  form.append('prompt', prompt);
+  form.append('size', mapSize(params.aspectRatio, params.width, params.height));
+  form.append('quality', resolveQuality(params.quality));
+  form.append('n', '1');
+
+  // Adiciona até 4 imagens em image[]
+  let added = 0;
+  for (const img of imageInputs.slice(0, 4)) {
+    const buffer = img.buffer || await loadInternalUpload(img.url);
+    if (!buffer) continue;
+    // Buffer → Blob (Node 18+ Blob aceita Buffer/Uint8Array como source)
+    const blob = new Blob([buffer], { type: 'image/png' });
+    form.append('image[]', blob, `ref_${added}.png`);
+    added++;
+  }
+  if (added === 0) {
+    return generateFresh({ prompt, apiKey, signal, params });
+  }
+
+  let resp;
+  try {
+    resp = await fetch(ENDPOINT_EDIT, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        // NÃO setar Content-Type — fetch faz isso com boundary correto
+      },
+      body: form,
+      signal,
+    });
+  } catch (e) {
+    if (e?.name === 'AbortError') throw err('TIMEOUT', 'OpenAI: timeout');
+    throw err('PROVIDER_UNAVAILABLE', `OpenAI: falha de rede (${e.message})`);
+  }
+
+  if (!resp.ok) {
+    const errBody = await resp.json().catch(() => ({}));
+    const msg = errBody?.error?.message || `HTTP ${resp.status}`;
+    const code = mapHttpStatus(resp.status, msg);
+    throw err(code, `OpenAI Edits: ${msg}`);
+  }
+
+  const data = await resp.json();
+  const item = data.data?.[0];
+  if (!item?.b64_json) throw err('PROVIDER_ERROR', 'OpenAI Edits: resposta sem b64_json');
+
+  return {
+    imageBuffer: Buffer.from(item.b64_json, 'base64'),
+    mimeType: 'image/png',
+    metadata: {
+      provider: 'openai',
+      model: resolveModelId(params.model),
+      mode: 'edit',
+      refsUsed: added,
+      revised_prompt: item.revised_prompt || null,
+    },
+  };
+}
+
+async function generate(params) {
+  const { prompt, imageInputs, settings, signal } = params;
+  const apiKey = getApiKey(settings);
+
+  if (Array.isArray(imageInputs) && imageInputs.length > 0) {
+    return generateEdit({ prompt, apiKey, imageInputs, signal, params });
+  }
+  return generateFresh({ prompt, apiKey, signal, params });
+}
+
 /**
- * Testa chave: tenta listar modelos (chamada barata, sem custo de geração).
+ * Testa chave via /v1/models.
  */
 async function testKey(apiKey) {
-  if (!apiKey) {
-    const err = new Error('OpenAI: chave vazia');
-    err.code = 'INVALID_INPUT';
-    throw err;
-  }
+  if (!apiKey) throw err('INVALID_INPUT', 'OpenAI: chave vazia');
   const resp = await fetch('https://api.openai.com/v1/models', {
     headers: { 'Authorization': `Bearer ${apiKey}` },
   });
   if (!resp.ok) {
     const txt = await resp.text().catch(() => '');
-    const err = new Error(`OpenAI: chave inválida (${resp.status}): ${txt.slice(0, 200)}`);
-    err.code = 'INVALID_INPUT';
-    throw err;
+    throw err('AUTHENTICATION_FAILED', `OpenAI: chave inválida (${resp.status}): ${txt.slice(0, 200)}`);
   }
   return true;
 }

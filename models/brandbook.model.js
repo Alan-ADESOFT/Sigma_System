@@ -200,6 +200,65 @@ async function deleteBrandbook(id, tenantId) {
   return true;
 }
 
+/**
+ * Atualiza as fixed_references do brandbook (até 5 imagens da marca que
+ * são SEMPRE injetadas como contexto visual em toda geração desse cliente).
+ *
+ * Invalida cache das descrições — vão ser recomputadas na próxima geração.
+ *
+ * Sprint v1.1 — abril 2026.
+ *
+ * @param {string} brandbookId
+ * @param {string} tenantId
+ * @param {Array<{url: string, label: string}>} fixedRefs
+ */
+async function updateFixedReferences(brandbookId, tenantId, fixedRefs) {
+  if (!Array.isArray(fixedRefs)) throw new Error('fixedRefs deve ser array');
+  if (fixedRefs.length > 5) throw new Error('Máximo de 5 referências fixas');
+
+  for (const ref of fixedRefs) {
+    if (!ref?.url || typeof ref.url !== 'string' || !ref.url.startsWith('/uploads/')) {
+      throw new Error('URL inválida — deve ser /uploads/...');
+    }
+    if (ref.url.includes('..')) throw new Error('URL inválida (path traversal)');
+    if (!ref.label || typeof ref.label !== 'string' || ref.label.length > 50) {
+      throw new Error('Label obrigatório (max 50 chars)');
+    }
+  }
+
+  // Invalida cache de descrições — vai recomputar na próxima geração
+  const updated = await queryOne(
+    `UPDATE client_brandbooks
+        SET fixed_references = $1::jsonb,
+            fixed_references_descriptions = '[]'::jsonb,
+            fixed_references_described_at = NULL,
+            updated_at = now()
+      WHERE id = $2 AND tenant_id = $3
+      RETURNING *`,
+    [JSON.stringify(fixedRefs), brandbookId, tenantId]
+  );
+  if (updated?.client_id) invalidateBrandbookCache(updated.client_id, tenantId);
+  return updated;
+}
+
+/**
+ * Atualiza apenas o cache de descrições das fixed refs (chamado pelo worker
+ * após chamar Vision em cada uma).
+ *
+ * @param {string} brandbookId
+ * @param {Array<{url, label, description}>} descriptions
+ */
+async function updateFixedReferencesDescriptions(brandbookId, descriptions) {
+  return queryOne(
+    `UPDATE client_brandbooks
+        SET fixed_references_descriptions = $1::jsonb,
+            fixed_references_described_at = now()
+      WHERE id = $2
+      RETURNING id, fixed_references_described_at`,
+    [JSON.stringify(descriptions || []), brandbookId]
+  );
+}
+
 module.exports = {
   getActiveBrandbook,
   listBrandbookHistory,
@@ -207,5 +266,7 @@ module.exports = {
   createBrandbook,
   updateBrandbook,
   deleteBrandbook,
+  updateFixedReferences,
+  updateFixedReferencesDescriptions,
   invalidateBrandbookCache,
 };
