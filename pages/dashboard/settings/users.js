@@ -120,7 +120,7 @@ const labelStyle = {
 
 export default function UsersPage() {
   const { user: me } = useAuth();
-  const { addNotification } = useNotification();
+  const { notify: addNotification } = useNotification();
   const [tab, setTab] = useState('users'); // 'users' | 'roles'
 
   // ── Estado: Usuários ──
