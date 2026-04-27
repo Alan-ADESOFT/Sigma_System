@@ -34,6 +34,8 @@ import ReferenceUploader from './ReferenceUploader';
 import PromptViewer from './PromptViewer';
 import FolderModal from './FolderModal';
 import TemplateModal from './TemplateModal';
+import HistoryStrip from './HistoryStrip';
+import ContextMenu from './ContextMenu';
 import styles from '../../assets/style/imageModal.module.css';
 
 const MAX_DESC = 4000;
@@ -101,6 +103,9 @@ export default function ImageGeneratorModal({
   // ─── Template modal ───────────────────────────────────────────
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templateSourceJob, setTemplateSourceJob] = useState(null);
+
+  // ─── Context menu (v1.2) ──────────────────────────────────────
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, job } | null
 
   // ─── Refs pra evitar dependências instáveis em useCallback ─────
   // Sem isso, `selectedJob` nas deps de `loadJobs` recriava a função
@@ -210,14 +215,29 @@ export default function ImageGeneratorModal({
     return () => document.removeEventListener('mousedown', onClick);
   }, [folderMenuOpen]);
 
-  // Esc fecha modal (a menos que esteja gerando)
+  // Esc fecha modal (a menos que esteja gerando) + ←/→ navega histórico
   useEffect(() => {
     function onKey(e) {
-      if (e.key === 'Escape' && !submitting) onClose?.();
+      // Ignora se foco em input/textarea — não atrapalha digitação
+      const tag = (e.target?.tagName || '').toLowerCase();
+      if (['input', 'textarea', 'select'].includes(tag)) return;
+
+      if (e.key === 'Escape' && !submitting) {
+        onClose?.();
+        return;
+      }
+      if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && jobs.length > 0) {
+        e.preventDefault();
+        const idx = jobs.findIndex(j => j.id === selectedJob?.id);
+        const dir = e.key === 'ArrowRight' ? 1 : -1;
+        const nextIdx = idx === -1 ? 0 : Math.max(0, Math.min(jobs.length - 1, idx + dir));
+        const next = jobs[nextIdx];
+        if (next) setSelectedJob(next);
+      }
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose, submitting]);
+  }, [onClose, submitting, jobs, selectedJob?.id]);
 
   const isBlocked = !description.trim();
   const charCount = description.length;
@@ -722,62 +742,13 @@ export default function ImageGeneratorModal({
                 </select>
               </div>
 
-              <div className={styles.historyGrid}>
-                {loadingJobs ? (
-                  Array.from({ length: 8 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="skeleton"
-                      style={{ aspectRatio: '1 / 1', borderRadius: 6 }}
-                    />
-                  ))
-                ) : jobs.length === 0 ? (
-                  <div className={styles.historyEmpty}>
-                    Nenhuma imagem ainda. Gere a primeira pelo painel à esquerda.
-                  </div>
-                ) : (
-                  jobs.map((j, idx) => {
-                    const isSelected = selectedJob?.id === j.id;
-                    const isDone = j.status === 'done' && j.result_thumbnail_url;
-                    const isRunning = j.status === 'queued' || j.status === 'running';
-                    const isError = j.status === 'error';
-                    return (
-                      <div
-                        key={j.id}
-                        className={`${styles.historyThumb} ${isSelected ? styles.selected : ''} animate-fade-in-up`}
-                        style={{ animationDelay: `${Math.min(idx, 7) * 30}ms` }}
-                        onClick={() => setSelectedJob(j)}
-                        title={j.raw_description?.slice(0, 100)}
-                      >
-                        {isDone && (
-                          <img
-                            src={j.result_thumbnail_url}
-                            alt=""
-                            loading="lazy"
-                          />
-                        )}
-                        {isRunning && (
-                          <div className={`${styles.historyStatusOverlay} ${styles.running}`}>
-                            <span className={styles.dot} />
-                            <span>Gerando</span>
-                          </div>
-                        )}
-                        {isError && (
-                          <div className={`${styles.historyStatusOverlay} ${styles.error}`}>
-                            <Icon name="alert" size={14} />
-                            <span>Falha</span>
-                          </div>
-                        )}
-                        {!isDone && !isRunning && !isError && (
-                          <div className={styles.historyStatusOverlay}>
-                            <span style={{ fontSize: '0.55rem' }}>{j.status}</span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+              <HistoryStrip
+                jobs={jobs}
+                selectedId={selectedJob?.id || null}
+                loading={loadingJobs}
+                onSelect={(j) => setSelectedJob(j)}
+                onContextMenu={(j, pos) => setContextMenu({ ...pos, job: j })}
+              />
             </div>
           </div>
         </div>
@@ -807,6 +778,79 @@ export default function ImageGeneratorModal({
               setTemplateSourceJob(null);
               notify('Template salvo', 'success');
             }}
+          />
+        )}
+
+        {/* Context menu (botão direito numa thumb) — v1.2 */}
+        {contextMenu && (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            job={contextMenu.job}
+            onClose={() => setContextMenu(null)}
+            actions={[
+              {
+                id: 'edit',
+                label: 'Editar com IA',
+                icon: 'edit',
+                disabled: !contextMenu.job?.result_image_url,
+                onClick: (j) => {
+                  setSelectedJob(j);
+                  // O ImageDetailModal abre via parent — emitimos via select
+                  // e o parent decide. Mantemos comportamento simples aqui.
+                },
+              },
+              {
+                id: 'variation',
+                label: 'Variação fresca',
+                icon: 'refresh',
+                onClick: regenerateCurrent,
+              },
+              {
+                id: 'download',
+                label: 'Download',
+                icon: 'download',
+                disabled: !contextMenu.job?.result_image_url,
+                onClick: (j) => {
+                  if (!j?.result_image_url) return;
+                  const a = document.createElement('a');
+                  a.href = j.result_image_url;
+                  a.download = `${j.id}.png`;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                },
+              },
+              {
+                id: 'template',
+                label: 'Salvar como template',
+                icon: 'layers',
+                disabled: !client?.id,
+                onClick: (j) => {
+                  setTemplateSourceJob(j);
+                  setShowTemplateModal(true);
+                },
+              },
+              { divider: true },
+              {
+                id: 'delete',
+                label: 'Apagar',
+                icon: 'trash',
+                danger: true,
+                onClick: async (j) => {
+                  if (!j?.id) return;
+                  if (!window.confirm('Apagar esta imagem?')) return;
+                  try {
+                    await fetch(`/api/image/jobs/${j.id}`, { method: 'DELETE' });
+                    if (selectedJob?.id === j.id) setSelectedJob(null);
+                    loadJobs();
+                    notify('Imagem apagada', 'success');
+                  } catch (err) {
+                    notify(`Erro: ${err.message}`, 'error');
+                  }
+                },
+              },
+            ]}
           />
         )}
       </div>

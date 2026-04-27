@@ -11,7 +11,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNotification } from '../../context/NotificationContext';
 import { Icon } from './ImageIcons';
 import styles from '../../assets/style/imageGeneration.module.css';
@@ -30,26 +30,59 @@ export default function ImageDetailModal({
   onToggleStar,
   onTitleUpdate,
   onEditApplied,
+  onPrev,    // v1.2: navegação com ←/→
+  onNext,
 }) {
   const { notify } = useNotification();
   const [title, setTitle] = useState(job?.title || '');
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleSaving, setTitleSaving] = useState(false);
-  const [showEditInput, setShowEditInput] = useState(false);
+  // v1.2: editor inline JÁ ABERTO por padrão quando job concluído
+  const [showEditInput, setShowEditInput] = useState(
+    !!(job?.status === 'done' && job?.result_image_url)
+  );
   const [editPrompt, setEditPrompt] = useState('');
   const [editSubmitting, setEditSubmitting] = useState(false);
+  const editInputRef = useRef(null);
 
   useEffect(() => {
     setTitle(job?.title || '');
-    setShowEditInput(false);
+    setShowEditInput(!!(job?.status === 'done' && job?.result_image_url));
     setEditPrompt('');
-  }, [job?.id, job?.title]);
+  }, [job?.id, job?.title, job?.status, job?.result_image_url]);
 
+  // Esc fecha + ←/→ navega + Cmd/Ctrl+E foca o input de edição (v1.2)
   useEffect(() => {
-    function onEsc(e) { if (e.key === 'Escape') onClose?.(); }
-    document.addEventListener('keydown', onEsc);
-    return () => document.removeEventListener('keydown', onEsc);
-  }, [onClose]);
+    function onKey(e) {
+      const tag = (e.target?.tagName || '').toLowerCase();
+      const isInputFocused = ['input', 'textarea'].includes(tag);
+
+      if (e.key === 'Escape') {
+        onClose?.();
+        return;
+      }
+      // Cmd/Ctrl+E: foca campo de edição (mesmo se input está focado)
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'e' || e.key === 'E')) {
+        e.preventDefault();
+        setShowEditInput(true);
+        // useEffect abaixo cuida de focar
+        setTimeout(() => editInputRef.current?.focus(), 0);
+        return;
+      }
+      // ←/→ só fora de inputs (senão atrapalha digitação)
+      if (!isInputFocused) {
+        if (e.key === 'ArrowLeft' && onPrev) {
+          e.preventDefault();
+          onPrev();
+        } else if (e.key === 'ArrowRight' && onNext) {
+          e.preventDefault();
+          onNext();
+        }
+      }
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose, onPrev, onNext]);
 
   if (!job) return null;
 
@@ -339,16 +372,16 @@ export default function ImageDetailModal({
                 Editar com IA
               </div>
               <textarea
+                ref={editInputRef}
                 className="textarea"
                 rows={3}
                 value={editPrompt}
                 onChange={e => setEditPrompt(e.target.value)}
-                placeholder="Ex: trocar fundo pra azul · adicionar legenda 'Promoção 50% off' · remover o relógio do canto direito"
-                autoFocus
+                placeholder="O que mudar? Ex: trocar fundo pra azul · adicionar legenda 'Promoção 50% off' · remover o relógio do canto direito"
                 disabled={editSubmitting}
                 onKeyDown={e => {
                   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') applyEdit();
-                  if (e.key === 'Escape') { setShowEditInput(false); setEditPrompt(''); }
+                  if (e.key === 'Escape') { e.target.blur(); }
                 }}
               />
               <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>

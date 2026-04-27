@@ -84,6 +84,51 @@ export default function ImagePage() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [refreshRate, setRefreshRate] = useState(0);
 
+  // v1.2: histórico do detail modal pra navegar com ←/→
+  const [detailJobsList, setDetailJobsList] = useState([]);
+
+  // ─── v1.2: carrega lista de jobs quando detail abre, pra ←/→ ─────
+  useEffect(() => {
+    if (!detailJob?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const params = new URLSearchParams({ limit: '40' });
+        if (detailJob.client_id) params.set('clientId', detailJob.client_id);
+        if (detailJob.folder_id) params.set('folderId', detailJob.folder_id);
+        params.set('status', 'done');
+        const res = await fetch(`/api/image/jobs?${params.toString()}`);
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.success && Array.isArray(json.data)) {
+          // Ordena cronologicamente (mais antigo → mais novo) pra ← ir pro anterior
+          const sorted = [...json.data].sort((a, b) =>
+            new Date(a.created_at) - new Date(b.created_at)
+          );
+          setDetailJobsList(sorted);
+        }
+      } catch { /* best-effort */ }
+    })();
+    return () => { cancelled = true; };
+  }, [detailJob?.id, detailJob?.client_id, detailJob?.folder_id]);
+
+  // ─── Atalho global Cmd+K → abre modal de geração livre ───────
+  useEffect(() => {
+    function onKey(e) {
+      const tag = (e.target?.tagName || '').toLowerCase();
+      if (['input', 'textarea'].includes(tag)) return;
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        // Não reabrir se já tem modal aberto
+        if (activeClient || browsingClient || detailJob || historyOpen) return;
+        setActiveClient({ id: null, company_name: 'Geração livre' });
+        setActiveFolder(null);
+      }
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [activeClient, browsingClient, detailJob, historyOpen]);
+
   // ─── Load inicial ────────────────────────────────────────────
   useEffect(() => {
     async function load() {
@@ -421,6 +466,18 @@ export default function ImagePage() {
         <ImageDetailModal
           job={detailJob}
           onClose={() => setDetailJob(null)}
+          onPrev={() => {
+            const list = detailJobsList;
+            if (!list.length) return;
+            const idx = list.findIndex(j => j.id === detailJob.id);
+            if (idx > 0) setDetailJob(list[idx - 1]);
+          }}
+          onNext={() => {
+            const list = detailJobsList;
+            if (!list.length) return;
+            const idx = list.findIndex(j => j.id === detailJob.id);
+            if (idx >= 0 && idx < list.length - 1) setDetailJob(list[idx + 1]);
+          }}
           onRegenerate={(j) => {
             setDetailJob(null);
             (async () => {
