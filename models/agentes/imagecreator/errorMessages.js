@@ -53,6 +53,11 @@ const FRIENDLY_BY_CODE = {
  * @returns {string}
  */
 function friendlyMessage(code, rawMessage = '') {
+  // Caso especial: OpenAI exige verificação de organização para modelos GPT Image.
+  // Mensagem da API contém "must be verified" — link de verificação no console.
+  if (code === 'AUTHENTICATION_FAILED' && /must be verified/i.test(String(rawMessage))) {
+    return 'Sua organização OpenAI precisa ser verificada para usar GPT Image. Acesse platform.openai.com/settings/organization/general → Verify Organization. A liberação leva até 15 minutos para propagar.';
+  }
   if (FRIENDLY_BY_CODE[code]) return FRIENDLY_BY_CODE[code];
   // Fallback útil pra INVALID_INPUT cru sem mapeamento
   if (code === 'INVALID_INPUT' && rawMessage) {
