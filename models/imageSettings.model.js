@@ -18,7 +18,7 @@ const DEFAULTS = {
   prompt_engineer_model:          'gpt-4o-mini',
   brandbook_extractor_model:      'gpt-4o-mini',
   vertex_location:                'us-central1',
-  enabled_models:                 ['imagen-4', 'gpt-image-1', 'flux-1.1-pro', 'nano-banana'],
+  enabled_models:                 ['gemini-3.1-flash-image-preview', 'gpt-image-2', 'fal-ai/flux-pro/kontext'],
   daily_limit_admin:              50,
   daily_limit_user:                30,
   hourly_limit_admin:              30,
