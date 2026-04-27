@@ -424,6 +424,7 @@ export default function ImagePage() {
           advancedMode={advancedMode}
           onClose={() => { setActiveClient(null); setActiveFolder(null); }}
           onGenerate={handleGenerate}
+          onEditJob={(j) => setDetailJob(j)}
           refreshTrigger={refreshTrigger}
         />
       )}

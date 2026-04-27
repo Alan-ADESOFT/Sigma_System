@@ -36,6 +36,7 @@ import FolderModal from './FolderModal';
 import TemplateModal from './TemplateModal';
 import HistoryStrip from './HistoryStrip';
 import ContextMenu from './ContextMenu';
+import TemplatesList from './TemplatesList';
 import styles from '../../assets/style/imageModal.module.css';
 
 const MAX_DESC = 4000;
@@ -69,6 +70,7 @@ export default function ImageGeneratorModal({
   advancedMode = false,  // v1.2: toggle Cmd+Shift+A
   onClose,
   onGenerate,
+  onEditJob,           // v1.2: parent abre detail modal com editor inline
   refreshTrigger = 0,
 }) {
   const { notify } = useNotification();
@@ -106,6 +108,24 @@ export default function ImageGeneratorModal({
 
   // ─── Context menu (v1.2) ──────────────────────────────────────
   const [contextMenu, setContextMenu] = useState(null); // { x, y, job } | null
+
+  // ─── Templates (v1.2 — montado no workspace) ──────────────────
+  // refreshKey força reload da lista quando salvar um template novo
+  const [templatesRefresh, setTemplatesRefresh] = useState(0);
+  // Aplica template aos campos do workspace (chamado pelo TemplatesList.onUse)
+  function applyTemplate(tpl) {
+    if (!tpl) return;
+    if (tpl.format) setFormat(tpl.format);
+    if (tpl.aspect_ratio) setAspectRatio(tpl.aspect_ratio);
+    // tpl.model é só sugestão — em modo normal sempre 'auto'. Em advanced
+    // respeita o que veio.
+    if (advancedMode && tpl.model) setModel(tpl.model);
+    if (tpl.raw_description) setDescription(tpl.raw_description);
+    if (tpl.observations) setObservations(tpl.observations);
+    if (Array.isArray(tpl.reference_image_metadata) && tpl.reference_image_metadata.length > 0) {
+      setReferenceUrls(tpl.reference_image_metadata);
+    }
+  }
 
   // ─── Refs pra evitar dependências instáveis em useCallback ─────
   // Sem isso, `selectedJob` nas deps de `loadJobs` recriava a função
@@ -613,6 +633,35 @@ export default function ImageGeneratorModal({
                   fromCache={lastOptimized?.fromCache}
                 />
               </div>
+
+              {/* v1.2: Templates (só com cliente — templates são por-cliente) */}
+              {client?.id ? (
+                <div className={styles.controlGroup}>
+                  <TemplatesList
+                    clientId={client.id}
+                    onUse={applyTemplate}
+                    refreshKey={templatesRefresh}
+                  />
+                </div>
+              ) : (
+                <div className={styles.controlGroup}>
+                  <div
+                    className="glass-card"
+                    style={{
+                      padding: '10px 12px',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '0.65rem',
+                      color: 'var(--text-muted)',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <div style={{ marginBottom: 4, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.55rem', color: 'var(--text-secondary)' }}>
+                      TEMPLATES
+                    </div>
+                    Disponível só com cliente selecionado — templates são salvos por cliente.
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className={styles.controlsActions}>
@@ -796,6 +845,7 @@ export default function ImageGeneratorModal({
             onSave={() => {
               setShowTemplateModal(false);
               setTemplateSourceJob(null);
+              setTemplatesRefresh(k => k + 1);  // v1.2: re-fetch lista
               notify('Template salvo', 'success');
             }}
           />
@@ -815,9 +865,11 @@ export default function ImageGeneratorModal({
                 icon: 'edit',
                 disabled: !contextMenu.job?.result_image_url,
                 onClick: (j) => {
-                  setSelectedJob(j);
-                  // O ImageDetailModal abre via parent — emitimos via select
-                  // e o parent decide. Mantemos comportamento simples aqui.
+                  // v1.2: pede pro parent abrir o detail modal (que tem o
+                  // editor inline ja aberto). Sem isso, "Editar com IA" so
+                  // mudava a thumb selecionada e nao acontecia nada visivel.
+                  if (onEditJob) onEditJob(j);
+                  else setSelectedJob(j);
                 },
               },
               {

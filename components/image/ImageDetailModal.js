@@ -49,12 +49,61 @@ export default function ImageDetailModal({
   const editInputRef = useRef(null);
   // v1.2: lineage de versões (job.parent_job_id chain)
   const [versions, setVersions] = useState([]);
+  // v1.2: imagens anexadas no input de edição (até 3 — junto com original = 4)
+  const [editRefs, setEditRefs] = useState([]); // Array<{url}>
+  const [editUploading, setEditUploading] = useState(false);
+  const editFileInputRef = useRef(null);
 
   useEffect(() => {
     setTitle(job?.title || '');
     setShowEditInput(!!(job?.status === 'done' && job?.result_image_url));
     setEditPrompt('');
+    setEditRefs([]);
   }, [job?.id, job?.title, job?.status, job?.result_image_url]);
+
+  // v1.2: upload das refs anexadas no editor
+  async function handleEditUpload(files) {
+    if (!files || files.length === 0) return;
+    const remaining = 3 - editRefs.length;
+    if (remaining <= 0) {
+      notify('Máximo 3 imagens adicionais', 'warning');
+      return;
+    }
+    const accepted = Array.from(files).slice(0, remaining);
+    const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
+    setEditUploading(true);
+    const newRefs = [];
+    for (const file of accepted) {
+      if (!ALLOWED.includes(file.type)) {
+        notify(`Formato inválido: ${file.name}`, 'error');
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        notify(`${file.name} excede 10 MB`, 'error');
+        continue;
+      }
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch('/api/upload', { method: 'POST', body: fd });
+        const json = await res.json();
+        if (json.success && json.url) {
+          // Normaliza pra path interno
+          let url = json.url;
+          if (!url.startsWith('/')) {
+            try { url = new URL(url).pathname; } catch { /* mantem */ }
+          }
+          newRefs.push({ url });
+        } else {
+          throw new Error(json.error || 'falha no upload');
+        }
+      } catch (err) {
+        notify(`Erro: ${err.message}`, 'error');
+      }
+    }
+    setEditUploading(false);
+    if (newRefs.length) setEditRefs(prev => [...prev, ...newRefs]);
+  }
 
   // v1.2: carrega lineage de versões (parent_job_id chain).
   // Se este job tem parent, usa o parent como root; senão, este job é o root.
@@ -146,6 +195,8 @@ export default function ImageDetailModal({
           editPrompt: editPrompt.trim(),
           // v1.2: 'auto' não vai no body (deixa o backend escolher)
           ...(editModel && editModel !== 'auto' ? { model: editModel } : {}),
+          // v1.2: imagens anexadas no input de edit (até 3)
+          ...(editRefs.length > 0 ? { additionalRefs: editRefs } : {}),
         }),
       });
       const json = await res.json();
@@ -416,6 +467,58 @@ export default function ImageDetailModal({
                   if (e.key === 'Escape') { e.target.blur(); }
                 }}
               />
+
+              {/* v1.2: anexar até 3 imagens adicionais como referência */}
+              <input
+                ref={editFileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                style={{ display: 'none' }}
+                onChange={e => { handleEditUpload(e.target.files); e.target.value = ''; }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => editFileInputRef.current?.click()}
+                  disabled={editUploading || editSubmitting || editRefs.length >= 3}
+                  title="Anexar imagem como referência adicional (até 3)"
+                >
+                  <Icon name={editUploading ? 'sparkles' : 'plus'} size={11} />
+                  {editUploading ? 'Subindo...' : `Anexar (${editRefs.length}/3)`}
+                </button>
+                {editRefs.map((r, i) => (
+                  <div
+                    key={r.url + i}
+                    style={{
+                      position: 'relative',
+                      width: 44, height: 44,
+                      borderRadius: 4,
+                      overflow: 'hidden',
+                      border: '1px solid rgba(168,85,247,0.4)',
+                    }}
+                  >
+                    <img src={r.url} alt={`Ref ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <button
+                      type="button"
+                      onClick={() => setEditRefs(prev => prev.filter((_, idx) => idx !== i))}
+                      aria-label="Remover anexo"
+                      style={{
+                        position: 'absolute', top: -4, right: -4,
+                        width: 16, height: 16, borderRadius: '50%',
+                        background: 'rgba(0,0,0,0.85)',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        color: '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', fontSize: 0,
+                      }}
+                    >
+                      <Icon name="x" size={9} />
+                    </button>
+                  </div>
+                ))}
+              </div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'space-between' }}>
                 <select
                   value={editModel}

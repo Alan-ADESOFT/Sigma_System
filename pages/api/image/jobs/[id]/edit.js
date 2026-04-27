@@ -60,9 +60,33 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, error: 'Imagem original ainda não está pronta' });
   }
 
-  const { editPrompt, model: requestedModel } = req.body || {};
+  const { editPrompt, model: requestedModel, additionalRefs } = req.body || {};
   if (!editPrompt || typeof editPrompt !== 'string' || !editPrompt.trim()) {
     return res.status(400).json({ success: false, error: 'editPrompt obrigatório (descreva a mudança)' });
+  }
+
+  // v1.2: refs ADICIONAIS que o user anexou no input de edit (até 3 — junto com
+  // a imagem original como char ref, dá no máximo 4, dentro do cap do gpt-image-2).
+  // Validação igual ao /generate: apenas /uploads/ internos.
+  function isInternalUploadUrl(url) {
+    if (typeof url !== 'string') return false;
+    if (!url.startsWith('/uploads/')) return false;
+    if (url.includes('..') || url.includes('//') || url.includes('\0')) return false;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return false;
+    return true;
+  }
+  const validatedAdditional = [];
+  if (Array.isArray(additionalRefs)) {
+    if (additionalRefs.length > 3) {
+      return res.status(400).json({ success: false, error: 'máximo 3 imagens adicionais na edição' });
+    }
+    for (const r of additionalRefs) {
+      const url = typeof r === 'string' ? r : r?.url;
+      if (!isInternalUploadUrl(url)) {
+        return res.status(400).json({ success: false, error: `URL adicional inválida: ${url}` });
+      }
+      validatedAdditional.push({ url });
+    }
   }
 
   // Verifica se o arquivo da imagem original existe
@@ -100,7 +124,9 @@ export default async function handler(req, res) {
   }
   const chosenProvider = chosenModel === 'auto' ? 'auto' : (providerForModel(chosenModel) || 'auto');
 
-  // Refs: a imagem original como `character` + refs originais (preserva contexto)
+  // Refs: a imagem original como `character` + refs adicionais do user + refs
+  // originais (preserva contexto). v1.2: prioriza additionalRefs antes das
+  // originais quando o usuário anexa imagens novas no input de edit.
   const origMetadata = (() => {
     try {
       const meta = Array.isArray(orig.reference_image_metadata)
@@ -110,8 +136,11 @@ export default async function handler(req, res) {
     } catch { return []; }
   })();
   const refMetadata = [
+    // 1ª SEMPRE a imagem original como character (preserva composição)
     { url: orig.result_image_url, mode: 'character' },
-    ...origMetadata.slice(0, 4),  // até 5 total
+    // 2ª-N: refs novas do user (sem mode — autoMode classifica) + originais
+    ...validatedAdditional,
+    ...origMetadata.slice(0, Math.max(0, 4 - validatedAdditional.length)),
   ].slice(0, 5);
   const refUrls = refMetadata.map(r => r.url);
 

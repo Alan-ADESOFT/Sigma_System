@@ -56,19 +56,29 @@ async function generate(params) {
     });
   }
 
+  // v1.2: aspect ratio nativo via imageConfig.aspectRatio (Gemini 2.5+/3.x).
+  // Valores aceitos: '1:1','2:3','3:2','3:4','4:3','9:16','16:9','21:9'.
+  // Antes da v1.2, só o prompt mencionava o aspect — o que era ignorado pelo
+  // modelo, gerando imagens em aspect default mesmo com formato 'square_post'.
+  const VALID_ASPECTS = new Set(['1:1','2:3','3:2','3:4','4:3','9:16','16:9','21:9']);
+  const aspectForApi = VALID_ASPECTS.has(aspectRatio) ? aspectRatio : null;
+
   const url = `${BASE}/${modelId}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const body = {
     contents: [{
       role: 'user',
       parts: [
-        { text: prompt },
+        // Reforça aspect ratio no início do prompt (defesa em profundidade —
+        // imageConfig é honrado mas alguns prompts longos com refs sobrescrevem).
+        { text: aspectForApi
+            ? `[ASPECT RATIO: ${aspectForApi}] ${prompt}`
+            : prompt },
         ...imageParts,
       ],
     }],
     generationConfig: {
       responseModalities: ['IMAGE'],
-      // aspect ratio é informativo — o Gemini não tem param formal pra aspect,
-      // o prompt inclui a instrução. Mantemos o controle aqui pra futuras versões.
+      ...(aspectForApi ? { imageConfig: { aspectRatio: aspectForApi } } : {}),
     },
     safetySettings: [
       { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_ONLY_HIGH' },
