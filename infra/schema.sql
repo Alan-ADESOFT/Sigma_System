@@ -645,7 +645,7 @@ CREATE TABLE IF NOT EXISTS copy_sessions (
     model_used      VARCHAR(100),
     prompt_raiz     TEXT,
     output_text     TEXT,
-    tone            VARCHAR(100),
+    tone            TEXT,
     status          VARCHAR(50) NOT NULL DEFAULT 'draft',
     metadata        JSONB NOT NULL DEFAULT '{}',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -655,6 +655,10 @@ CREATE TABLE IF NOT EXISTS copy_sessions (
 CREATE INDEX IF NOT EXISTS idx_copy_sessions_tenant ON copy_sessions(tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_copy_sessions_folder ON copy_sessions(folder_id);
 CREATE INDEX IF NOT EXISTS idx_copy_sessions_client ON copy_sessions(client_id);
+
+-- Migração: tone era VARCHAR(100), mas usuários colam descrições longas de tom
+-- de voz (>100 chars). Promovido para TEXT.
+ALTER TABLE copy_sessions ALTER COLUMN tone TYPE TEXT;
 
 -- ============================================================
 -- 29. COPY_HISTORY (log de cada geracao/modificacao)
