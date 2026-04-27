@@ -18,6 +18,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import DashboardLayout from '../../../components/DashboardLayout';
 import { useAuth } from '../../../hooks/useAuth';
+import { useAdvancedMode } from '../../../hooks/useAdvancedMode';
 import { useNotification } from '../../../context/NotificationContext';
 import { Icon } from '../../../components/image/ImageIcons';
 import HowItWorksImage from '../../../components/image/HowItWorksImage';
@@ -55,6 +56,7 @@ export default function ImagePage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { notify } = useNotification();
+  const { advancedMode } = useAdvancedMode();
 
   // ─── Estado global ───────────────────────────────────────────
   const [clients, setClients] = useState([]);
@@ -374,6 +376,7 @@ export default function ImagePage() {
           brandbook={clientMeta[activeClient.id]?.brandbook || null}
           brandbookLoading={!clientMeta[activeClient.id] && !!activeClient.id}
           settings={settings}
+          advancedMode={advancedMode}
           onClose={() => { setActiveClient(null); setActiveFolder(null); }}
           onGenerate={handleGenerate}
           refreshTrigger={refreshTrigger}

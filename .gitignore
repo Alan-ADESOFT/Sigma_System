@@ -7,3 +7,4 @@ storage/
 sessions/
 .DS_Store
 Sigma_proposta/
+.claude/

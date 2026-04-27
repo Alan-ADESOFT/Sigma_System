@@ -45,6 +45,10 @@ const {
   describeReferencesByMode,
   describeFixedReference,
 } = require('../models/agentes/imagecreator/referenceVision');
+const {
+  classifyReferences,
+  roleToLegacyMode,
+} = require('../models/agentes/imagecreator/refClassifier');
 const { selectByHeuristic } = require('../models/agentes/imagecreator/heuristicSelector');
 const { selectStrategy } = require('../models/agentes/imagecreator/smartSelector');
 const { getMaxImageInputs } = require('../models/agentes/imagecreator/modelCapabilities');
@@ -131,9 +135,13 @@ async function saveImage(tenantId, jobId, imageBuffer, mimeType) {
 /**
  * Parse de refs do job. Prioriza reference_image_metadata (formato novo
  * com modo). Cai pra reference_image_urls (formato legado, assume 'inspiration').
+ *
+ * v1.2: Quando refs vêm SEM mode (auto-classify), retorna `needsAutoClassify=true`
+ * pra o caller chamar classifyReferences antes de prosseguir.
+ *
+ * @returns {{ refs: Array<{url, mode?}>, needsAutoClassify: boolean }}
  */
 function parseReferencesWithMode(job) {
-  // Tenta formato novo
   let metadata = [];
   try {
     metadata = Array.isArray(job.reference_image_metadata)
@@ -142,10 +150,19 @@ function parseReferencesWithMode(job) {
   } catch { metadata = []; }
 
   if (Array.isArray(metadata) && metadata.length > 0) {
-    return metadata.filter(r => r && typeof r.url === 'string').map(r => ({
-      url: r.url,
-      mode: ['inspiration', 'character', 'scene'].includes(r.mode) ? r.mode : 'inspiration',
-    }));
+    const filtered = metadata.filter(r => r && typeof r.url === 'string');
+    // Se todos têm mode válido (advancedMode ou jobs antigos), retorna direto
+    const allHaveMode = filtered.every(r =>
+      ['inspiration', 'character', 'scene'].includes(r.mode)
+    );
+    if (allHaveMode) {
+      return { refs: filtered.map(r => ({ url: r.url, mode: r.mode })), needsAutoClassify: false };
+    }
+    // Pelo menos um sem mode: classificar tudo (a classificação considera contexto)
+    return {
+      refs: filtered.map(r => ({ url: r.url, mode: r.mode || null })),
+      needsAutoClassify: true,
+    };
   }
 
   // Fallback legado
@@ -155,7 +172,10 @@ function parseReferencesWithMode(job) {
       ? job.reference_image_urls
       : JSON.parse(job.reference_image_urls || '[]');
   } catch { urls = []; }
-  return urls.filter(u => typeof u === 'string').map(url => ({ url, mode: 'inspiration' }));
+  return {
+    refs: urls.filter(u => typeof u === 'string').map(url => ({ url, mode: 'inspiration' })),
+    needsAutoClassify: false,
+  };
 }
 
 /**
@@ -333,8 +353,36 @@ async function processJob(job) {
       }
     }
 
-    // 3. Parse de refs com modo
-    const refs = parseReferencesWithMode(job);
+    // 3. Parse de refs com modo + auto-classificação (v1.2)
+    const parsed = parseReferencesWithMode(job);
+    let refs = parsed.refs;
+
+    if (parsed.needsAutoClassify && refs.length > 0) {
+      console.log('[INFO][Worker] refs sem modo — chamando refClassifier', {
+        jobId: job.id, count: refs.length,
+      });
+      const classified = await classifyReferences({
+        refs,
+        rawDescription: job.raw_description,
+        tenantId: job.tenant_id,
+        clientId: job.client_id,
+        jobId: job.id,
+      });
+
+      // Persiste o resultado bruto pra debug
+      await updateJobStatus(job.id, 'running', {
+        autoClassifiedRefs: classified,
+      });
+
+      // Mapeia role → mode legado pro restante do pipeline
+      refs = classified.map(c => ({
+        url: c.url,
+        mode: roleToLegacyMode(c.role),
+        // Carrega hasFace/isProduct pro autoMode (v1.2)
+        hasFace: !!c.hasFace,
+        isProduct: !!c.isProduct,
+      }));
+    }
 
     // 4. Fixed refs do brandbook (cache 30d)
     const fixedRefDescriptions = brandbook

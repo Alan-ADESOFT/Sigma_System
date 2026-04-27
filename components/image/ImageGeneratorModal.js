@@ -64,6 +64,7 @@ export default function ImageGeneratorModal({
   brandbook,
   brandbookLoading,
   settings,
+  advancedMode = false,  // v1.2: toggle Cmd+Shift+A
   onClose,
   onGenerate,
   refreshTrigger = 0,
@@ -236,11 +237,11 @@ export default function ImageGeneratorModal({
     }
     setSubmitting(true);
     try {
-      // Sprint v1.1 — abril 2026: ReferenceUploader devolve [{url, mode}].
-      // Mantemos referenceImages (formato novo). Se algum chamador passar
-      // strings legadas, normaliza pra { url, mode: 'inspiration' }.
+      // Sprint v1.2 — abril 2026: ReferenceUploader devolve [{url}] (sem mode).
+      // O backend (refClassifier) classifica automaticamente. Strings legadas
+      // viram { url } puro também.
       const refsNormalized = (referenceUrls || []).map(r =>
-        typeof r === 'string' ? { url: r, mode: 'inspiration' } : r
+        typeof r === 'string' ? { url: r } : r
       );
       const body = {
         rawDescription: description.trim(),
@@ -535,7 +536,11 @@ export default function ImageGeneratorModal({
                   Referências
                   <span className={styles.controlHint}>até 5</span>
                 </div>
-                <ReferenceUploader value={referenceUrls} onChange={setReferenceUrls} />
+                <ReferenceUploader
+                  value={referenceUrls}
+                  onChange={setReferenceUrls}
+                  advancedMode={advancedMode}
+                />
               </div>
 
               <div className={styles.controlGroup}>
