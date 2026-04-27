@@ -418,9 +418,30 @@
 .detailMeta {
   padding: 22px 24px;
   overflow-y: auto;
+  /* CRÍTICO: grid items têm min-height: auto por default, o que ignora
+     overflow e deixa o painel crescer infinitamente — usuário não conseguia
+     rolar pra ver botões abaixo do editor de IA. min-height: 0 + max-height
+     explícito força o container a respeitar o cap do .detailCard (90vh). */
+  min-height: 0;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* Scrollbar visível pra deixar claro que rola */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 0, 51, 0.35) rgba(255, 255, 255, 0.04);
+}
+
+.detailMeta::-webkit-scrollbar { width: 8px; }
+.detailMeta::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+}
+.detailMeta::-webkit-scrollbar-thumb {
+  background: rgba(255, 0, 51, 0.35);
+  border-radius: 4px;
+}
+.detailMeta::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 0, 51, 0.55);
 }
 
 .detailMetaTitle {
