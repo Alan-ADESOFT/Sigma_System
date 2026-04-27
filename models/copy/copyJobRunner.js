@@ -341,7 +341,17 @@ async function processCopyJob(jobId) {
     );
     await notifyJobDone(updated, job.kind);
   } catch (err) {
-    console.error('[ERRO][copyJobRunner:process]', { jobId, error: err.message });
+    console.error('[ERRO][copyJobRunner:process]', {
+      jobId,
+      error: err.message,
+      pgCode: err.code,
+      pgColumn: err.column,
+      pgTable: err.table,
+      pgConstraint: err.constraint,
+      pgRoutine: err.routine,
+      pgWhere: err.where,
+      stack: err.stack?.split('\n').slice(0, 5).join('\n'),
+    });
     if (job) {
       try {
         await query(
