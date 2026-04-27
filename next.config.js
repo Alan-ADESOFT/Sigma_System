@@ -50,6 +50,15 @@ const nextConfig = {
       { source: '/dashboard/settings/image', headers: SECURITY_HEADERS },
     ];
   },
+  // /uploads/* é volume persistente (Railway). Em produção o `next start` não
+  // relê public/ em runtime — arquivos novos não aparecem. Reescrevemos pra
+  // um handler API que lê do disco a cada request. Arquivos que JÁ existiam
+  // em public/ no build (logos, etc) continuam servidos diretamente.
+  async rewrites() {
+    return [
+      { source: '/uploads/:path*', destination: '/api/_uploads/:path*' },
+    ];
+  },
   // ── Webpack ──────────────────────────────────────────────────────────────
   // CONTEXTO: o instrumentation.js (raiz) é compilado pra AMBOS runtimes
   // (Node e Edge). O guard real que evita o build do Edge tracejar sharp está
