@@ -25,6 +25,7 @@ export default async function handler(req, res) {
   const {
     clientId, folderId, status,
     starred, scopeUser,
+    parentJobId,
     limit, offset,
   } = req.query;
 
@@ -35,6 +36,7 @@ export default async function handler(req, res) {
     folderId:  folderId === 'null' ? null : (folderId || undefined),
     status:    status || undefined,
     starredOnly: starred === 'true',
+    parentJobId: parentJobId || undefined,  // v1.2: lista versões do mesmo lineage
     limit:     Math.min(Math.max(parseInt(limit) || 20, 1), 100),
     offset:    Math.max(parseInt(offset) || 0, 0),
   };

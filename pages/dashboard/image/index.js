@@ -478,6 +478,7 @@ export default function ImagePage() {
             const idx = list.findIndex(j => j.id === detailJob.id);
             if (idx >= 0 && idx < list.length - 1) setDetailJob(list[idx + 1]);
           }}
+          onSelectVersion={(v) => setDetailJob(v)}
           onRegenerate={(j) => {
             setDetailJob(null);
             (async () => {

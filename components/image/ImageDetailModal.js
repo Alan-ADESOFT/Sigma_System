@@ -32,6 +32,7 @@ export default function ImageDetailModal({
   onEditApplied,
   onPrev,    // v1.2: navegação com ←/→
   onNext,
+  onSelectVersion,  // v1.2: click na strip de versões troca o job
 }) {
   const { notify } = useNotification();
   const [title, setTitle] = useState(job?.title || '');
@@ -43,13 +44,40 @@ export default function ImageDetailModal({
   );
   const [editPrompt, setEditPrompt] = useState('');
   const [editSubmitting, setEditSubmitting] = useState(false);
+  // v1.2: modelo de edição. Default 'gpt-image-2'; auto / fal-ai/flux-pro/kontext.
+  const [editModel, setEditModel] = useState('gpt-image-2');
   const editInputRef = useRef(null);
+  // v1.2: lineage de versões (job.parent_job_id chain)
+  const [versions, setVersions] = useState([]);
 
   useEffect(() => {
     setTitle(job?.title || '');
     setShowEditInput(!!(job?.status === 'done' && job?.result_image_url));
     setEditPrompt('');
   }, [job?.id, job?.title, job?.status, job?.result_image_url]);
+
+  // v1.2: carrega lineage de versões (parent_job_id chain).
+  // Se este job tem parent, usa o parent como root; senão, este job é o root.
+  useEffect(() => {
+    if (!job?.id) { setVersions([]); return; }
+    const rootId = job.parent_job_id || job.id;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/image/jobs?parentJobId=${rootId}&limit=20`);
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.success && Array.isArray(json.data)) {
+          // Ordena cronologicamente (root → mais recente)
+          const sorted = [...json.data].sort((a, b) =>
+            new Date(a.created_at) - new Date(b.created_at)
+          );
+          setVersions(sorted);
+        }
+      } catch { /* best-effort */ }
+    })();
+    return () => { cancelled = true; };
+  }, [job?.id, job?.parent_job_id]);
 
   // Esc fecha + ←/→ navega + Cmd/Ctrl+E foca o input de edição (v1.2)
   useEffect(() => {
@@ -114,7 +142,11 @@ export default function ImageDetailModal({
       const res = await fetch(`/api/image/jobs/${job.id}/edit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ editPrompt: editPrompt.trim() }),
+        body: JSON.stringify({
+          editPrompt: editPrompt.trim(),
+          // v1.2: 'auto' não vai no body (deixa o backend escolher)
+          ...(editModel && editModel !== 'auto' ? { model: editModel } : {}),
+        }),
       });
       const json = await res.json();
       if (res.status === 429) {
@@ -384,17 +416,95 @@ export default function ImageDetailModal({
                   if (e.key === 'Escape') { e.target.blur(); }
                 }}
               />
-              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setShowEditInput(false); setEditPrompt(''); }} disabled={editSubmitting}>
-                  Cancelar
-                </button>
-                <button type="button" className="sigma-btn-primary btn-sm" onClick={applyEdit} disabled={editSubmitting || !editPrompt.trim()}>
-                  <Icon name="zap" size={11} />
-                  {editSubmitting ? 'Enviando...' : 'Aplicar edição'}
-                </button>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'space-between' }}>
+                <select
+                  value={editModel}
+                  onChange={e => setEditModel(e.target.value)}
+                  disabled={editSubmitting}
+                  className="select"
+                  style={{ fontSize: '0.7rem', padding: '4px 8px', maxWidth: 180 }}
+                  title="Modelo de IA usado pra edição"
+                >
+                  <option value="auto">Auto (recomendado)</option>
+                  <option value="gpt-image-2">GPT Image 2</option>
+                  <option value="fal-ai/flux-pro/kontext">Flux Kontext Pro</option>
+                </select>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => { setShowEditInput(false); setEditPrompt(''); }}
+                    disabled={editSubmitting}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="sigma-btn-primary btn-sm"
+                    onClick={applyEdit}
+                    disabled={editSubmitting || !editPrompt.trim()}
+                  >
+                    <Icon name="zap" size={11} />
+                    {editSubmitting ? 'Enviando...' : 'Aplicar edição'}
+                  </button>
+                </div>
               </div>
               <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>
-                A imagem atual vira referência (modo Personagem) e o sistema escolhe Flux Kontext Pro / Nano Banana 2 pra preservar a composição enquanto aplica sua mudança.
+                A imagem atual vira referência (modo Personagem) e o modelo escolhido aplica sua mudança preservando o resto.
+              </div>
+            </div>
+          )}
+
+          {/* v1.2: strip de versões (lineage do parent_job_id). Mostra
+              apenas se há mais de 1 (root + N edições). */}
+          {versions.length > 1 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+              <span className={styles.detailFieldLabel}>
+                Versões deste lineage ({versions.length})
+              </span>
+              <div style={{
+                display: 'flex',
+                gap: 6,
+                overflowX: 'auto',
+                paddingBottom: 4,
+              }}>
+                {versions.map((v) => {
+                  const isCurrent = v.id === job.id;
+                  return (
+                    <div
+                      key={v.id}
+                      onClick={() => {
+                        if (!isCurrent && onSelectVersion) onSelectVersion(v);
+                      }}
+                      title={`${v.title || 'Sem título'} · ${new Date(v.created_at).toLocaleString('pt-BR')}${v.parent_job_id ? ' · edição' : ' · original'}`}
+                      style={{
+                        position: 'relative',
+                        flex: '0 0 auto',
+                        width: 64, height: 64,
+                        borderRadius: 4,
+                        border: isCurrent
+                          ? '2px solid var(--brand-500)'
+                          : '1px solid var(--border-default)',
+                        overflow: 'hidden',
+                        cursor: isCurrent ? 'default' : 'pointer',
+                        opacity: isCurrent ? 1 : 0.75,
+                      }}
+                    >
+                      {v.result_thumbnail_url
+                        ? <img src={v.result_thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : <div style={{ width: '100%', height: '100%', background: 'var(--surface-card)' }} />
+                      }
+                      {!v.parent_job_id && (
+                        <span style={{
+                          position: 'absolute', top: 2, left: 2,
+                          background: 'rgba(0,0,0,0.7)', color: '#fff',
+                          fontFamily: 'var(--font-mono)', fontSize: '0.5rem',
+                          padding: '1px 4px', borderRadius: 2, letterSpacing: '0.05em',
+                        }}>ORIG</span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

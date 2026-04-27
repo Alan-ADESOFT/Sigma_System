@@ -189,7 +189,7 @@ async function getJobById(id, tenantId) {
 async function listJobs(opts = {}) {
   const {
     tenantId, userId, clientId, folderId, status,
-    starredOnly, limit = 20, offset = 0,
+    starredOnly, parentJobId, limit = 20, offset = 0,
   } = opts;
   if (!tenantId) throw new Error('listJobs: tenantId obrigatório');
 
@@ -206,6 +206,11 @@ async function listJobs(opts = {}) {
   }
   if (status)    { params.push(status);    where.push(`j.status = $${params.length}`); }
   if (starredOnly) where.push(`j.is_starred = true`);
+  // v1.2: lineage de edições — lista o job-pai E todos descendentes
+  if (parentJobId) {
+    params.push(parentJobId);
+    where.push(`(j.parent_job_id = $${params.length} OR j.id = $${params.length})`);
+  }
 
   params.push(limit);
   const limitParam = `$${params.length}`;
@@ -221,6 +226,7 @@ async function listJobs(opts = {}) {
             j.duration_ms, j.cost_usd,
             j.brandbook_id, j.brandbook_used, j.template_id,
             j.is_template_saved, j.is_starred,
+            j.parent_job_id, j.title,
             j.created_at, j.started_at, j.completed_at,
             j.user_id, u.name AS user_name,
             j.client_id, c.company_name AS client_name,
