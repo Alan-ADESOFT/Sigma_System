@@ -85,15 +85,35 @@ function safeParseJSON(text) {
 async function classifyReferences({ refs, rawDescription, tenantId, clientId, jobId }) {
   if (!Array.isArray(refs) || refs.length === 0) return [];
 
-  console.log('[INFO][RefClassifier] classificando refs', {
-    tenantId, jobId, count: refs.length,
+  // Refs com mode já setado pelo caller são preservadas — não desperdiçar
+  // tokens reclassificando + evita conflito (ex: edit envia a imagem original
+  // explicitamente como 'character', não queremos o classifier sobrescrever).
+  const preserved = refs.filter(r => r?.url && VALID_ROLES.includes(r.mode));
+  const toClassify = refs.filter(r => r?.url && !VALID_ROLES.includes(r.mode));
+
+  console.log('[INFO][RefClassifier] processando refs', {
+    tenantId, jobId,
+    total: refs.length,
+    preserved: preserved.length,
+    toClassify: toClassify.length,
   });
 
-  const instruction = CLASSIFIER_INSTRUCTION_TEMPLATE(rawDescription);
-  const out = [];
+  const out = [
+    ...preserved.map(r => ({
+      url: r.url,
+      role: r.mode,
+      hasFace: !!r.hasFace,
+      isProduct: !!r.isProduct,
+      shortDescription: r.shortDescription || '',
+      classifierSkipped: true,
+    })),
+  ];
 
-  for (const ref of refs) {
-    if (!ref?.url) continue;
+  if (toClassify.length === 0) return out;
+
+  const instruction = CLASSIFIER_INSTRUCTION_TEMPLATE(rawDescription);
+
+  for (const ref of toClassify) {
 
     // Fallback default — usado em qualquer caminho de erro
     const fallback = {

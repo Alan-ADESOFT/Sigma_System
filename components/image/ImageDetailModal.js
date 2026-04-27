@@ -61,48 +61,71 @@ export default function ImageDetailModal({
     setEditRefs([]);
   }, [job?.id, job?.title, job?.status, job?.result_image_url]);
 
-  // v1.2: upload das refs anexadas no editor
+  // Upload das refs anexadas no editor.
+  // Guard `uploadInFlightRef` previne race condition: se o user clica "Anexar"
+  // duas vezes em rápida sucessão, ambas as chamadas leriam editRefs.length
+  // stale (3-0=3) e poderiam subir 6 imagens. O ref é checado e setado
+  // sincronamente antes de qualquer await.
+  const uploadInFlightRef = useRef(false);
+  const MAX_REFS = 3;
+
   async function handleEditUpload(files) {
     if (!files || files.length === 0) return;
-    const remaining = 3 - editRefs.length;
-    if (remaining <= 0) {
-      notify('Máximo 3 imagens adicionais', 'warning');
+    if (uploadInFlightRef.current) {
+      notify('Aguarde o upload anterior terminar', 'info', 2000);
       return;
     }
-    const accepted = Array.from(files).slice(0, remaining);
-    const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
+    uploadInFlightRef.current = true;
     setEditUploading(true);
-    const newRefs = [];
-    for (const file of accepted) {
-      if (!ALLOWED.includes(file.type)) {
-        notify(`Formato inválido: ${file.name}`, 'error');
-        continue;
+    try {
+      const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
+      const filesArray = Array.from(files);
+
+      // Calcula o limite usando o estado atual via setter functional
+      // (evita stale-closure read de editRefs.length).
+      let currentCount = 0;
+      setEditRefs(prev => { currentCount = prev.length; return prev; });
+      const remaining = MAX_REFS - currentCount;
+      if (remaining <= 0) {
+        notify(`Máximo ${MAX_REFS} imagens adicionais`, 'warning');
+        return;
       }
-      if (file.size > 10 * 1024 * 1024) {
-        notify(`${file.name} excede 10 MB`, 'error');
-        continue;
-      }
-      try {
-        const fd = new FormData();
-        fd.append('file', file);
-        const res = await fetch('/api/upload', { method: 'POST', body: fd });
-        const json = await res.json();
-        if (json.success && json.url) {
-          // Normaliza pra path interno
+
+      const accepted = filesArray.slice(0, remaining);
+      const newRefs = [];
+      for (const file of accepted) {
+        if (!ALLOWED.includes(file.type)) {
+          notify(`Formato inválido: ${file.name}`, 'error');
+          continue;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          notify(`${file.name} excede 10 MB`, 'error');
+          continue;
+        }
+        try {
+          const fd = new FormData();
+          fd.append('file', file);
+          const res = await fetch('/api/upload', { method: 'POST', body: fd });
+          const json = await res.json();
+          if (!json.success || !json.url) throw new Error(json.error || 'falha no upload');
           let url = json.url;
           if (!url.startsWith('/')) {
-            try { url = new URL(url).pathname; } catch { /* mantem */ }
+            try { url = new URL(url).pathname; } catch { /* mantém */ }
           }
           newRefs.push({ url });
-        } else {
-          throw new Error(json.error || 'falha no upload');
+        } catch (err) {
+          notify(`Erro: ${err.message}`, 'error');
         }
-      } catch (err) {
-        notify(`Erro: ${err.message}`, 'error');
       }
+      // Adição final via setter functional + cap defensivo (mesmo se
+      // uploadInFlight foi bypassado, nunca passa de MAX_REFS).
+      if (newRefs.length) {
+        setEditRefs(prev => [...prev, ...newRefs].slice(0, MAX_REFS));
+      }
+    } finally {
+      uploadInFlightRef.current = false;
+      setEditUploading(false);
     }
-    setEditUploading(false);
-    if (newRefs.length) setEditRefs(prev => [...prev, ...newRefs]);
   }
 
   // v1.2: carrega lineage de versões (parent_job_id chain).

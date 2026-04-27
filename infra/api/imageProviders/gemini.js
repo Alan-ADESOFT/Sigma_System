@@ -56,10 +56,12 @@ async function generate(params) {
     });
   }
 
-  // v1.2: aspect ratio nativo via imageConfig.aspectRatio (Gemini 2.5+/3.x).
+  // Aspect ratio nativo via imageConfig.aspectRatio (Gemini 2.5+/3.x).
   // Valores aceitos: '1:1','2:3','3:2','3:4','4:3','9:16','16:9','21:9'.
-  // Antes da v1.2, só o prompt mencionava o aspect — o que era ignorado pelo
-  // modelo, gerando imagens em aspect default mesmo com formato 'square_post'.
+  // Antes desse fix, só o prompt mencionava o aspect — ignorado pelo modelo.
+  // NÃO prefixar o prompt com "[ASPECT RATIO: X]": brackets podem ser
+  // interpretados como texto a renderizar em alguns casos. O imageConfig
+  // sozinho é o canal correto.
   const VALID_ASPECTS = new Set(['1:1','2:3','3:2','3:4','4:3','9:16','16:9','21:9']);
   const aspectForApi = VALID_ASPECTS.has(aspectRatio) ? aspectRatio : null;
 
@@ -68,11 +70,7 @@ async function generate(params) {
     contents: [{
       role: 'user',
       parts: [
-        // Reforça aspect ratio no início do prompt (defesa em profundidade —
-        // imageConfig é honrado mas alguns prompts longos com refs sobrescrevem).
-        { text: aspectForApi
-            ? `[ASPECT RATIO: ${aspectForApi}] ${prompt}`
-            : prompt },
+        { text: prompt },
         ...imageParts,
       ],
     }],

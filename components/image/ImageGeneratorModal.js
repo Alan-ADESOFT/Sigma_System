@@ -109,21 +109,28 @@ export default function ImageGeneratorModal({
   // ─── Context menu (v1.2) ──────────────────────────────────────
   const [contextMenu, setContextMenu] = useState(null); // { x, y, job } | null
 
-  // ─── Templates (v1.2 — montado no workspace) ──────────────────
-  // refreshKey força reload da lista quando salvar um template novo
+  // refreshKey força reload da TemplatesList quando salvar um template novo
   const [templatesRefresh, setTemplatesRefresh] = useState(0);
-  // Aplica template aos campos do workspace (chamado pelo TemplatesList.onUse)
+
+  // Aplica template aos campos do workspace (chamado pelo TemplatesList.onUse).
+  // O Neon serverless driver às vezes retorna JSONB como string crua —
+  // outros pontos do código (parseReferencesWithMode, refsArray) já fazem
+  // esse parse defensivo, mantemos a convenção.
   function applyTemplate(tpl) {
     if (!tpl) return;
     if (tpl.format) setFormat(tpl.format);
     if (tpl.aspect_ratio) setAspectRatio(tpl.aspect_ratio);
-    // tpl.model é só sugestão — em modo normal sempre 'auto'. Em advanced
-    // respeita o que veio.
+    // tpl.model é só sugestão — fluxo normal usa 'auto'. Modo avançado respeita.
     if (advancedMode && tpl.model) setModel(tpl.model);
     if (tpl.raw_description) setDescription(tpl.raw_description);
     if (tpl.observations) setObservations(tpl.observations);
-    if (Array.isArray(tpl.reference_image_metadata) && tpl.reference_image_metadata.length > 0) {
-      setReferenceUrls(tpl.reference_image_metadata);
+
+    let refs = tpl.reference_image_metadata;
+    if (typeof refs === 'string') {
+      try { refs = JSON.parse(refs); } catch { refs = []; }
+    }
+    if (Array.isArray(refs) && refs.length > 0) {
+      setReferenceUrls(refs);
     }
   }
 

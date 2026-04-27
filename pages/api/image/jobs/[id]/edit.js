@@ -25,6 +25,9 @@ const { checkImageRateLimit } = require('../../../../../infra/imageRateLimit');
 const { getOrCreate: getSettings } = require('../../../../../models/imageSettings.model');
 const { notifyNewJob } = require('../../../../../infra/imageJobEmitter');
 const { providerForModel } = require('../../../../../infra/api/imageProviders');
+const { isInternalUploadUrl } = require('../../../../../lib/url-validation');
+
+const MAX_ADDITIONAL_REFS = 3;
 
 // Modelos preferidos pra edição (em ordem). Worker escolhe o 1º que estiver
 // no enabled_models do tenant.
@@ -65,20 +68,15 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, error: 'editPrompt obrigatório (descreva a mudança)' });
   }
 
-  // v1.2: refs ADICIONAIS que o user anexou no input de edit (até 3 — junto com
-  // a imagem original como char ref, dá no máximo 4, dentro do cap do gpt-image-2).
-  // Validação igual ao /generate: apenas /uploads/ internos.
-  function isInternalUploadUrl(url) {
-    if (typeof url !== 'string') return false;
-    if (!url.startsWith('/uploads/')) return false;
-    if (url.includes('..') || url.includes('//') || url.includes('\0')) return false;
-    if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return false;
-    return true;
-  }
+  // Refs adicionais que o user anexou no input de edit. Limite alinhado com
+  // o cap do gpt-image-2 (4) menos a imagem original como base.
   const validatedAdditional = [];
   if (Array.isArray(additionalRefs)) {
-    if (additionalRefs.length > 3) {
-      return res.status(400).json({ success: false, error: 'máximo 3 imagens adicionais na edição' });
+    if (additionalRefs.length > MAX_ADDITIONAL_REFS) {
+      return res.status(400).json({
+        success: false,
+        error: `máximo ${MAX_ADDITIONAL_REFS} imagens adicionais na edição`,
+      });
     }
     for (const r of additionalRefs) {
       const url = typeof r === 'string' ? r : r?.url;
@@ -124,9 +122,10 @@ export default async function handler(req, res) {
   }
   const chosenProvider = chosenModel === 'auto' ? 'auto' : (providerForModel(chosenModel) || 'auto');
 
-  // Refs: a imagem original como `character` + refs adicionais do user + refs
-  // originais (preserva contexto). v1.2: prioriza additionalRefs antes das
-  // originais quando o usuário anexa imagens novas no input de edit.
+  // Refs do novo job: imagem original (1ª, com mode='character' pra garantir
+  // preservação de composição) + adicionais do user (sem mode — refClassifier
+  // vai classificar) + refs originais com modes já estabelecidos. O classifier
+  // pula refs que já têm mode válido.
   const origMetadata = (() => {
     try {
       const meta = Array.isArray(orig.reference_image_metadata)
@@ -136,9 +135,7 @@ export default async function handler(req, res) {
     } catch { return []; }
   })();
   const refMetadata = [
-    // 1ª SEMPRE a imagem original como character (preserva composição)
     { url: orig.result_image_url, mode: 'character' },
-    // 2ª-N: refs novas do user (sem mode — autoMode classifica) + originais
     ...validatedAdditional,
     ...origMetadata.slice(0, Math.max(0, 4 - validatedAdditional.length)),
   ].slice(0, 5);
