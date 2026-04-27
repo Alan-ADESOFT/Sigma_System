@@ -48,8 +48,9 @@ Auth (`lib/auth.js`, `pages/api/auth/*`, `hooks/useAuth.js`) usa scrypt + cookie
 HMAC. `lib/api-auth.requireAuth(req)` retorna o user; `user.tenant_id` aponta
 pro `WORKSPACE_TENANT_ID` por compatibilidade com handlers antigos.
 
-Tasks são a exceção: filtro `WHERE (assigned_to = userId OR created_by = userId)`
-no `models/task.model.getTasksByTenant`. View=`team` libera tudo do workspace.
+Tasks são a exceção: filtro `WHERE assigned_to = userId` no
+`models/task.model.getTasksByTenant`. View=`team` libera tudo do workspace
+(inclusive tasks que o usuário criou pra outros).
 
 ### Directory layout (the parts that matter)
 ```
