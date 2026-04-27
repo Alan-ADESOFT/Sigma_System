@@ -505,20 +505,40 @@ export default function ImageGeneratorModal({
                   <div
                     className="glass-card"
                     style={{
-                      padding: '8px 12px',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: '0.7rem',
-                      color: 'var(--text-secondary)',
+                      padding: '10px 12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                    }}
+                  >
+                    <div style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: 6,
-                    }}
-                    title="O sistema escolhe o melhor modelo automaticamente baseado no seu pedido e nas referências."
-                  >
-                    <Icon name="sparkles" size={11} />
-                    <span style={{ color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Modelo: auto
-                    </span>
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.7rem',
+                      color: 'var(--text-secondary)',
+                    }}>
+                      <Icon name="sparkles" size={11} />
+                      <span style={{
+                        color: 'var(--text-primary)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                      }}>
+                        Modelo: auto
+                      </span>
+                    </div>
+                    <div style={{
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '0.68rem',
+                      color: 'var(--text-muted)',
+                      lineHeight: 1.4,
+                    }}>
+                      O sistema escolhe o melhor modelo automaticamente para
+                      cada pedido — baseado no seu texto, nas referências e
+                      no que você quer preservar (pessoa, cenário, estilo).
+                      Sem precisar configurar.
+                    </div>
                   </div>
                 )}
               </div>

@@ -336,6 +336,10 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* min-width: 0 é essencial em flex container — sem isso, conteúdo
+     com overflow horizontal (HistoryStrip cheia) empurra a coluna
+     além do espaço do grid e quebra o modal. */
+  min-width: 0;
   background: rgba(0,0,0,0.4);
 }
 
@@ -518,6 +522,9 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;     /* deixa HistoryStrip respeitar largura da coluna */
+  max-width: 100%;
+  overflow: hidden; /* contém qualquer leak de filho mal-comportado */
 }
 
 .historyHeader {
@@ -727,27 +734,55 @@
 }
 
 /* ─── HistoryStrip (v1.2 — horizontal scrollable) ─── */
+/* CRÍTICO: min-width: 0 nos flex children pra strip respeitar largura do
+   parent (sem isso, thumbs empurram o container e quebram o layout do modal).
+   width: 100% explícito + max-width: 100% como cinto-e-suspensório. */
 .historyStripWrap {
   position: relative;
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   display: flex;
   align-items: center;
 }
 
 .historyStrip {
   flex: 1;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   gap: 8px;
   padding: 14px 18px;
   overflow-x: auto;
   overflow-y: hidden;
   scroll-behavior: smooth;
+  /* Sempre reserva espaço pra scrollbar (evita layout shift quando aparece) */
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
+  scrollbar-color: var(--brand-500) rgba(255,255,255,0.04);
 }
 
-.historyStrip::-webkit-scrollbar { height: 4px; }
-.historyStrip::-webkit-scrollbar-thumb { background: var(--dark-700); border-radius: 2px; }
+/* Scrollbar visível e clicável (era 4px de altura, fininho demais).
+   Track levemente escuro, thumb na cor brand pra ficar óbvio que arrasta. */
+.historyStrip::-webkit-scrollbar { height: 10px; }
+.historyStrip::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.03);
+  border-radius: 5px;
+  margin: 0 14px;
+}
+.historyStrip::-webkit-scrollbar-thumb {
+  background: rgba(255,0,51,0.35);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.historyStrip::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,0,51,0.55);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
 
 .historyStripThumb {
   position: relative;
