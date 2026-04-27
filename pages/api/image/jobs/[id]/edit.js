@@ -7,7 +7,6 @@
  * Modelo escolhido: por padrão Flux Kontext Pro (especialista em preservar
  * composição) ou Nano Banana 2 (multi-imagem). User pode forçar via body.model.
  *
- * Sprint v1.1 — abril 2026.
  *
  * Body:
  *   {
@@ -31,7 +30,7 @@ const MAX_ADDITIONAL_REFS = 3;
 
 // Modelos preferidos pra edição (em ordem). Worker escolhe o 1º que estiver
 // no enabled_models do tenant.
-// v1.2: GPT Image 2 lidera (alta fidelidade + edit pontual). Flux Kontext
+// GPT Image 2 lidera (alta fidelidade + edit pontual). Flux Kontext
 // continua segundo (preserva pessoa). Nano Banana 2 versátil.
 const EDIT_PREFERRED_MODELS = [
   'gpt-image-2',                      // edição pontual com alta fidelidade

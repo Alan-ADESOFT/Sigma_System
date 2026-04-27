@@ -3,7 +3,6 @@
  * @description Cria um novo job copiando os parâmetros do original mas
  * passando por toda a validação/rate limit de novo.
  *
- * Sprint v1.1 — abril 2026:
  *   · Preserva reference_image_metadata (com modos) — antes só copiava URLs planas
  *   · bypassCache=true por padrão (variação deve ser fresca, prompt novo)
  *     o usuário pode passar bypassCache=false explicitamente pra forçar reuso

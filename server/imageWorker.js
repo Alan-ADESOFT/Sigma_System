@@ -1,5 +1,5 @@
 /**
- * @fileoverview Worker em background do Gerador de Imagem (v1.1)
+ * @fileoverview Worker em background do Gerador de Imagem
  * @description Roda dentro do `server/instrumentation.js` no boot do Next.
  *   · Polling adaptativo: 2s normal, 5s ocioso, 10s muito ocioso
  *   · MAX_CONCURRENT_GLOBAL = 5 (limite v1.1 da sprint)
@@ -7,7 +7,6 @@
  *   · Cron diário às 03:00 chama cleanup_image_jobs() + remove arquivos órfãos
  *   · Timeout duro de 90s (configurável via settings.job_timeout_seconds)
  *
- * Sprint v1.1 — abril 2026:
  *   · Parse de refs com modo (inspiration|character|scene)
  *   · Fixed refs do brandbook (cache 30d das descrições Vision)
  *   · Smart Mode opcional (LLM decide modelo) ou heurística
@@ -49,7 +48,7 @@ const {
   classifyReferences,
   roleToLegacyMode,
 } = require('../models/agentes/imagecreator/refClassifier');
-// v1.2: heuristicSelector/smartSelector preservados em disco pra compat reversa
+// heuristicSelector/smartSelector preservados em disco pra compat reversa
 // com jobs antigos no histórico, mas o worker agora usa só autoMode.
 const { decide: autoModeDecide } = require('../models/agentes/imagecreator/autoMode');
 const { probeOpenAIImageModel } = require('../infra/api/imageProviders/_probe');
@@ -139,7 +138,7 @@ async function saveImage(tenantId, jobId, imageBuffer, mimeType) {
  * Parse de refs do job. Prioriza reference_image_metadata (formato novo
  * com modo). Cai pra reference_image_urls (formato legado, assume 'inspiration').
  *
- * v1.2: Quando refs vêm SEM mode (auto-classify), retorna `needsAutoClassify=true`
+ * Quando refs vêm SEM mode (auto-classify), retorna `needsAutoClassify=true`
  * pra o caller chamar classifyReferences antes de prosseguir.
  *
  * @returns {{ refs: Array<{url, mode?}>, needsAutoClassify: boolean }}
@@ -356,7 +355,7 @@ async function processJob(job) {
       }
     }
 
-    // 3. Parse de refs com modo + auto-classificação (v1.2)
+    // 3. Parse de refs com modo + auto-classificação
     const parsed = parseReferencesWithMode(job);
     let refs = parsed.refs;
 
@@ -381,7 +380,7 @@ async function processJob(job) {
       refs = classified.map(c => ({
         url: c.url,
         mode: roleToLegacyMode(c.role),
-        // Carrega hasFace/isProduct pro autoMode (v1.2)
+        // Carrega hasFace/isProduct pro autoMode
         hasFace: !!c.hasFace,
         isProduct: !!c.isProduct,
       }));
@@ -464,7 +463,7 @@ async function processJob(job) {
     // Exemplos do bug v1.1:
     //   · refs=5 + autoMode→fal/flux-kontext (max=1) → 4 refs descartadas
     //   · refs=6 + autoMode→gpt-image-2 (max=4) → 2 refs descartadas
-    // v1.2: tenta upgrade pra Nano Banana 2 (max=14) antes de cortar.
+    // tenta upgrade pra Nano Banana 2 (max=14) antes de cortar.
     const hasAnyRef = refs.length > 0;
     const hasCharRef = refs.some(r => r.mode === 'character');
     const wouldCutRefs = hasAnyRef && maxImages > 0 && maxImages < refs.length;
@@ -968,7 +967,7 @@ function startImageWorker() {
   });
   stats.startedAt = new Date().toISOString();
 
-  // v1.2: probe runtime do gpt-image-* disponível pra cada tenant que tem
+  // probe runtime do gpt-image-* disponível pra cada tenant que tem
   // chave OpenAI configurada. Não bloqueia o tick inicial — roda async.
   // Resolved cacheado em image_settings.openai_image_model_resolved.
   (async () => {

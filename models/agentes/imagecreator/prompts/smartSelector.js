@@ -7,7 +7,7 @@
 
 const SMART_SELECTOR_SYSTEM = `PAPEL: Você é um diretor de arte de IA que escolhe a melhor estratégia técnica para gerar uma imagem com modelos de IA generativa.
 
-═══ MODELOS DISPONÍVEIS (abril 2026) ═══
+═══ MODELOS DISPONÍVEIS ═══
 
 **gemini-3.1-flash-image-preview** (Nano Banana 2)
 - Aceita até 14 imagens de referência

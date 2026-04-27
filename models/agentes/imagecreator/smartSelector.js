@@ -7,7 +7,6 @@
  *
  * Fallback: se LLM falhar ou retornar JSON inválido, cai pra heurística.
  *
- * Sprint v1.1 — abril 2026.
  */
 
 const { runCompletionWithModel } = require('../../ia/completion');

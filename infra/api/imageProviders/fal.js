@@ -2,7 +2,6 @@
  * @fileoverview Provider Flux Kontext Pro (fal.ai) — especialista em
  * preservar pessoa/personagem exato da referência.
  *
- * Sprint v1.1 — abril 2026:
  *   · Modelo default: fal-ai/flux-pro/kontext
  *   · Aceita 1 image_url (URL pública obrigatória — não aceita base64)
  *   · Quando há ref `character`, prioriza-a; senão usa `scene`

@@ -6,7 +6,6 @@
  *   · Validações: max 5, max 10 MB cada, MIME jpeg/png/webp
  *   · POST pra /api/upload (já existe), guarda { url, mode? } no estado
  *
- * Sprint v1.2 — abril 2026: o usuário NÃO escolhe mais o modo. O backend
  * (refClassifier.js) classifica automaticamente em character/scene/
  * inspiration via Vision (gpt-4o-mini). O `<select>` de modo só aparece
  * quando `advancedMode=true` (toggle Cmd+Shift+A escondido pra debug).
@@ -85,7 +84,7 @@ export default function ReferenceUploader({ value = [], onChange, advancedMode =
         const json = await res.json();
         if (json.success && json.url) {
           const normalized = normalizeUploadUrl(json.url);
-          // v1.2: NÃO seta mode — backend (refClassifier) decide.
+          // NÃO seta mode — backend (refClassifier) decide.
           // Em advancedMode, default é 'inspiration' pro user trocar.
           newRefs.push(advancedMode ? { url: normalized, mode: 'inspiration' } : { url: normalized });
         } else {

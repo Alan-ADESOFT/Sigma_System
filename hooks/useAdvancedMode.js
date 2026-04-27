@@ -1,7 +1,7 @@
 /**
  * hooks/useAdvancedMode.js
  * ─────────────────────────────────────────────────────────────────────────────
- * Toggle global "Modo Avançado" do Gerador de Imagem (v1.2 — abril 2026).
+ * Toggle global "Modo Avançado" do Gerador de Imagem.
  *
  * Acionado por Cmd/Ctrl+Shift+A em qualquer ponto. Persiste em localStorage
  * pra sobreviver a reloads. Quando ativo, expõe controles de implementação

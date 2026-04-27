@@ -3,7 +3,6 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Workspace central do Gerador de Imagem.
  *
- * Sprint v1.1 — abril 2026:
  *   · Refs armazenadas como [{ url, mode }] (3 modos: inspiration|character|scene)
  *   · Modelo default 'auto' (smart mode ou heurística decide no worker)
  *   · Botão "Ver prompt" → abre modal com prompt otimizado + decisão
@@ -27,7 +26,6 @@ import PromptViewer from './PromptViewer';
 import ImageCard from './ImageCard';
 import TemplateModal from './TemplateModal';
 
-// Sprint v1.1 — histórico horizontal com setas de navegação.
 // Substitui o grid por uma linha única scrollável.
 function HistoryStrip({ jobs, renderCard }) {
   const scrollerRef = useRef(null);
@@ -422,7 +420,6 @@ export default function ImageWorkspace({
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [lastOptimized, setLastOptimized] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
-  // Sprint v1.1 — modo edição inline. Quando setado, substitui o painel
   // de criação por um EditPanel pré-carregado com a imagem como ref.
   const [editingJob, setEditingJob] = useState(null);
 
@@ -787,7 +784,6 @@ export default function ImageWorkspace({
             Sem resultados — gere sua primeira imagem
           </div>
         ) : (
-          // Sprint v1.1 — histórico em linha horizontal scrollável com setas
           <HistoryStrip
             jobs={jobs}
             renderCard={(j) => (

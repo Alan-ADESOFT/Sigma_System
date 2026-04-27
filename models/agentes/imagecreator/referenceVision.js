@@ -3,7 +3,6 @@
  * @description Antes de chamar o Prompt Engineer, todas as referências são
  * descritas em texto pra serem injetadas no prompt final.
  *
- * Sprint v1.1 — abril 2026: agora descreve por MODO (inspiration | character |
  * scene), com instruções específicas pra cada um. Provedores que aceitam
  * image input nativo (Nano Banana 2, Flux Kontext, GPT Image 2, Imagen 3 Cap)
  * recebem os bytes diretamente; os demais usam só a descrição textual.

@@ -3,7 +3,6 @@
  * @description Source of truth pra UI e backend sobre o que cada modelo aceita.
  * Cacheado por 1h em memória — capabilities mudam só quando schema é atualizado.
  *
- * Sprint v1.1 — abril 2026.
  */
 
 const { query, queryOne } = require('../../../infra/db');

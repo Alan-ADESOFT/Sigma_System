@@ -5,7 +5,6 @@
  * badge de custo ($/$$/$$$), badge de velocidade (raios) e flag de habilitado.
  * Modelos disabled aparecem acinzentados com tooltip.
  *
- * Sprint v1.1 — abril 2026: lineup novo de 5 modelos + opção 'auto' (smart
  * mode ou heurística decide).
  * ─────────────────────────────────────────────────────────────────────────────
  */

@@ -3,7 +3,6 @@
  * @description Editado inline no card/modal. Marca title_user_edited=true
  * pra que o gerador automático não sobrescreva depois.
  *
- * Sprint v1.1 — abril 2026.
  */
 
 const { resolveTenantId } = require('../../../../../infra/get-tenant-id');

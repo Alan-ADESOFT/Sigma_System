@@ -84,7 +84,7 @@ export default function ImagePage() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [refreshRate, setRefreshRate] = useState(0);
 
-  // v1.2: histórico do detail modal pra navegar com ←/→
+  // histórico do detail modal pra navegar com ←/→
   const [detailJobsList, setDetailJobsList] = useState([]);
 
   // ─── v1.2: carrega lista de jobs quando detail abre, pra ←/→ ─────

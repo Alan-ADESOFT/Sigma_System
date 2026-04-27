@@ -1,6 +1,6 @@
 /**
  * @fileoverview Probe runtime do modelo OpenAI Image disponível para a org.
- * @description Sprint v1.2 — abril/2026.
+ * @description Sprint v1.2
  *
  * Algumas orgs OpenAI não têm `gpt-image-2` habilitado (precisa verificação).
  * Este módulo testa em ordem `gpt-image-2` → `gpt-image-1.5` → `gpt-image-1`

@@ -4,7 +4,6 @@
  *   · Sem refs: POST /v1/images/generations (JSON)
  *   · Com refs: POST /v1/images/edits (multipart/form-data, image[] x N)
  *
- * Sprint v1.1 — abril 2026:
  *   · Modelo default: gpt-image-2
  *   · Aceita até 4 imagens em image[]
  *   · Suporta máscara opcional (não exposta na UI ainda)

@@ -1,7 +1,7 @@
 /**
  * components/image/HistoryStrip.js
  * ─────────────────────────────────────────────────────────────────────────────
- * Strip horizontal de thumbnails do histórico (v1.2 — abril/2026).
+ * Strip horizontal de thumbnails do histórico.
  * Substitui o grid 2D embaixo do preview no ImageGeneratorModal.
  *
  *   ◀  [thumb] [thumb] [thumb] [thumb] ...  ▶

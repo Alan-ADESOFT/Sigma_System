@@ -3,7 +3,6 @@
  * @description Otimiza o pedido bruto do operador em um prompt visual
  * profissional, adaptando o estilo de saída ao modelo de destino.
  *
- * Sprint v1.1 — abril 2026: lineup novo + reference modes + fixed refs.
  * O system prompt agora discrimina:
  *   · STYLE GUIDE (modo inspiration)
  *   · SUBJECT TO PRESERVE EXACTLY (modo character — vai como image input nativo)

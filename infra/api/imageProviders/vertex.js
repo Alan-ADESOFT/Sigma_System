@@ -3,7 +3,6 @@
  * @description JWT signing manual (sem SDK googleapis) pra trocar service
  * account JSON por access token. Cache do JSON parseado e do token (50min).
  *
- * Sprint v1.1 — abril 2026:
  *   · Imagen 4 (imagen-4.0-generate-001): TEXT-TO-IMAGE puro, NÃO aceita refs
  *   · Imagen 3 Capability (imagen-3.0-capability-001): aceita até 4 reference
  *     images com tipos REFERENCE_TYPE_SUBJECT (PERSON/PRODUCT/ANIMAL),

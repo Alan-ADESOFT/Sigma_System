@@ -4,7 +4,6 @@
  * Modal fullscreen para visualizar uma imagem específica + toda metadata.
  * Ações: Download, Variação, Salvar Template, Mover Pasta, Deletar.
  *
- * Sprint v1.1 — abril 2026:
  *   · Título editável inline (PUT /api/image/jobs/[id]/title)
  *   · Smart decision visível (modelo + reasoning + confidence)
  *   · Reference mode dos refs aplicados
@@ -30,26 +29,26 @@ export default function ImageDetailModal({
   onToggleStar,
   onTitleUpdate,
   onEditApplied,
-  onPrev,    // v1.2: navegação com ←/→
+  onPrev,    // navegação com ←/→
   onNext,
-  onSelectVersion,  // v1.2: click na strip de versões troca o job
+  onSelectVersion,  // click na strip de versões troca o job
 }) {
   const { notify } = useNotification();
   const [title, setTitle] = useState(job?.title || '');
   const [titleEditing, setTitleEditing] = useState(false);
   const [titleSaving, setTitleSaving] = useState(false);
-  // v1.2: editor inline JÁ ABERTO por padrão quando job concluído
+  // editor inline JÁ ABERTO por padrão quando job concluído
   const [showEditInput, setShowEditInput] = useState(
     !!(job?.status === 'done' && job?.result_image_url)
   );
   const [editPrompt, setEditPrompt] = useState('');
   const [editSubmitting, setEditSubmitting] = useState(false);
-  // v1.2: modelo de edição. Default 'gpt-image-2'; auto / fal-ai/flux-pro/kontext.
+  // modelo de edição. Default 'gpt-image-2'; auto / fal-ai/flux-pro/kontext.
   const [editModel, setEditModel] = useState('gpt-image-2');
   const editInputRef = useRef(null);
-  // v1.2: lineage de versões (job.parent_job_id chain)
+  // lineage de versões (job.parent_job_id chain)
   const [versions, setVersions] = useState([]);
-  // v1.2: imagens anexadas no input de edição (até 3 — junto com original = 4)
+  // imagens anexadas no input de edição (até 3 — junto com original = 4)
   const [editRefs, setEditRefs] = useState([]); // Array<{url}>
   const [editUploading, setEditUploading] = useState(false);
   const editFileInputRef = useRef(null);
@@ -128,7 +127,7 @@ export default function ImageDetailModal({
     }
   }
 
-  // v1.2: carrega lineage de versões (parent_job_id chain).
+  // carrega lineage de versões (parent_job_id chain).
   // Se este job tem parent, usa o parent como root; senão, este job é o root.
   useEffect(() => {
     if (!job?.id) { setVersions([]); return; }
@@ -151,7 +150,7 @@ export default function ImageDetailModal({
     return () => { cancelled = true; };
   }, [job?.id, job?.parent_job_id]);
 
-  // Esc fecha + ←/→ navega + Cmd/Ctrl+E foca o input de edição (v1.2)
+  // Esc fecha + ←/→ navega + Cmd/Ctrl+E foca o input de edição
   useEffect(() => {
     function onKey(e) {
       const tag = (e.target?.tagName || '').toLowerCase();
@@ -216,9 +215,9 @@ export default function ImageDetailModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           editPrompt: editPrompt.trim(),
-          // v1.2: 'auto' não vai no body (deixa o backend escolher)
+          // 'auto' não vai no body (deixa o backend escolher)
           ...(editModel && editModel !== 'auto' ? { model: editModel } : {}),
-          // v1.2: imagens anexadas no input de edit (até 3)
+          // imagens anexadas no input de edit (até 3)
           ...(editRefs.length > 0 ? { additionalRefs: editRefs } : {}),
         }),
       });
@@ -264,7 +263,7 @@ export default function ImageDetailModal({
     }
   }
 
-  // v1.2: detecção de divergência de brandbook. Se o job foi disparado com
+  // detecção de divergência de brandbook. Se o job foi disparado com
   // brandbook ativo (brandbook_id setado) mas brandbook_used=false, alguma
   // coisa abortou a injeção (cache divergente, erro de query, etc).
   // Mostra banner pra o user saber que precisa regenerar.
@@ -466,7 +465,7 @@ export default function ImageDetailModal({
             </div>
           )}
 
-          {/* Editor inline — sprint v1.1 */}
+          {/* Editor inline */}
           {showEditInput && (
             <div style={{
               padding: 12, marginTop: 4,
@@ -491,7 +490,7 @@ export default function ImageDetailModal({
                 }}
               />
 
-              {/* v1.2: anexar até 3 imagens adicionais como referência */}
+              {/* anexar até 3 imagens adicionais como referência */}
               <input
                 ref={editFileInputRef}
                 type="file"
@@ -581,7 +580,7 @@ export default function ImageDetailModal({
             </div>
           )}
 
-          {/* v1.2: strip de versões (lineage do parent_job_id). Mostra
+          {/* strip de versões (lineage do parent_job_id). Mostra
               apenas se há mais de 1 (root + N edições). */}
           {versions.length > 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>

@@ -2,7 +2,6 @@
  * @fileoverview Provider Gemini (Nano Banana 2) — image generation com
  * suporte a múltiplas imagens de referência nativamente.
  *
- * Sprint v1.1 — abril 2026:
  *   · Modelo default: gemini-3.1-flash-image-preview (Nano Banana 2)
  *   · Aceita até 14 imagens de referência via inlineData base64
  *   · Mantém consistência de até 4 personagens em multi-imagem

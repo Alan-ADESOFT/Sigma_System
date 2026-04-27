@@ -8,7 +8,6 @@
  *      (brandbook + fixed refs + refs por modo + smart decision + hints)
  *   5. Loga em ai_token_usage (operationType='image_prompt_engineer')
  *
- * Sprint v1.1 — abril 2026: aceita referenceDescriptionsByMode (3 modos),
  * fixed refs do brandbook, smart decision, e retorna imageInputs hints pro
  * worker passar pros providers.
  */
@@ -21,7 +20,7 @@ const { PROMPT_ENGINEER_SYSTEM, buildUserMessage } = require('./prompts/promptEn
 
 /**
  * Hash do conteúdo do brandbook (paleta + tipografia + fixed_references).
- * v1.2: incluído no hash do prompt pra invalidar cache quando o user
+ * incluído no hash do prompt pra invalidar cache quando o user
  * edita o MESMO brandbookId — `id` igual mas content novo deve gerar prompt
  * novo, senão cache devolve prompt antigo com cores antigas.
  */
@@ -45,9 +44,7 @@ function brandbookContentHash(bb) {
  * Hash determinístico do "input semântico" do prompt — ignora detalhes
  * que não mudam o significado do prompt final.
  *
- * Sprint v1.1: refsKey agora considera modo + descrição (cache invalida
  * corretamente quando user troca foto OU modo).
- * Sprint v1.2: brandbookContent invalida cache quando user edita brandbook
  * (mesmo id, conteúdo novo).
  */
 function calculateHash(input) {
@@ -82,7 +79,7 @@ function calculateHash(input) {
   const payload = JSON.stringify({
     raw:        (input.rawDescription || '').trim().toLowerCase(),
     brandbook:  input.brandbookId || null,
-    bbContent:  input.brandbookContentHash || '',  // v1.2 — invalida quando user edita o mesmo brandbook
+    bbContent:  input.brandbookContentHash || '',  // invalida quando user edita o mesmo brandbook
     format:     input.format,
     aspect:     input.aspectRatio,
     model:      input.model,

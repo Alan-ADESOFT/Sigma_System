@@ -67,10 +67,10 @@ export default function ImageGeneratorModal({
   brandbook,
   brandbookLoading,
   settings,
-  advancedMode = false,  // v1.2: toggle Cmd+Shift+A
+  advancedMode = false,  // toggle Cmd+Shift+A
   onClose,
   onGenerate,
-  onEditJob,           // v1.2: parent abre detail modal com editor inline
+  onEditJob,           // parent abre detail modal com editor inline
   refreshTrigger = 0,
 }) {
   const { notify } = useNotification();
@@ -78,7 +78,7 @@ export default function ImageGeneratorModal({
   // ─── Estado dos controles ──────────────────────────────────────
   const [format, setFormat] = useState('square_post');
   const [aspectRatio, setAspectRatio] = useState('1:1');
-  // v1.2: default sempre 'auto'. Settings.default_model só vale em modo avançado.
+  // default sempre 'auto'. Settings.default_model só vale em modo avançado.
   const [model, setModel] = useState('auto');
   const [description, setDescription] = useState('');
   const [observations, setObservations] = useState('');
@@ -106,7 +106,7 @@ export default function ImageGeneratorModal({
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templateSourceJob, setTemplateSourceJob] = useState(null);
 
-  // ─── Context menu (v1.2) ──────────────────────────────────────
+  // ─── Context menu ──────────────────────────────────────
   const [contextMenu, setContextMenu] = useState(null); // { x, y, job } | null
 
   // refreshKey força reload da TemplatesList quando salvar um template novo
@@ -285,7 +285,6 @@ export default function ImageGeneratorModal({
     }
     setSubmitting(true);
     try {
-      // Sprint v1.2 — abril 2026: ReferenceUploader devolve [{url}] (sem mode).
       // O backend (refClassifier) classifica automaticamente. Strings legadas
       // viram { url } puro também.
       const refsNormalized = (referenceUrls || []).map(r =>
@@ -641,7 +640,7 @@ export default function ImageGeneratorModal({
                 />
               </div>
 
-              {/* v1.2: Templates (só com cliente — templates são por-cliente) */}
+              {/* Templates (só com cliente — templates são por-cliente) */}
               {client?.id ? (
                 <div className={styles.controlGroup}>
                   <TemplatesList
@@ -852,13 +851,13 @@ export default function ImageGeneratorModal({
             onSave={() => {
               setShowTemplateModal(false);
               setTemplateSourceJob(null);
-              setTemplatesRefresh(k => k + 1);  // v1.2: re-fetch lista
+              setTemplatesRefresh(k => k + 1);  // re-fetch lista
               notify('Template salvo', 'success');
             }}
           />
         )}
 
-        {/* Context menu (botão direito numa thumb) — v1.2 */}
+        {/* Context menu (botão direito numa thumb) */}
         {contextMenu && (
           <ContextMenu
             x={contextMenu.x}
@@ -872,7 +871,7 @@ export default function ImageGeneratorModal({
                 icon: 'edit',
                 disabled: !contextMenu.job?.result_image_url,
                 onClick: (j) => {
-                  // v1.2: pede pro parent abrir o detail modal (que tem o
+                  // pede pro parent abrir o detail modal (que tem o
                   // editor inline ja aberto). Sem isso, "Editar com IA" so
                   // mudava a thumb selecionada e nao acontecia nada visivel.
                   if (onEditJob) onEditJob(j);

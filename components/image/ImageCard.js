@@ -44,7 +44,6 @@ export default function ImageCard({
   const isRunning = job.status === 'queued' || job.status === 'running';
   const isError   = job.status === 'error';
 
-  // Sprint v1.1 — menu de contexto (right-click) com ações rápidas
   const [ctxMenu, setCtxMenu] = useState(null);
   useEffect(() => {
     if (!ctxMenu) return;

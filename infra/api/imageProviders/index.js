@@ -3,7 +3,6 @@
  * @description Despacha a chamada para o provider correto (vertex, openai,
  * fal, gemini) e padroniza erros via Error.code.
  *
- * Sprint v1.1 — abril 2026: nova interface unificada com `imageInputs`,
  * `referenceMode`, `quality`, `signal` (AbortController). Cada provider
  * implementa generate(params) e retorna { imageBuffer, mimeType, metadata }.
  *

@@ -1,5 +1,5 @@
 /**
- * @fileoverview Reference Classifier (v1.2 — abril 2026)
+ * @fileoverview Reference Classifier
  * @description Classifica automaticamente cada imagem de referência subida
  * pelo usuário em um dos 3 papéis (character/scene/inspiration) +
  * detecta hasFace e isProduct. Substitui o `<select>` manual de modo no

@@ -1,6 +1,6 @@
 /**
  * @fileoverview AutoMode — decide qual modelo usar SEM perguntar ao usuário
- * @description Sprint v1.2 — abril/2026.
+ * @description Sprint v1.2
  *
  * Substitui na prática o par heuristicSelector + smartSelector quando o user
  * envia model='auto'. Diferenças do anterior:

@@ -53,7 +53,6 @@ const PROMPT_LLM_OPTIONS = [
   { id: 'gpt-4o',           label: 'GPT-4o ($$$)' },
 ];
 
-// Sprint v1.2 — abril/2026: lineup reduzido a 3 modelos (autoMode escolhe).
 // Modelos antigos seguem no código de providers pra que jobs do histórico
 // abram, mas não aparecem mais no toggle.
 const ALL_MODELS = [
@@ -340,7 +339,7 @@ export default function SettingsImagePage() {
           </div>
         </Section>
 
-        {/* Sprint v1.2: seção "Modo Inteligente" REMOVIDA da UI. autoMode roda
+        {/* seção "Modo Inteligente" REMOVIDA da UI. autoMode roda
             sempre, é determinístico (regras + saída do refClassifier) e não
             tem custo de LLM extra. As colunas smart_mode_enabled/smart_mode_model
             permanecem no schema pra compat reversa. */}

@@ -4,7 +4,6 @@
  * Decide qual modelo usar baseado em regras simples a partir das refs e do
  * texto do pedido. Sem chamada de LLM (custo zero).
  *
- * Sprint v1.1 — abril 2026: lineup novo de 5 modelos.
  *
  * Regras (em ordem de precedência):
  *   1. char + scene OU ≥3 refs        → Nano Banana 2 (multi-imagem nativo)

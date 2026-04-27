@@ -8,7 +8,6 @@
  * TIMEOUT, INVALID_INPUT, PROVIDER_ERROR, ...) ou do próprio worker
  * (TIMEOUT, MODEL_UNAVAILABLE, BRANDBOOK_FETCH_FAILED, ...).
  *
- * Sprint v1.1 — abril 2026: expandido com codes de timeout duro, modelo
  * indisponível, autenticação falha, refs inválidas.
  */
 
