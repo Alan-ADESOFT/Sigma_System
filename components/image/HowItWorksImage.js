@@ -25,9 +25,9 @@ const VARIANTS = {
   settings: {
     title: 'Configuração',
     text:
-      'Configure os modelos de IA, suas chaves de API e os limites de uso. Todas as chaves ' +
-      'são criptografadas (AES-256-GCM) antes de irem ao banco. Ajustes em limites e modelos ' +
-      'são auditados automaticamente.',
+      'O sistema escolhe o melhor modelo automaticamente para cada pedido baseado no seu texto ' +
+      'e referências — você não precisa configurar. Habilite as chaves de API dos providers ' +
+      'que você usa. Todas as chaves são criptografadas (AES-256-GCM) antes de irem ao banco.',
   },
   brandbook: {
     title: 'Brandbook',

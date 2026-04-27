@@ -49,8 +49,11 @@ const {
   classifyReferences,
   roleToLegacyMode,
 } = require('../models/agentes/imagecreator/refClassifier');
-const { selectByHeuristic } = require('../models/agentes/imagecreator/heuristicSelector');
-const { selectStrategy } = require('../models/agentes/imagecreator/smartSelector');
+// v1.2: heuristicSelector/smartSelector preservados em disco pra compat reversa
+// com jobs antigos no histórico, mas o worker agora usa só autoMode.
+const { decide: autoModeDecide } = require('../models/agentes/imagecreator/autoMode');
+const { probeOpenAIImageModel } = require('../infra/api/imageProviders/_probe');
+const { setOpenAIResolved } = require('../models/imageSettings.model');
 const { getMaxImageInputs } = require('../models/agentes/imagecreator/modelCapabilities');
 const { generateImage, providerForModel } = require('../infra/api/imageProviders');
 const { loadInternalUpload } = require('../infra/api/imageProviders/_helpers');
@@ -398,39 +401,41 @@ async function processJob(job) {
       referenceDescriptionsByMode = result.byMode;
     }
 
-    // 6. Decisão de modelo (smart OR heurística)
+    // 6. Decisão de modelo (v1.2: autoMode determinístico + probe GPT Image)
     let smartDecision = null;
     let chosenModel = job.model;
 
     if (job.model === 'auto') {
-      if (settings.smart_mode_enabled) {
-        try {
-          smartDecision = await selectStrategy({
-            rawDescription: job.raw_description, brandbook,
-            format: job.format, refs,
-            observations: job.observations,
-            enabledModels: settings.enabled_models || [],
-            settings, tenantId: job.tenant_id,
-            userId: job.user_id, clientId: job.client_id, jobId: job.id,
-          });
-        } catch (err) {
-          console.warn('[WARN][Worker] smart selector falhou — caindo pra heurística', {
-            error: err.message,
-          });
-          smartDecision = selectByHeuristic({
-            rawDescription: job.raw_description, format: job.format, refs,
-            enabledModels: settings.enabled_models || [],
-          });
-        }
+      smartDecision = autoModeDecide({
+        rawDescription: job.raw_description,
+        refs,
+        enabledModels: settings.enabled_models || [],
+        openAIResolved: settings.openai_image_model_resolved || null,
+      });
+
+      // Resolve GPT Image: se autoMode escolheu gpt-image-2 mas a org não tem,
+      // o resolved fica null e o gptImageActual() devolve gpt-image-2 mesmo
+      // assim — o provider lança 404. Como temos o probe rodando no boot, na
+      // prática o resolved está populado. Defesa em profundidade: se vier
+      // gpt-image-2 e resolved aponta pra outro, swap aqui.
+      if (
+        chosenModel === 'gpt-image-2' &&
+        settings.openai_image_model_resolved &&
+        settings.openai_image_model_resolved !== 'gpt-image-2'
+      ) {
+        const original = chosenModel;
+        chosenModel = settings.openai_image_model_resolved;
+        smartDecision = {
+          ...smartDecision,
+          primary_model: chosenModel,
+          reasoning: `${smartDecision.reasoning} (org sem gpt-image-2 — fallback ${chosenModel})`,
+          openai_fallback: { from: original, to: chosenModel },
+        };
       } else {
-        smartDecision = selectByHeuristic({
-          rawDescription: job.raw_description, format: job.format, refs,
-          enabledModels: settings.enabled_models || [],
-        });
+        chosenModel = smartDecision.primary_model;
       }
-      chosenModel = smartDecision.primary_model;
-    } else if (job.model && (settings.smart_mode_enabled === false || !settings.smart_mode_enabled)) {
-      // Modelo explícito sem smart — apenas registra a heurística como info
+    } else {
+      // Modelo explícito (modo avançado Cmd+Shift+A) — não roda autoMode.
       smartDecision = null;
     }
 
@@ -931,11 +936,44 @@ function startImageWorker() {
     return;
   }
 
-  console.log('[INFO][Worker] iniciando v1.1', {
+  console.log('[INFO][Worker] iniciando v1.2', {
     fastMs: POLL_FAST_MS, medMs: POLL_MED_MS, slowMs: POLL_SLOW_MS,
     maxConcurrentGlobal: MAX_CONCURRENT_GLOBAL,
   });
   stats.startedAt = new Date().toISOString();
+
+  // v1.2: probe runtime do gpt-image-* disponível pra cada tenant que tem
+  // chave OpenAI configurada. Não bloqueia o tick inicial — roda async.
+  // Resolved cacheado em image_settings.openai_image_model_resolved.
+  (async () => {
+    try {
+      const tenants = await query(
+        `SELECT tenant_id, openai_api_key_encrypted, openai_image_model_resolved
+           FROM image_settings
+          WHERE openai_api_key_encrypted IS NOT NULL
+            AND openai_image_model_resolved IS NULL`
+      );
+      for (const row of tenants) {
+        try {
+          const settingsModel = require('../models/imageSettings.model');
+          const apiKey = await settingsModel.getDecryptedKey(row.tenant_id, 'openai');
+          const resolved = await probeOpenAIImageModel(apiKey);
+          if (resolved) {
+            await setOpenAIResolved(row.tenant_id, resolved);
+            console.log('[INFO][Worker] OpenAI image model resolvido', {
+              tenantId: row.tenant_id, modelId: resolved,
+            });
+          }
+        } catch (err) {
+          console.warn('[WARN][Worker] probe falhou pra tenant', {
+            tenantId: row.tenant_id, error: err.message,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[WARN][Worker] probe loop falhou', { error: err.message });
+    }
+  })();
 
   tick().catch((err) => console.error('[ERRO][Worker] tick inicial falhou', { error: err.message }));
 

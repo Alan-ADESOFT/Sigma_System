@@ -74,7 +74,8 @@ export default function ImageGeneratorModal({
   // ─── Estado dos controles ──────────────────────────────────────
   const [format, setFormat] = useState('square_post');
   const [aspectRatio, setAspectRatio] = useState('1:1');
-  const [model, setModel] = useState(settings?.default_model || 'imagen-4');
+  // v1.2: default sempre 'auto'. Settings.default_model só vale em modo avançado.
+  const [model, setModel] = useState('auto');
   const [description, setDescription] = useState('');
   const [observations, setObservations] = useState('');
   const [referenceUrls, setReferenceUrls] = useState([]);
@@ -473,12 +474,33 @@ export default function ImageGeneratorModal({
 
               <div className={styles.controlGroup}>
                 <div className={styles.controlLabel}>Modelo de IA</div>
-                <ModelSelector
-                  value={model}
-                  onChange={setModel}
-                  settings={settings}
-                  enabledModels={settings?.enabled_models}
-                />
+                {advancedMode ? (
+                  <ModelSelector
+                    value={model}
+                    onChange={setModel}
+                    settings={settings}
+                    enabledModels={settings?.enabled_models}
+                  />
+                ) : (
+                  <div
+                    className="glass-card"
+                    style={{
+                      padding: '8px 12px',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.7rem',
+                      color: 'var(--text-secondary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                    title="O sistema escolhe o melhor modelo automaticamente baseado no seu pedido e nas referências."
+                  >
+                    <Icon name="sparkles" size={11} />
+                    <span style={{ color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Modelo: auto
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Aspect ratio só aparece quando formato é "Custom".

@@ -108,6 +108,8 @@ async function getPublic(tenantId) {
     smart_mode_model:       s.smart_mode_model || 'gpt-4o-mini',
     job_timeout_seconds:    s.job_timeout_seconds || 90,
     title_generator_model:  s.title_generator_model || 'gpt-4o-mini',
+    // Sprint v1.2 — abril 2026: probe runtime do modelo OpenAI
+    openai_image_model_resolved: s.openai_image_model_resolved || null,
     created_at:                 s.created_at,
     updated_at:                 s.updated_at,
   };
@@ -262,6 +264,26 @@ async function getWithDecryptedKeys(tenantId) {
   );
 }
 
+/**
+ * Sprint v1.2: persiste o resultado do probe runtime do GPT Image
+ * (gpt-image-2 → 1.5 → 1). Cacheado pra não probrar a cada boot.
+ *
+ * @param {string} tenantId
+ * @param {string} modelId
+ */
+async function setOpenAIResolved(tenantId, modelId) {
+  if (!tenantId || !modelId) return null;
+  const row = await queryOne(
+    `UPDATE image_settings
+        SET openai_image_model_resolved = $1, updated_at = now()
+      WHERE tenant_id = $2
+      RETURNING tenant_id, openai_image_model_resolved`,
+    [String(modelId), tenantId]
+  );
+  invalidateSettingsCache(tenantId);
+  return row;
+}
+
 module.exports = {
   getOrCreate,
   getPublic,
@@ -270,5 +292,6 @@ module.exports = {
   getDecryptedKey,
   getWithDecryptedKeys,
   invalidateSettingsCache,
+  setOpenAIResolved,
   DEFAULTS,
 };

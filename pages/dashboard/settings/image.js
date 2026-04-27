@@ -53,9 +53,9 @@ const PROMPT_LLM_OPTIONS = [
   { id: 'gpt-4o',           label: 'GPT-4o ($$$)' },
 ];
 
-// Sprint v1.1 — abril 2026: lineup novo. Modelos antigos seguem suportados
-// no backend pra que jobs no histórico continuem abrindo, mas só os novos
-// aparecem no toggle.
+// Sprint v1.2 — abril/2026: lineup reduzido a 3 modelos (autoMode escolhe).
+// Modelos antigos seguem no código de providers pra que jobs do histórico
+// abram, mas não aparecem mais no toggle.
 const ALL_MODELS = [
   {
     id: 'gemini-3.1-flash-image-preview',
@@ -64,29 +64,16 @@ const ALL_MODELS = [
     capabilities: '14 refs · image input · $0.04-0.15',
   },
   {
+    id: 'gpt-image-2',
+    name: 'GPT Image 2',
+    provider: 'openai',
+    capabilities: 'Tipografia precisa · edição alta fidelidade · $0.04-0.17 (com fallback automático para gpt-image-1.5/1)',
+  },
+  {
     id: 'fal-ai/flux-pro/kontext',
     name: 'Flux Kontext Pro',
     provider: 'fal',
     capabilities: '1 ref · preserva pessoa · $0.04',
-  },
-  {
-    id: 'gpt-image-1',
-    name: 'GPT Image 1',
-    provider: 'openai',
-    capabilities: 'Rápido, sem verificação de organização · $0.04-0.17',
-  },
-  {
-    id: 'imagen-3.0-capability-001',
-    name: 'Imagen 3 Capability',
-    provider: 'vertex',
-    capabilities: 'subject types · deprecated em Jun/2026 · $0.04',
-    legacy: true,
-  },
-  {
-    id: 'imagen-4.0-generate-001',
-    name: 'Imagen 4',
-    provider: 'vertex',
-    capabilities: 'text-only · $0.04',
   },
 ];
 
@@ -353,38 +340,10 @@ export default function SettingsImagePage() {
           </div>
         </Section>
 
-        {/* ─── Modo Inteligente ──────────────────────────────────── */}
-        <Section title="Modo Inteligente (avançado)" icon="sparkles" defaultOpen={false}>
-          <div className={styles.toggleRow}>
-            <div className={styles.toggleRowInfo}>
-              <div className={styles.fieldLabel}>Ativar Smart Mode</div>
-              <div className={styles.hint}>
-                Quando ativo, um agente LLM escolhe o melhor modelo pra cada tarefa baseado em refs, brandbook e descrição.
-                Quando desativado, usa heurística rápida (sem custo extra).
-                Custo adicional do Smart Mode: ~$0.0005 por geração.
-              </div>
-            </div>
-            <Switch
-              on={!!data.smart_mode_enabled}
-              onChange={v => saveField({ smart_mode_enabled: v })}
-              ariaLabel="Smart Mode"
-            />
-          </div>
-
-          {!!data.smart_mode_enabled && (
-            <div className={styles.field}>
-              <label className={styles.fieldLabel}>LLM do Smart Selector</label>
-              <select
-                className="select"
-                value={data.smart_mode_model || 'gpt-4o-mini'}
-                onChange={e => saveField({ smart_mode_model: e.target.value })}
-              >
-                {PROMPT_LLM_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-              </select>
-              <span className={styles.hint}>Modelo usado pra decidir qual modelo de imagem usar.</span>
-            </div>
-          )}
-        </Section>
+        {/* Sprint v1.2: seção "Modo Inteligente" REMOVIDA da UI. autoMode roda
+            sempre, é determinístico (regras + saída do refClassifier) e não
+            tem custo de LLM extra. As colunas smart_mode_enabled/smart_mode_model
+            permanecem no schema pra compat reversa. */}
 
         {/* ─── Limites técnicos v1.1 ─────────────────────────────── */}
         <Section title="Limites técnicos" icon="alert" defaultOpen={false}>
