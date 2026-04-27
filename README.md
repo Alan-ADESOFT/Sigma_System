@@ -250,18 +250,62 @@ Tokens CSS em `:root` no `globals.css`. Nunca usar hex hard-coded nos componente
 
 ## Gerador de Imagem
 
-Modulo de geracao de imagens com brandbook por cliente, suportando 4 provedores:
-- **Imagen 4** (Google Vertex AI) — fotorrealismo + texto, otimo pra brand
-- **GPT Image 1** (OpenAI) — rapido, segue instrucao em linguagem natural
-- **Flux 1.1 Pro** (fal.ai) — editorial cinematografico
-- **Nano Banana** (Google Gemini) — barato, otimo pra ideacao
+Modulo de geracao de imagens com brandbook por cliente. **Sprint v1.2 (abril 2026):**
+o usuario nao escolhe mais o modelo nem o tipo de cada referencia. O sistema decide
+automaticamente.
+
+### Lineup de modelos (abril 2026)
+
+Apenas 3 modelos no lineup ativo (autoMode escolhe):
+
+- **Nano Banana 2** (`gemini-3.1-flash-image-preview`, Google Gemini) —
+  multi-imagem nativo (ate 14 refs), versatil, default da maioria dos casos.
+- **GPT Image 2** (`gpt-image-2`, OpenAI) — lider em tipografia + edicao
+  pontual com alta fidelidade. **Probe runtime no boot** do worker testa
+  disponibilidade na org; se 404, fallback automatico silencioso pra
+  `gpt-image-1.5` -> `gpt-image-1`. Resultado cacheado em
+  `image_settings.openai_image_model_resolved`.
+- **Flux Kontext Pro** (`fal-ai/flux-pro/kontext`, fal.ai) — especialista em
+  preservar pessoa exata da referencia.
+
+Modelos legados (Imagen 3/4, GPT Image 1, etc) seguem suportados em
+`infra/api/imageProviders/` para que jobs antigos no historico continuem
+abrindo, mas nao aparecem mais no toggle das settings.
+
+### Modo automatico
+
+Em `models/agentes/imagecreator/autoMode.js`. Sem chamada de LLM extra
+(determinístico). Usa o output do `refClassifier` (Vision API classifica cada
+ref subida em character/scene/inspiration + hasFace/isProduct):
+
+| Condicao                                    | Modelo escolhido     |
+|---------------------------------------------|----------------------|
+| char + face + edit pontual (regex)          | gpt-image-2          |
+| char + face (nova geracao)                  | flux-pro/kontext     |
+| 3+ refs OU char+scene                       | nano-banana-2        |
+| logo / poster / banner / tipografia (regex) | gpt-image-2          |
+| default                                     | nano-banana-2        |
+
+### Atalhos de teclado
+
+- **Cmd/Ctrl+K** (workspace) — abre modal "Geracao livre".
+- **Cmd/Ctrl+Enter** (textarea de descricao) — dispara geracao.
+- **Cmd/Ctrl+E** (detail modal) — foca textarea de edicao inline.
+- **Cmd/Ctrl+Shift+A** (qualquer lugar do modulo) — toggle "modo avancado"
+  (mostra ModelSelector e seletor manual de modo por ref). Persistido em
+  `localStorage('image:advanced')`. Nao documentado em UI — para debug.
+- **Esc** — fecha o modal/menu de contexto aberto.
+- **Setas <- ->** — navega entre thumbs no workspace e versoes no detail.
+- **Botao direito numa thumb** — menu de contexto custom (Editar IA,
+  Variacao, Download, Salvar template, Apagar).
 
 ### Configuracao
 
-1. Configure as chaves em `/dashboard/settings/image` (todas criptografadas AES-256-GCM)
+1. Configure as chaves em `/dashboard/settings/image` (todas criptografadas AES-256-GCM).
 2. Crie um brandbook por cliente em `/dashboard/clients/[id]` aba **Brandbook**
-   (3 caminhos: gerar com IA, upload PDF/HTML, manual)
+   (3 caminhos: gerar com IA, upload PDF/HTML, manual).
 3. Use `/dashboard/image` pra gerar — o brandbook ativo e injetado automaticamente
+   e o modelo é escolhido pelo autoMode.
 
 ### Fluxo tecnico
 
@@ -280,15 +324,27 @@ server/imageWorker.js (em background)
 
 ### Estrutura de arquivos
 
-- `models/agentes/imagecreator/` — pipeline (PromptEngineer, BrandbookExtractor, costCalculator, errorMessages)
-- `infra/api/imageProviders/` — adapters dos 4 provedores (interface unificada)
+- `models/agentes/imagecreator/`
+  - `promptEngineer.js` — gera prompt otimizado, cache MD5 24h
+  - `refClassifier.js` (v1.2) — classifica refs via Vision (gpt-4o-mini)
+  - `autoMode.js` (v1.2) — decide modelo deterministicamente
+  - `referenceVision.js` — descreve refs por modo
+  - `brandbookExtractor.js`, `costCalculator.js`, `errorMessages.js`
+  - `heuristicSelector.js`, `smartSelector.js` — preservados para compat
+    reversa (jobs antigos no historico). NAO sao chamados pelo worker novo.
+- `infra/api/imageProviders/`
+  - `vertex.js`, `openai.js`, `fal.js`, `gemini.js` — adapters dos providers
+  - `_probe.js` (v1.2) — resolve gpt-image-2 -> 1.5 -> 1 via /v1/models
 - `infra/encryption.js` — AES-256-GCM com auth tag pra API keys
 - `infra/cache.js` — cache em memoria com TTL
 - `infra/imageRateLimit.js` — 3 camadas: concurrent + hourly + daily
 - `infra/promptSanitizer.js` — detecta prompt injection patterns
 - `server/imageWorker.js` — worker em background com polling adaptativo (2/5/10s)
-- `pages/api/image/` — endpoints REST (~17 arquivos)
+- `pages/api/image/` — endpoints REST
 - `pages/dashboard/image/` — workspace, visualizacao full, historico admin
+- `components/image/` — UI: ImageGeneratorModal, ImageDetailModal, HistoryStrip,
+  ContextMenu (v1.2), ReferenceUploader, ModelSelector (so em modo avancado), etc
+- `hooks/useAdvancedMode.js` (v1.2) — toggle Cmd+Shift+A persistido
 
 ### Limites padrao
 
@@ -314,4 +370,19 @@ curl -H "x-internal-token: $INTERNAL_API_TOKEN" https://app.example.com/api/imag
 ```
 
 Retorna snapshot do worker (jobs processados, erros, fila atual, cache hit rate, ultimo cleanup).
+
+### Testes manuais
+
+`scripts/test-brandbook-injection.js` — confirma que uma geracao para um
+cliente com brandbook ativo realmente injeta as cores hex do brandbook no
+prompt otimizado. Pre-requisito: `npm run dev` rodando e `ADMIN_TENANT_ID`
+no .env.
+
+```bash
+node scripts/test-brandbook-injection.js <clientId>
+# [PASS] brandbook injetado corretamente. 2/3 cores no prompt.
+```
+
+Falha exit 1 com diagnostico (cache divergente, brandbook nao carregado,
+worker nao processando, etc).
 
