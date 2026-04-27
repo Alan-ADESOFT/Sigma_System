@@ -9,8 +9,13 @@ async function getTasksByTenant(tenantId, filters = {}) {
   const params = [tenantId];
   let idx = 2;
 
-  if (view === 'me' && userId) {
-    conditions.push(`t.assigned_to = $${idx}`);
+  // Default: cada user vê SÓ as tasks dele (atribuídas OU criadas).
+  // view='team' libera todas as tasks do workspace.
+  // view='me' explícito faz a mesma coisa que o default (proteção).
+  const effectiveView = view || 'me';
+  if (effectiveView === 'me') {
+    if (!userId) throw new Error('getTasksByTenant: userId obrigatório quando view !== "team"');
+    conditions.push(`(t.assigned_to = $${idx} OR t.created_by = $${idx})`);
     params.push(userId);
     idx++;
   } else if (assignedTo) {
@@ -18,6 +23,7 @@ async function getTasksByTenant(tenantId, filters = {}) {
     params.push(assignedTo);
     idx++;
   }
+  // view='team' sem assignedTo: mostra todas do workspace
 
   if (clientId) {
     conditions.push(`t.client_id = $${idx}`);

@@ -18,9 +18,9 @@ const { createNotification } = require('../models/clientForm');
 async function runWeeklyCycle() {
   console.log('[INFO][server/generateWeeklyAdsReports] iniciando');
 
-  const adminTenantId = process.env.ADMIN_TENANT_ID;
-  if (adminTenantId) {
-    const enabled = await getSetting(adminTenantId, 'ads_ai_weekly_enabled');
+  const workspaceId = process.env.WORKSPACE_TENANT_ID;
+  if (workspaceId) {
+    const enabled = await getSetting(workspaceId, 'ads_ai_weekly_enabled');
     if (enabled !== 'true') {
       console.log('[INFO][server/generateWeeklyAdsReports] desabilitado (ads_ai_weekly_enabled != true)');
       return { skipped: true };

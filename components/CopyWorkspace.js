@@ -75,6 +75,7 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
   const [outputText, setOutputText] = useState('');
   const [saved, setSaved] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [activeJobId, setActiveJobId] = useState(null);
   const [improving, setImproving] = useState(false);
   const [promptInput, setPromptInput] = useState('');
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
@@ -355,9 +356,9 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
     }
   }
 
-  // ── Gerar / Modificar ──
+  // ── Gerar / Modificar (async — enfileira job e faz polling) ──
   async function handleGenerate() {
-    if (!promptInput.trim() || generating || !activeSessionId) return;
+    if (!promptInput.trim() || generating || activeJobId || !activeSessionId) return;
     setGenerating(true);
     try {
       const imagesB64 = [];
@@ -387,26 +388,79 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
         }
       }
 
-      const endpoint = hasOutput ? '/api/copy/improve' : '/api/copy/generate';
-      const body = hasOutput
+      const kind = hasOutput ? 'improve' : 'generate';
+      const params = hasOutput
         ? { sessionId: activeSessionId, currentOutput: editorRef.current.innerText, instruction: finalPrompt, clientId, modelOverride: selectedModel, tone: toneInput || undefined, ...(imagesB64.length ? { images: imagesB64 } : {}), ...(filesB64.length ? { files: filesB64 } : {}) }
         : { sessionId: activeSessionId, contentId: folder.id, clientId, structureId: selectedStructureId || undefined, modelOverride: selectedModel, promptRaiz: finalPrompt, tone: toneInput || undefined, ...(imagesB64.length ? { images: imagesB64 } : {}), ...(filesB64.length ? { files: filesB64 } : {}) };
 
-      const r = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const r = await fetch('/api/copy/jobs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind, params }),
+      });
       const d = await r.json();
-      if (!d.success) throw new Error(d.error);
+      if (!d.success || !d.data?.jobId) throw new Error(d.error || 'Falha ao enfileirar');
 
-      setOutputText(d.data.text);
-      if (editorRef.current) { editorRef.current.innerHTML = mdToHtml(d.data.text); editorRef.current.scrollTop = 0; }
+      // Limpa inputs imediatamente — usuário pode fechar modal e seguir trabalhando.
+      // Polling (useEffect abaixo) aplica o resultado ou notifica erro.
+      setActiveJobId(d.data.jobId);
       setPromptInput('');
-      setSaved(false);
       setUploadedImages([]);
       setUploadedDocs([]);
-      notify('Copy gerada — revise e salve quando estiver pronto', 'success');
+      notify('Gerando em segundo plano — voce pode fechar e seguir trabalhando, avisamos no sininho.', 'info');
     } catch (err) {
-      notify(err.message?.includes('Limite') ? err.message : 'Falha ao gerar copy. Verifique o prompt e tente novamente.', 'error');
-    } finally { setGenerating(false); }
+      notify(err.message?.includes('Limite') ? err.message : 'Falha ao iniciar geracao. Tente novamente.', 'error');
+      setGenerating(false);
+    }
+    // setGenerating(false) é feito pelo polling quando o job termina (done/error).
   }
+
+  // ── Polling do job ativo (background) ──
+  // Aplica o texto do servidor no editor (mdToHtml escapa &<> antes de
+  // formatar markdown — mesmo padrão do restante do componente).
+  useEffect(() => {
+    if (!activeJobId) return;
+    let cancelled = false;
+    const applyDoneText = (text) => {
+      setOutputText(text || '');
+      if (editorRef.current && text) {
+        const safeHtml = mdToHtml(text);
+        editorRef.current.innerHTML = safeHtml;
+        editorRef.current.scrollTop = 0;
+      }
+      setSaved(false);
+    };
+    const interval = setInterval(async () => {
+      if (cancelled) return;
+      try {
+        const r = await fetch('/api/copy/jobs/' + activeJobId);
+        const d = await r.json();
+        if (!d.success || !d.data) return;
+        const job = d.data;
+        if (job.status === 'done') {
+          clearInterval(interval);
+          if (cancelled) return;
+          setActiveJobId(null);
+          setGenerating(false);
+          applyDoneText(job.text);
+          notify('Copy pronta — revise e salve.', 'success');
+          fetch('/api/copy/session?folderId=' + folder.id + '&activeId=' + activeSessionId + (clientId ? '&clientId=' + clientId : ''))
+            .then(r => r.json())
+            .then(d => { if (d.success && !cancelled) setHistory(d.data.history || []); })
+            .catch(() => {});
+        } else if (job.status === 'error') {
+          clearInterval(interval);
+          if (cancelled) return;
+          setActiveJobId(null);
+          setGenerating(false);
+          notify('Falha ao gerar copy: ' + (job.error || 'erro desconhecido'), 'error');
+        }
+      } catch {
+        // erro de rede transitório — próximo tick tenta de novo
+      }
+    }, 1500);
+    return () => { cancelled = true; clearInterval(interval); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeJobId]);
 
   function applyHistoryAsDraft(item) {
     if (!item || !editorRef.current) return;

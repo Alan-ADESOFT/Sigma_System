@@ -1,28 +1,36 @@
-const { getOrCreateAdmin } = require('../models/tenant.model');
-
-let _cachedAdminId = null;
+// infra/get-tenant-id.js
+// ─────────────────────────────────────────────────────────────────────────────
+// Resolve o tenant ID do request.
+// Modelo single-workspace: TODOS os usuários autenticados pertencem ao mesmo
+// workspace, definido por WORKSPACE_TENANT_ID no .env.
+//
+// IMPORTANTE: A tabela `tenants` armazena USUÁRIOS, não workspaces. Cada linha
+// é uma pessoa que faz login. O isolamento por usuário (ex: tasks pessoais)
+// deve ser feito via `assigned_to`/`created_by` nos models, NÃO via tenant_id.
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Resolve o tenant ID do request.
- * Prioridade: header x-tenant-id > env ADMIN_TENANT_ID > busca/cria admin no DB
+ * Retorna o tenant ID (workspace global) para qualquer request.
+ * Header `x-tenant-id` ainda é respeitado para cron jobs e testes de integração.
+ *
+ * @param {object} req - Request do Next.js
+ * @returns {Promise<string>}
  */
 async function resolveTenantId(req) {
-  if (req?.headers?.['x-tenant-id']) return req.headers['x-tenant-id'];
-  if (process.env.ADMIN_TENANT_ID) return process.env.ADMIN_TENANT_ID;
+  const headerId = req?.headers?.['x-tenant-id'];
+  if (headerId) return headerId;
 
-  if (!_cachedAdminId) {
-    const email = process.env.ADMIN_EMAIL || 'admin@dashboard.local';
-    const name = process.env.ADMIN_NAME || 'Admin';
-    const tenant = await getOrCreateAdmin(email, name);
-    _cachedAdminId = tenant?.id;
+  const id = process.env.WORKSPACE_TENANT_ID;
+  if (!id) {
+    throw new Error(
+      '[FATAL] WORKSPACE_TENANT_ID não configurado no .env. ' +
+      'Defina o ID do tenant que servirá como workspace único da plataforma.'
+    );
   }
-
-  return _cachedAdminId;
+  return id;
 }
 
-// Limpa o cache (util em testes ou quando o tenant muda)
-function clearTenantCache() {
-  _cachedAdminId = null;
-}
+// Mantida pra compatibilidade com chamadas legadas; sem efeito real.
+function clearTenantCache() {}
 
 module.exports = { resolveTenantId, clearTenantCache };

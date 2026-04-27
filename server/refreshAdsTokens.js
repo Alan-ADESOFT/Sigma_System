@@ -26,10 +26,10 @@ async function runRefreshCycle() {
   const summary = { total: 0, refreshed: 0, failed: 0, skipped: 0 };
 
   try {
-    // Lê threshold global (não por tenant — usamos fallback)
-    const adminTenantId = process.env.ADMIN_TENANT_ID;
+    // Lê threshold global do workspace
+    const workspaceId = process.env.WORKSPACE_TENANT_ID;
     const daysAhead = parseInt(
-      adminTenantId ? await getSetting(adminTenantId, 'ads_token_refresh_days_ahead') : null,
+      workspaceId ? await getSetting(workspaceId, 'ads_token_refresh_days_ahead') : null,
       10,
     ) || 15;
 

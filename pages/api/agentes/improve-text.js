@@ -10,6 +10,7 @@
  */
 
 import { resolveModel } from '../../../models/ia/completion';
+import { formatCopyOutput } from '../../../models/copy/copyPrompt';
 
 export const config = { api: { bodyParser: { sizeLimit: '5mb' } } };
 
@@ -68,7 +69,13 @@ export default async function handler(req, res) {
 
     if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e?.error?.message || r.statusText); }
     const d = await r.json();
-    return res.json({ success: true, data: { text: d.choices?.[0]?.message?.content || text } });
+    let improved = d.choices?.[0]?.message?.content || text;
+
+    // Reaplica o formatador para garantir consistência com o fluxo de gerar/modificar.
+    // O revisor linguístico pode introduzir pequenas variações de markdown que quebram o render.
+    if (mode === 'full') improved = await formatCopyOutput(improved);
+
+    return res.json({ success: true, data: { text: improved } });
   } catch (err) {
     console.error('[ERRO][ImproveText]', { error: err.message });
     return res.status(500).json({ success: false, error: err.message });

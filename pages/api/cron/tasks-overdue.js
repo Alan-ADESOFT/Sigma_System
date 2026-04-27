@@ -29,71 +29,74 @@ export default async function handler(req, res) {
   console.log('[CRON][tasks-overdue] Início');
 
   try {
-    const tenants = await query(`SELECT id FROM tenants WHERE is_active = true`);
-    let totalMarked = 0;
+    const workspaceId = process.env.WORKSPACE_TENANT_ID;
+    if (!workspaceId) {
+      console.error('[CRON][tasks-overdue] WORKSPACE_TENANT_ID não configurado');
+      return res.status(500).json({ success: false, error: 'WORKSPACE_TENANT_ID ausente' });
+    }
+
+    const marked = await taskModel.markOverdue(workspaceId);
+    const totalMarked = marked.length;
     let totalDispatched = 0;
 
-    for (const tenant of tenants) {
-      const marked = await taskModel.markOverdue(tenant.id);
-      totalMarked += marked.length;
-
-      // Agrupa por usuario responsavel
-      const byUser = {};
-      for (const t of marked) {
-        const task = await queryOne(
-          `SELECT ct.id, ct.title, ct.priority, ct.assigned_to,
-                  tn.name AS user_name,
-                  tc.name AS category_name
-             FROM client_tasks ct
-             LEFT JOIN tenants tn ON tn.id = ct.assigned_to
-             LEFT JOIN task_categories tc ON tc.id = ct.category_id
-            WHERE ct.id = $1`,
-          [t.id]
-        );
-        if (task?.assigned_to) {
-          if (!byUser[task.assigned_to]) {
-            byUser[task.assigned_to] = { name: task.user_name, tasks: [] };
-          }
-          byUser[task.assigned_to].tasks.push(task);
+    // Agrupa por usuario responsavel
+    const byUser = {};
+    for (const t of marked) {
+      const task = await queryOne(
+        `SELECT ct.id, ct.title, ct.priority, ct.assigned_to,
+                tn.name AS user_name,
+                tc.name AS category_name
+           FROM client_tasks ct
+           LEFT JOIN tenants tn ON tn.id = ct.assigned_to
+           LEFT JOIN task_categories tc ON tc.id = ct.category_id
+          WHERE ct.id = $1`,
+        [t.id]
+      );
+      if (task?.assigned_to) {
+        if (!byUser[task.assigned_to]) {
+          byUser[task.assigned_to] = { name: task.user_name, tasks: [] };
         }
+        byUser[task.assigned_to].tasks.push(task);
+      }
+    }
+
+    // Notificacao no sininho + envio WhatsApp
+    const { createNotification } = require('../../../models/clientForm');
+    for (const [userId, info] of Object.entries(byUser)) {
+      const titles = info.tasks.map((t) => t.title);
+
+      // 1) Sininho
+      try {
+        await createNotification(
+          userId, 'task_overdue',
+          'Tarefas vencidas',
+          `Você tem ${titles.length} tarefa(s) vencida(s)`,
+          null,
+          { taskCount: titles.length, titles: titles.slice(0, 5) }
+        );
+      } catch (err) {
+        console.warn('[WARN][CRON][tasks-overdue] sininho falhou para', userId, err.message);
       }
 
-      // Notificacao no sininho + envio WhatsApp
-      const { createNotification } = require('../../../models/clientForm');
-      for (const [userId, info] of Object.entries(byUser)) {
-        const titles = info.tasks.map((t) => t.title);
-
-        // 1) Sininho
-        try {
-          await createNotification(
-            userId, 'task_overdue',
-            'Tarefas vencidas',
-            `Você tem ${titles.length} tarefa(s) vencida(s)`,
-            null,
-            { taskCount: titles.length, titles: titles.slice(0, 5) }
-          );
-        } catch {}
-
-        // 2) WhatsApp — apenas se o usuario tem bot ativo configurado
-        try {
-          const botCfg = await queryOne(
-            `SELECT * FROM task_bot_config
-              WHERE tenant_id = $1 AND user_id = $2 AND is_active = true`,
-            [tenant.id, userId]
-          );
-          if (botCfg && botCfg.phone) {
-            const template = await resolveTemplate(botCfg, tenant.id, 'overdue');
-            const msg = renderTemplate(template, {
-              nome: info.name || 'usuário',
-              tarefas: formatTaskList(info.tasks),
-              count: info.tasks.length,
-            });
-            await sendText(botCfg.phone, msg);
-            totalDispatched++;
-          }
-        } catch (err) {
-          console.error('[CRON][tasks-overdue] WhatsApp falhou para', userId, err.message);
+      // 2) WhatsApp — apenas se o usuario tem bot ativo configurado
+      try {
+        const botCfg = await queryOne(
+          `SELECT * FROM task_bot_config
+            WHERE tenant_id = $1 AND user_id = $2 AND is_active = true`,
+          [workspaceId, userId]
+        );
+        if (botCfg && botCfg.phone) {
+          const template = await resolveTemplate(botCfg, workspaceId, 'overdue');
+          const msg = renderTemplate(template, {
+            nome: info.name || 'usuário',
+            tarefas: formatTaskList(info.tasks),
+            count: info.tasks.length,
+          });
+          await sendText(botCfg.phone, msg);
+          totalDispatched++;
         }
+      } catch (err) {
+        console.error('[CRON][tasks-overdue] WhatsApp falhou para', userId, err.message);
       }
     }
 

@@ -302,6 +302,11 @@ export default function ApprovalWizard({ token, plan, creatives: initialCreative
         submitDecision(current.id, payload);
         // Sai do modo edição para mostrar resumo
         setEditingId(null);
+      } else {
+        // Reprovou sem motivo: força modo edição para a textarea aparecer
+        // (sem isso, inReadMode=true e o usuário cai direto no DecisionReadOnly,
+        //  pulando a coleta do motivo).
+        setEditingId(current.id);
       }
     }
     function nextOrFinalize() {

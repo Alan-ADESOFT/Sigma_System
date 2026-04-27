@@ -16,9 +16,9 @@ const { getSetting } = require('../models/settings.model');
 async function runDetectionCycle() {
   console.log('[INFO][server/detectAdsAnomalies] iniciando');
 
-  const adminTenantId = process.env.ADMIN_TENANT_ID;
-  if (adminTenantId) {
-    const enabled = await getSetting(adminTenantId, 'ads_anomaly_detection');
+  const workspaceId = process.env.WORKSPACE_TENANT_ID;
+  if (workspaceId) {
+    const enabled = await getSetting(workspaceId, 'ads_anomaly_detection');
     if (enabled === 'false') {
       console.log('[INFO][server/detectAdsAnomalies] desabilitado via ads_anomaly_detection=false');
       return { skipped: true };

@@ -2214,3 +2214,31 @@ ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS auto_classified_refs JSONB DEFAU
 --    Worker faz HEAD/dry-run pra gpt-image-2 → fallback gpt-image-1.5 → gpt-image-1.
 --    Cacheado aqui pra não probrar a cada boot.
 ALTER TABLE image_settings ADD COLUMN IF NOT EXISTS openai_image_model_resolved TEXT;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- COPY GENERATION — fila de jobs assíncronos
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Geração e modificação de copy passaram a rodar em background via setImmediate
+-- pra não travar a UI. O endpoint /api/copy/jobs cria a linha aqui, dispara o
+-- processamento no mesmo processo e retorna 202 + jobId. O frontend faz polling
+-- em /api/copy/jobs/[id] e o sininho é alimentado por system_notifications
+-- quando o job conclui.
+-- ═══════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS copy_generation_jobs (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    session_id      TEXT NOT NULL REFERENCES copy_sessions(id) ON DELETE CASCADE,
+    client_id       TEXT REFERENCES marketing_clients(id) ON DELETE SET NULL,
+    kind            TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending',
+    params          JSONB NOT NULL DEFAULT '{}',
+    result_text     TEXT,
+    history_id      TEXT,
+    error_message   TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at      TIMESTAMPTZ,
+    finished_at     TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_copy_jobs_session ON copy_generation_jobs(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_copy_jobs_active  ON copy_generation_jobs(status) WHERE status IN ('pending','running');

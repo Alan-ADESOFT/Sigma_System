@@ -1,5 +1,4 @@
 const { upsertAccountFromOAuth } = require('../../../../models/account.model');
-const { getOrCreateAdmin } = require('../../../../models/tenant.model');
 
 export default async function handler(req, res) {
   console.log('[INFO][API:/api/auth/instagram/callback] Requisição recebida', { method: req.method, query: { code: req.query.code ? '***' : undefined, error: req.query.error } });
@@ -78,12 +77,15 @@ export default async function handler(req, res) {
 
     console.log('[Meta OAuth] Profile:', JSON.stringify(profile));
 
-    // 4. Garantir que existe um admin tenant
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@dashboard.local';
-    const tenant = await getOrCreateAdmin(adminEmail, 'Admin');
+    // 4. Workspace global — todas as contas Instagram pertencem ao workspace.
+    const workspaceId = process.env.WORKSPACE_TENANT_ID;
+    if (!workspaceId) {
+      console.error('[Meta OAuth] WORKSPACE_TENANT_ID não configurado');
+      return res.redirect('/dashboard/settings?error=workspace_not_configured');
+    }
 
-    // 5. Salvar conta no banco vinculada ao tenant admin
-    await upsertAccountFromOAuth(tenant.id, userId, {
+    // 5. Salvar conta no banco vinculada ao workspace
+    await upsertAccountFromOAuth(workspaceId, userId, {
       access_token: longLivedToken,
       expires_at: expiresAt,
       username: profile.username ?? '',

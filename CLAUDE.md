@@ -32,13 +32,24 @@ The dev server starts a background scheduler via `server/instrumentation.js` (en
 - AI: OpenAI Chat Completions + Responses API (web search), Anthropic Messages API, optional Perplexity Sonar. Routing is automatic by model ID substring (see Completion router below).
 - DOCX export uses `docx`, file extraction uses `pdf-parse` + `mammoth`, image optimization uses `sharp`.
 
-### Multi-tenancy (critical)
-**Every** query must filter by `tenant_id`. The tenant is resolved per-request via `infra/get-tenant-id.js → resolveTenantId(req)`:
-1. `x-tenant-id` header
-2. `ADMIN_TENANT_ID` env var
-3. Cached lookup/creation of the admin tenant (`models/tenant.model.getOrCreateAdmin`) using `ADMIN_EMAIL` / `ADMIN_NAME`
+### Multi-tenancy (single-workspace mode)
 
-This is currently a single-admin model; do not assume per-user sessions resolve the tenant. Auth (`lib/auth.js`, `pages/api/auth/*`, `hooks/useAuth.js`) uses scrypt + HMAC-signed cookie tokens — separate concept from the tenant.
+A plataforma opera em modo **single-workspace**: todos os usuários compartilham
+o mesmo `tenant_id`, definido por `WORKSPACE_TENANT_ID` no `.env`. A tabela
+`tenants` armazena USUÁRIOS (não workspaces) — cada linha é uma pessoa que faz
+login. O isolamento por usuário, quando necessário (ex: tasks pessoais), é
+feito via `assigned_to`/`created_by`, NÃO via `tenant_id`.
+
+`infra/get-tenant-id.js → resolveTenantId(req)` sempre retorna o
+`WORKSPACE_TENANT_ID` (header `x-tenant-id` ainda tem prioridade para cron jobs
+e testes). Não use `user.id` como tenant.
+
+Auth (`lib/auth.js`, `pages/api/auth/*`, `hooks/useAuth.js`) usa scrypt + cookie
+HMAC. `lib/api-auth.requireAuth(req)` retorna o user; `user.tenant_id` aponta
+pro `WORKSPACE_TENANT_ID` por compatibilidade com handlers antigos.
+
+Tasks são a exceção: filtro `WHERE (assigned_to = userId OR created_by = userId)`
+no `models/task.model.getTasksByTenant`. View=`team` libera tudo do workspace.
 
 ### Directory layout (the parts that matter)
 ```
