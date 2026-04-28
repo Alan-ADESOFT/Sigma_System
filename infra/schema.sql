@@ -2129,7 +2129,7 @@ ALTER TABLE image_settings ADD COLUMN IF NOT EXISTS title_generator_model TEXT N
 --    array atual até alterarem manualmente em Configurações → Imagem.
 --    v1.2: lineup reduzido a 3 (Nano Banana 2 / GPT Image 2 / Flux Kontext).
 ALTER TABLE image_settings ALTER COLUMN enabled_models SET DEFAULT
-  '["gemini-3.1-flash-image-preview","gpt-image-2","fal-ai/flux-pro/kontext"]'::jsonb;
+  '["gemini-3.1-flash-image-preview","gpt-image-1.5","fal-ai/flux-pro/kontext"]'::jsonb;
 
 -- 8. Brandbook fixed references (3-5 imagens da marca, sempre injetadas).
 --    fixed_references: [{url, label}] (até 5)

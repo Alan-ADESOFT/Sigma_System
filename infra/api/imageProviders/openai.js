@@ -4,7 +4,7 @@
  *   · Sem refs: POST /v1/images/generations (JSON)
  *   · Com refs: POST /v1/images/edits (multipart/form-data, image[] x N)
  *
- *   · Modelo default: gpt-image-2
+ *   · Modelo default: gpt-image-1.5
  *   · Aceita até 4 imagens em image[]
  *   · Suporta máscara opcional (não exposta na UI ainda)
  *   · Não tem `input_fidelity` (sempre roda em high automático)
@@ -46,7 +46,7 @@ function resolveQuality(quality) {
 }
 
 function resolveModelId(model) {
-  if (!model) return 'gpt-image-2';
+  if (!model) return 'gpt-image-1.5';
   return model;
 }
 

@@ -74,8 +74,8 @@ async function probeOpenAIImageModel(apiKey) {
   console.log('[INFO][Probe:OpenAI] resolvendo modelo disponível');
   const available = await listAvailableModels(apiKey);
   if (available.size === 0) {
-    console.warn('[WARN][Probe:OpenAI] não foi possível listar modelos — assumindo gpt-image-2');
-    return 'gpt-image-2';
+    console.warn('[WARN][Probe:OpenAI] não foi possível listar modelos — assumindo gpt-image-1.5');
+    return 'gpt-image-1.5';
   }
 
   for (const candidate of PROBE_ORDER) {
