@@ -115,12 +115,18 @@ function getInitials(name) {
   return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 }
 
-/** Retorna ISO da due_date sem a parte de horas */
+/** Retorna ISO da due_date sem a parte de horas.
+ *  due_date é DATE no Postgres (sem TZ); o driver devolve como Date em UTC
+ *  midnight. Lemos via UTC pra preservar o dia armazenado, evitando shift
+ *  de -1 dia em fusos negativos (ex.: America/Sao_Paulo). */
 function taskDueIso(t) {
   if (!t.due_date) return null;
   const d = new Date(t.due_date);
   if (isNaN(d)) return null;
-  return isoDate(d);
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function isOverdue(t) {
