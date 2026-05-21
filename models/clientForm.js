@@ -286,52 +286,122 @@ async function submitForm(tokenId, clientId, tenantId, data) {
 }
 
 // ─── NOTIFICAÇÕES ────────────────────────────────────────────────────────────
+//
+// PATCH single-workspace (20260521):
+//
+// Em modo single-workspace, `tenant_id` é o MESMO pra todos os usuários do
+// time. Filtrar só por tenant_id no sininho faria todo mundo ver notificação
+// de todo mundo — o que está errado pra notificações pessoais.
+//
+// Solução adotada:
+//   • Cada notificação tem `user_id`:
+//       - user_id = NULL  → broadcast (todo time vê).
+//       - user_id = $X    → pessoal (só $X vê).
+//   • As funções de leitura filtram pelo destinatário:
+//       WHERE tenant_id = $1 AND (user_id = $2 OR user_id IS NULL)
+//     O `OR user_id IS NULL` garante que broadcasts continuam visíveis pra
+//     todo mundo, e que notificações antigas (sem user_id) viram broadcast
+//     retroativo.
+//   • createNotification aceita o destinatário como 2º parâmetro opcional.
+//     A função paralela createUserNotification deixa explícito quando a
+//     intenção é "pessoal" (force userId obrigatório).
+//   • O cache do badge é por usuário: chave `notif:count:${tenant}:${user}`.
+//
+// Regra de bolso pra call sites:
+//   - Notificação RESULTADO DE AÇÃO DO USER ou ENDEREÇADA A UM USER  → pessoal
+//   - Evento do sistema relevante pra todo time (cliente preencheu form,
+//     pipeline rodou, base apagada, etc.)                            → broadcast
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Cria uma notificação interna no sistema.
- * Usada para avisar operadores sobre eventos (form preenchido, token expirado, etc.)
+ *
+ * Assinatura mantida retrocompatível com chamadas antigas
+ * (`createNotification(tenantId, type, title, message, clientId, metadata)`),
+ * que ficam como **broadcast** (todo time vê).
+ *
+ * Para notificação pessoal, passe `userId` como 7º parâmetro OU use a função
+ * `createUserNotification(userId, ...)` que torna a intenção explícita.
+ *
+ * @param {string}      tenantId  - workspace global (resolveTenantId)
+ * @param {string}      type      - chave do tipo (ex: 'task_assigned')
+ * @param {string}      title
+ * @param {string}      message
+ * @param {string|null} clientId  - cliente relacionado (opcional)
+ * @param {object}      metadata
+ * @param {string|null} userId    - destinatário pessoal. NULL/undefined = broadcast.
  */
-async function createNotification(tenantId, type, title, message, clientId = null, metadata = {}) {
-  console.log('[INFO][ClientForm:createNotification] Criando notificação', { tenantId, type, clientId });
+async function createNotification(tenantId, type, title, message, clientId = null, metadata = {}, userId = null) {
+  console.log('[INFO][ClientForm:createNotification]', {
+    tenantId, userId: userId || '(broadcast)', type, clientId,
+  });
 
   const row = await queryOne(
-    `INSERT INTO system_notifications (tenant_id, type, title, message, client_id, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO system_notifications (tenant_id, user_id, type, title, message, client_id, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
-    [tenantId, type, title, message, clientId, JSON.stringify(metadata)]
+    [tenantId, userId || null, type, title, message, clientId, JSON.stringify(metadata)]
   );
 
-  // PERF: invalida cache de contagem de notificações
-  try { require('../infra/cache').invalidate(`notif:count:${tenantId}`); } catch {}
+  // PERF: invalida cache de contagem. Em broadcast, invalida o prefixo do
+  // tenant inteiro (cobre todos os users daquele tenant).
+  try {
+    const { invalidate } = require('../infra/cache');
+    if (userId) {
+      invalidate(`notif:count:${tenantId}:${userId}`);
+    } else {
+      invalidate(`notif:count:${tenantId}`);
+    }
+  } catch {}
 
-  console.log('[SUCESSO][ClientForm:createNotification] Notificação criada', { id: row.id, type });
+  console.log('[SUCESSO][ClientForm:createNotification]', { id: row.id, type });
   return row;
 }
 
 /**
- * Busca notificações não lidas do tenant com nome do cliente.
- * Ordenadas da mais recente para a mais antiga.
+ * Atalho explícito quando a intenção é "pessoal" — `userId` obrigatório.
+ * Use isso em call sites onde a notificação é claramente pra UM usuário
+ * (ex: "task atribuída a você", "tarefas vencidas suas"). A ordem dos
+ * parâmetros é DIFERENTE de `createNotification` (userId primeiro) pra forçar
+ * o caller a pensar no destinatário antes do conteúdo.
  */
-async function getUnreadNotifications(tenantId, limit = 20) {
-  console.log('[INFO][ClientForm:getUnreadNotifications] Buscando notificações', { tenantId });
+async function createUserNotification(userId, tenantId, type, title, message, clientId = null, metadata = {}) {
+  if (!userId) throw new Error('createUserNotification: userId obrigatório (use createNotification para broadcast)');
+  return createNotification(tenantId, type, title, message, clientId, metadata, userId);
+}
+
+/**
+ * Notificações não-lidas DO USUÁRIO logado.
+ * Cobre pessoais (user_id = $userId) E broadcasts (user_id IS NULL).
+ *
+ * @param {string} tenantId
+ * @param {string} userId   - obrigatório
+ * @param {number} limit
+ */
+async function getUnreadNotifications(tenantId, userId, limit = 20) {
+  if (!userId) throw new Error('getUnreadNotifications: userId obrigatório');
 
   return query(
     `SELECT n.*, c.company_name
      FROM system_notifications n
      LEFT JOIN marketing_clients c ON c.id = n.client_id
-     WHERE n.tenant_id = $1 AND n.read = false
+     WHERE n.tenant_id = $1
+       AND (n.user_id = $2 OR n.user_id IS NULL)
+       AND n.read = false
      ORDER BY n.created_at DESC
-     LIMIT $2`,
-    [tenantId, limit]
+     LIMIT $3`,
+    [tenantId, userId, limit]
   );
 }
 
 /**
  * Marca uma notificação específica como lida.
+ *
+ * Nota: NÃO valida que a notificação pertence ao caller — o sininho da UI
+ * só lista o que é dele (pessoal + broadcast), então a chance de ID inválido
+ * é baixa. Se quiser endurecer no futuro, adicionar `AND (user_id = $X OR user_id IS NULL)`.
  */
 async function markNotificationRead(notificationId) {
-  console.log('[INFO][ClientForm:markNotificationRead] Marcando como lida', { notificationId });
-
   return queryOne(
     `UPDATE system_notifications SET read = true WHERE id = $1 RETURNING *`,
     [notificationId]
@@ -339,42 +409,59 @@ async function markNotificationRead(notificationId) {
 }
 
 /**
- * Marca todas as notificações do tenant como lidas de uma vez.
+ * Marca como lidas todas as notificações VISÍVEIS PRO USUÁRIO logado.
+ * "Visíveis" = pessoais (user_id = $userId) + broadcasts (user_id IS NULL).
+ *
+ * Importante: broadcasts são marcadas como lidas pra TODO MUNDO quando um
+ * único user clica "marcar tudo como lido". Aceitável por ora — a maior parte
+ * dos broadcasts é operacional (pipeline rodou, base apagada). Se isso virar
+ * problema, criar uma tabela `notification_reads(user_id, notification_id)`.
  */
-async function markAllNotificationsRead(tenantId) {
-  console.log('[INFO][ClientForm:markAllNotificationsRead] Marcando todas como lidas', { tenantId });
+async function markAllNotificationsRead(tenantId, userId) {
+  if (!userId) throw new Error('markAllNotificationsRead: userId obrigatório');
 
   return query(
-    `UPDATE system_notifications SET read = true WHERE tenant_id = $1 AND read = false RETURNING id`,
-    [tenantId]
+    `UPDATE system_notifications
+        SET read = true
+      WHERE tenant_id = $1
+        AND (user_id = $2 OR user_id IS NULL)
+        AND read = false
+      RETURNING id`,
+    [tenantId, userId]
   );
 }
 
 /**
- * Busca todas as notificações do tenant (lidas e não lidas).
- * Usada na aba "Todas" do dropdown de notificações.
+ * Todas as notificações visíveis pro user logado (lidas e não-lidas).
  */
-async function getAllNotifications(tenantId, limit = 50) {
-  console.log('[INFO][ClientForm:getAllNotifications] Buscando todas as notificações', { tenantId });
+async function getAllNotifications(tenantId, userId, limit = 50) {
+  if (!userId) throw new Error('getAllNotifications: userId obrigatório');
 
   return query(
     `SELECT n.*, c.company_name
      FROM system_notifications n
      LEFT JOIN marketing_clients c ON c.id = n.client_id
      WHERE n.tenant_id = $1
+       AND (n.user_id = $2 OR n.user_id IS NULL)
      ORDER BY n.created_at DESC
-     LIMIT $2`,
-    [tenantId, limit]
+     LIMIT $3`,
+    [tenantId, userId, limit]
   );
 }
 
 /**
- * Conta quantas notificações não lidas o tenant tem — usado para badge no header.
+ * Conta não-lidas visíveis pro user logado — usado pelo badge do sininho.
  */
-async function countUnread(tenantId) {
+async function countUnread(tenantId, userId) {
+  if (!userId) throw new Error('countUnread: userId obrigatório');
+
   const row = await queryOne(
-    `SELECT COUNT(*)::int AS count FROM system_notifications WHERE tenant_id = $1 AND read = false`,
-    [tenantId]
+    `SELECT COUNT(*)::int AS count
+       FROM system_notifications
+      WHERE tenant_id = $1
+        AND (user_id = $2 OR user_id IS NULL)
+        AND read = false`,
+    [tenantId, userId]
   );
   return row?.count || 0;
 }
@@ -395,6 +482,7 @@ module.exports = {
   submitForm,
   // Notificações
   createNotification,
+  createUserNotification,
   getUnreadNotifications,
   getAllNotifications,
   markNotificationRead,

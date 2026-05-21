@@ -62,7 +62,7 @@ export default async function handler(req, res) {
     // Notificações pra responsáveis (best-effort, agrupado por user — uma
     // notificação por pessoa ao invés de N).
     try {
-      const { createNotification } = require('../../../../models/clientForm');
+      const { createUserNotification } = require('../../../../models/clientForm');
       const byAssignee = {};
       for (const t of created) {
         if (t.assigned_to && t.assigned_to !== user.id) {
@@ -70,8 +70,9 @@ export default async function handler(req, res) {
         }
       }
       for (const [uid, count] of Object.entries(byAssignee)) {
-        await createNotification(
-          uid, 'task_assigned',
+        // Pessoal — cada assignee só vê o próprio bloco de tarefas dele.
+        await createUserNotification(
+          uid, tenantId, 'task_assigned',
           'Tarefas atribuídas',
           `${count} tarefa(s) foram atribuídas a você via importação em massa`,
           null,

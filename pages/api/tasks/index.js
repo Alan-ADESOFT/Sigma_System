@@ -66,12 +66,13 @@ export default async function handler(req, res) {
         }
       }
 
-      // Notification: task assigned
+      // Notification PESSOAL: task atribuída — vai pro sininho do assignee.
+      // (Antes deste patch passava `assigned_to` como tenantId — bug.)
       if (assigned_to && assigned_to !== userId) {
         try {
-          const { createNotification } = require('../../../models/clientForm');
-          await createNotification(
-            assigned_to, 'task_assigned',
+          const { createUserNotification } = require('../../../models/clientForm');
+          await createUserNotification(
+            assigned_to, tenantId, 'task_assigned',
             'Nova task atribuída',
             `A task "${title}" foi atribuída a você`,
             client_id || null,

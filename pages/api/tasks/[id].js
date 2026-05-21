@@ -68,12 +68,12 @@ export default async function handler(req, res) {
       const task = await taskModel.updateTask(id, data, userId, tenantId);
       if (!task) return res.status(404).json({ success: false, error: 'Task não encontrada' });
 
-      // If assigned_to changed, notify new assignee
+      // Notification PESSOAL: assignee mudou — avisa o novo responsável.
       if (data.assigned_to && data.assigned_to !== userId) {
         try {
-          const { createNotification } = require('../../../models/clientForm');
-          await createNotification(
-            data.assigned_to, 'task_assigned',
+          const { createUserNotification } = require('../../../models/clientForm');
+          await createUserNotification(
+            data.assigned_to, tenantId, 'task_assigned',
             'Task atribuída a você',
             `A task "${task.title}" foi atribuída a você`,
             task.client_id || null,
@@ -82,11 +82,12 @@ export default async function handler(req, res) {
         } catch {}
       }
 
-      // If completed, check if any task was blocked by this one and notify
+      // Notification PESSOAL: dependência liberada — avisa cada assignee
+      // das tasks que estavam bloqueadas por esta.
       if (data.status === 'done') {
         try {
           const { query } = require('../../../infra/db');
-          const { createNotification } = require('../../../models/clientForm');
+          const { createUserNotification } = require('../../../models/clientForm');
           const blocked = await query(
             `SELECT DISTINCT ct.id, ct.title, ct.assigned_to
              FROM task_dependencies td
@@ -97,8 +98,8 @@ export default async function handler(req, res) {
           for (const bt of blocked) {
             const canNow = await taskModel.canCompleteTask(bt.id, tenantId);
             if (canNow.canComplete && bt.assigned_to) {
-              await createNotification(
-                bt.assigned_to, 'task_dependency_resolved',
+              await createUserNotification(
+                bt.assigned_to, tenantId, 'task_dependency_resolved',
                 'Dependência liberada',
                 `A task "${bt.title}" pode ser iniciada agora`,
                 null,

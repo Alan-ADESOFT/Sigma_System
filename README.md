@@ -213,14 +213,73 @@ Veja `.env.example` para a lista completa.
    - Duracoes por tipo: success=4s, error=6s, pipeline=8s
 
 2. **Notificacoes internas (banco)** — tabela `system_notifications`
-   - Tipos: `form_submitted`, `form_started`, `pipeline_done`, `token_expired`
-   - Exibidas no dropdown de notificacoes do header
+   - Coluna `user_id` (NULLABLE):
+     - `user_id = NULL` → **broadcast** (todo time vê)
+     - `user_id = $X`   → **pessoal** (só $X vê no sininho)
+   - O sininho filtra `WHERE (user_id = $userId OR user_id IS NULL)`.
+   - Helpers em `models/clientForm.js`:
+     - `createNotification(tenantId, type, title, message, clientId, metadata, userId?)` — `userId` opcional. Sem ele = broadcast.
+     - `createUserNotification(userId, tenantId, ...)` — atalho explícito quando a intenção é pessoal (força `userId` obrigatório).
+   - Regra de bolso: notificação RESULTADO DE AÇÃO DO USER ou ENDEREÇADA A UM USER → pessoal. Evento do sistema relevante pra todo time → broadcast.
 
 ---
 
-## Multi-tenancy
+## 🏢 Arquitetura de Dados — Single Workspace
 
-Todas as queries filtram por `tenant_id`. O tenant e resolvido automaticamente pela sessao do usuario via `infra/get-tenant-id.js`. Cada tenant tem seus proprios clientes, agentes e dados isolados.
+O Sigma é uma plataforma **single-workspace**. Isso significa:
+
+- Existe **UM** `WORKSPACE_TENANT_ID` no `.env`, único pro time inteiro.
+- A tabela `tenants` armazena **usuários** (não workspaces). Cada linha é uma pessoa que faz login.
+- `resolveTenantId(req)` retorna SEMPRE o mesmo ID, independente de quem fez login.
+- **`tenant_id` NÃO isola dados entre usuários.** Quem isola pessoa é `user_id` / `assigned_to` / `created_by` em colunas próprias.
+
+### O que é COMPARTILHADO (todo time vê e edita)
+
+Por padrão, **tudo** no Sigma é compartilhado. Qualquer pessoa do time pode ver, criar, editar e remover. Isso inclui (não exaustivo):
+
+- **Clientes** (`marketing_clients`), contratos, parcelas, ficha completa
+- **Financeiro** — receitas, despesas, categorias, parcelas, configs do bot de cobrança
+- **Forms / Onboarding** — templates de mensagens, vídeo de boas-vindas, jornada de 15 dias, respostas dos clientes, configs de etapas, mensagens dos dias de descanso
+- **Suporte / Tutoriais** — módulos, aulas, vídeos, anexos
+- **Configurações do sistema** — settings (tabela `settings` key/value), templates do Jarvis, prompt library, modelos de IA selecionados
+- **Brand books, Copy Generator, Image Generator, Ads, Social Media, Content Plan, Pipeline de Agentes**
+- **Categorias de tasks, recorrências de tasks, task templates** (a CONFIG é compartilhada; só a TASK em si é pessoal — ver abaixo)
+- **Indicações, base de dados, leads comerciais, pipeline comercial**
+
+### O que é PESSOAL (cada user vê só o que é dele)
+
+Apenas três áreas têm isolamento por usuário. Em todas, **além** do `tenant_id` padrão, é obrigatório filtrar por usuário:
+
+| Domínio | Tabela(s) | Filtro pessoal |
+|---|---|---|
+| **Tasks individuais** | `client_tasks` | `WHERE assigned_to = $userId OR created_by = $userId` — toggle "Time" libera tudo |
+| **Chat / interações Jarvis** | `jarvis_usage_log` | `WHERE user_id = $userId` |
+| **Notificações (sininho)** | `system_notifications` | `WHERE (user_id = $userId OR user_id IS NULL)` |
+
+**Preferências de UI** (ex: `user_task_preferences`) também são por usuário — `WHERE user_id = $userId`.
+
+### Regra prática pra novas features
+
+Antes de criar qualquer tabela ou endpoint, perguntar: **"Faz sentido o Alan ver o que o Brenno fez?"**
+
+- **Sim, faz sentido** → compartilhado. Só `tenant_id` padrão, sem filtro adicional.
+- **Não, é privado** → pessoal. Precisa de coluna `user_id` (ou equivalente) E filtro em todas as queries.
+
+Quando em dúvida → **compartilhado por padrão**. É uma agência.
+
+### Permissões (role-based) ≠ Isolamento de dados
+
+Algumas áreas têm **gates de edição** baseados em `role` (`user` / `admin` / `god`). Isso controla quem pode editar, **não** quem vê. Exemplos:
+
+- Suporte/Tutoriais: todo time vê; só admin/god cria/edita.
+- Settings do sistema: todo time pode ver os efeitos; só god edita.
+- Pipeline comercial: configurável por role.
+
+`user.role` controla **permissão**. `user.id` controla **propriedade** quando aplicável. São coisas diferentes.
+
+### Quando usar `resolveTenantId(req)`
+
+Sempre. Em **todo** endpoint autenticado — mas isso não é "multi-tenancy", é apenas o jeito padrão de descobrir o workspace ID pra usar nas queries (que sempre filtram `WHERE tenant_id = $X` por consistência com o schema). **Não confundir com isolamento por usuário.**
 
 ---
 
@@ -428,6 +487,71 @@ banco apaga os registros em cascata, mas os arquivos físicos em
 garbage collection (cron que varre os arquivos sem referência no banco).
 
 ## Histórico de alterações
+
+### 2026-05-21 — PATCH single-workspace + notificações pessoais
+
+Auditoria arquitetural corrigindo a confusão histórica entre "multi-tenancy"
+e "single-workspace" no README e no código de notificações.
+
+**Documentação:**
+- README ganhou seção "🏢 Arquitetura de Dados — Single Workspace" explicando
+  que `tenant_id` NÃO isola dados entre usuários (todos do time têm o mesmo).
+  Isolamento por pessoa é via `user_id`/`assigned_to`/`created_by`.
+- Lista do que é **compartilhado** (quase tudo) vs **pessoal** (Tasks, Jarvis,
+  Notificações + preferências de UI).
+- Distinção entre `role` (permissão de edição) e `user.id` (propriedade).
+- Substituída a seção antiga "Multi-tenancy" que era enganosa.
+
+**Schema (`infra/migrations/006_notifications_per_user_20260521.sql`):**
+- `system_notifications.user_id TEXT` NULLABLE (REFERENCES `tenants` ON DELETE CASCADE).
+  NULL = broadcast; preenchido = pessoal. Notificações antigas (sem `user_id`)
+  viram broadcast retroativo — aceitável (operacionais por natureza).
+- Índice composto `(user_id, read, created_at DESC)` pra o filtro do sininho.
+
+**Model (`models/clientForm.js`):**
+- `createNotification(tenantId, type, title, message, clientId, metadata, userId?)`
+  — `userId` opcional como **7º** parâmetro (retrocompat: 38 call sites antigos
+  continuam funcionando como broadcast sem alteração).
+- Nova função `createUserNotification(userId, tenantId, ...)` — atalho explícito
+  pra notificação pessoal, com `userId` obrigatório (throw se ausente).
+- `getUnreadNotifications`, `getAllNotifications`, `markAllNotificationsRead`,
+  `countUnread` agora EXIGEM `userId` e filtram com
+  `WHERE tenant_id = $1 AND (user_id = $2 OR user_id IS NULL)`.
+
+**Endpoint (`pages/api/notifications/index.js`):**
+- Usa `requireAuth(req)` pra extrair o `user.id`.
+- Cache do contador agora é por usuário: `notif:count:${tenantId}:${userId}`
+  (antes era global `notif:count:${tenantId}` — vazava entre users).
+- Em broadcast, a invalidação usa só o prefixo `notif:count:${tenantId}`
+  (cobre todas as variantes user-específicas).
+
+**Call sites corrigidos (pessoais):**
+- `pages/api/tasks/index.js` — "task atribuída" → `createUserNotification(assigned_to, tenantId, ...)`.
+  **Bug pré-existente corrigido:** o código antigo passava `assigned_to`
+  como se fosse `tenantId` no 1º arg — notificação nascia com `tenant_id`
+  errado e ficava invisível.
+- `pages/api/tasks/[id].js` — mesmo bug corrigido em 2 lugares:
+  "task atribuída" quando muda assignee e "dependência liberada" pros
+  assignees de tasks que estavam bloqueadas.
+- `pages/api/cron/tasks-overdue.js` — "tarefas vencidas" agora pessoal pro user
+  afetado (mesmo bug pré-existente).
+- `pages/api/tasks/bulk-import/commit.js` — "tarefas atribuídas via importação"
+  pessoal pra cada assignee (mesmo bug pré-existente).
+- `pages/api/jarvis/confirm.js` — 6 call sites passam `user.id` no 7º arg:
+  task criada, task recorrente, receita/despesa, pipeline, send_form,
+  send_onboarding/resend_onboarding.
+
+**Broadcasts permanecem** (sem `userId`): cliente criado, base apagada, form
+preenchido, pipeline finalizado, Instagram conectado, anomalias de ads,
+propostas comerciais, etc. — tudo que é evento do sistema relevante pro time.
+
+**Validação dos cenários canônicos:**
+- Alan cria cliente → Brenno vê ✅
+- Alan cria task pra ele → Brenno NÃO vê na view "Eu" ✅
+- Brenno conversa com Jarvis → Alan NÃO vê histórico ✅
+- Pipeline finalizado → todo time vê (broadcast) ✅
+- Alan atribui task ao Brenno → SÓ Brenno recebe notificação ✅
+- Admin upou tutorial → todo time vê (gated só pra editar) ✅
 
 ### 2026-05-20 — Central de Suporte — Tutoriais internos (módulos > aulas > mídias)
 

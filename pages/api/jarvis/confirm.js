@@ -96,11 +96,13 @@ export default async function handler(req, res) {
           try { await invalidate(`task_recurrences:${tenantId}`); } catch {}
 
           try {
+            // Pessoal — confirma pro user que disparou a ação no Jarvis
             await createNotification(
               tenantId, 'jarvis_action', 'Task recorrente criada via JARVIS',
               `"${data.title}" — ${freqLabel}${data.client_name ? `, cliente: ${data.client_name}` : ''}.`,
               data.client_id || null,
-              { action: 'create_recurring_task', recurrenceId: recurrence.id, createdBy: 'jarvis' }
+              { action: 'create_recurring_task', recurrenceId: recurrence.id, createdBy: 'jarvis' },
+              user.id
             );
           } catch {}
 
@@ -148,10 +150,13 @@ export default async function handler(req, res) {
         try { await invalidate(`tasks:${tenantId}`); } catch {}
 
         try {
+          // Pessoal — confirma a ação pro user que disparou no chat
           await createNotification(
             tenantId, 'jarvis_action', 'Tarefa criada via JARVIS',
             `"${data.title}"${data.client_name ? ` para ${data.client_name}` : ''}${data.assigned_to_name ? `, atribuída a ${data.assigned_to_name}` : ''}${data.category_name ? ` [${data.category_name}]` : ''}.`,
-            data.client_id || null, { action: 'create_task', taskId: row.id, createdBy: 'jarvis' }
+            data.client_id || null,
+            { action: 'create_task', taskId: row.id, createdBy: 'jarvis' },
+            user.id
           );
         } catch {}
 
@@ -184,10 +189,13 @@ export default async function handler(req, res) {
 
       const valueFmt = Number(data.value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
       try {
+        // Pessoal — feedback pro user que registrou o lançamento via chat
         await createNotification(
           tenantId, 'jarvis_action', `${typeLabel} registrada via JARVIS`,
           `${data.description} — ${valueFmt} em ${new Date(date).toLocaleDateString('pt-BR')}.`,
-          null, { action, financeId: row.id, createdBy: 'jarvis' }
+          null,
+          { action, financeId: row.id, createdBy: 'jarvis' },
+          user.id
         );
       } catch {}
 
@@ -225,10 +233,14 @@ export default async function handler(req, res) {
       invalidate(`clients:list:${tenantId}`);
 
       try {
+        // Pessoal — confirma pro user que rodou o pipeline.
+        // (Quando o pipeline FINALIZA, há um broadcast separado em run-all.js.)
         await createNotification(
           tenantId, 'jarvis_action', 'Pipeline disparado via JARVIS',
           `Pipeline de ${data.client_name || 'cliente'} iniciado. Acompanhe na Base de Dados.`,
-          data.client_id, { action: 'generate_summary', jobId: pipelineResult.jobId, createdBy: 'jarvis' }
+          data.client_id,
+          { action: 'generate_summary', jobId: pipelineResult.jobId, createdBy: 'jarvis' },
+          user.id
         );
       } catch {}
 
@@ -280,10 +292,13 @@ export default async function handler(req, res) {
         await logJarvisUsage(tenantId, user.id, 'confirm:send_form', JSON.stringify(data), `sent to ${data.phone}`, 0, true, null);
 
         try {
+          // Pessoal — confirma pro user que disparou o envio.
           await createNotification(
             tenantId, 'jarvis_action', 'Formulário enviado via JARVIS',
             `Link do formulário enviado para ${data.client_name || 'cliente'} (${data.phone}) via WhatsApp.`,
-            data.client_id, { action: 'send_form', messageId: result?.messageId, createdBy: 'jarvis' }
+            data.client_id,
+            { action: 'send_form', messageId: result?.messageId, createdBy: 'jarvis' },
+            user.id
           );
         } catch {}
 
@@ -410,6 +425,7 @@ export default async function handler(req, res) {
       );
 
       try {
+        // Pessoal — confirma pro user que disparou o envio/reenvio.
         await createNotification(
           tenantId, 'jarvis_action',
           isResend ? 'Formulário reenviado via JARVIS' : 'Onboarding iniciado via JARVIS',
@@ -417,7 +433,8 @@ export default async function handler(req, res) {
             ? `Link reenviado para ${data.client_name || 'cliente'} (${phone}) sem resetar a contagem.`
             : `Jornada de 15 dias iniciada para ${data.client_name || 'cliente'} (${phone}) via WhatsApp.`,
           data.client_id,
-          { action, messageId: sendResult?.messageId, videoSent, createdBy: 'jarvis' }
+          { action, messageId: sendResult?.messageId, videoSent, createdBy: 'jarvis' },
+          user.id
         );
       } catch {}
 

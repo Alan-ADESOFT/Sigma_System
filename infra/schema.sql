@@ -556,8 +556,15 @@ CREATE TABLE IF NOT EXISTS system_notifications (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- PATCH single-workspace (20260521): user_id NULLABLE pra distinguir
+-- notificações pessoais (user_id = $X) de broadcast (user_id IS NULL).
+-- Migration espelhada em infra/migrations/006_notifications_per_user_20260521.sql
+ALTER TABLE system_notifications
+  ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES tenants(id) ON DELETE CASCADE;
+
 CREATE INDEX IF NOT EXISTS idx_notifications_tenant ON system_notifications(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read   ON system_notifications(tenant_id, read);
+CREATE INDEX IF NOT EXISTS idx_system_notif_user    ON system_notifications(user_id, read, created_at DESC);
 
 -- ============================================================
 -- 24. PIPELINE_JOBS (tracking de execucao do pipeline)

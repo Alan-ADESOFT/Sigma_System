@@ -41,6 +41,22 @@ Header obrigatório em todas: `x-internal-token: {valor de INTERNAL_API_TOKEN}`
 Rodar `infra/schema.sql` contra o banco para garantir que todas as tabelas e colunas existem.
 O arquivo é idempotente (IF NOT EXISTS + ADD COLUMN IF NOT EXISTS).
 
+## Notificações pessoais — patch 20260521
+
+**Migration:** `infra/migrations/006_notifications_per_user_20260521.sql`
+- Adiciona `system_notifications.user_id TEXT` (NULLABLE) + índice composto.
+- Idempotente; notificações antigas (`user_id IS NULL`) viram broadcast retroativo.
+
+**Impacto no app após deploy:**
+- O sininho passa a filtrar `WHERE (user_id = $userId OR user_id IS NULL)`.
+  Cada user vê só as próprias notificações + broadcasts.
+- Cache do badge fica por usuário (`notif:count:{tenant}:{user}`).
+- Notificações de "task atribuída", "task vencida", "dependência liberada",
+  ações do Jarvis disparadas pelo user → pessoais.
+- Bug pré-existente corrigido: alguns call sites passavam `assigned_to` como
+  `tenantId` por engano — notificação gerada com tenant errado e ficava
+  invisível no sininho. Agora estão certos.
+
 ## Central de Suporte — sprint 20260520
 
 **Migration:** `infra/migrations/005_support_center_20260520.sql` cria 3 tabelas:

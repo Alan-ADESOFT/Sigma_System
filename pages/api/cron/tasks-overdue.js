@@ -55,13 +55,15 @@ export default async function handler(req, res) {
       }
     }
 
-    // Notificação no sininho (WhatsApp removido — agora só morning + afternoon)
-    const { createNotification } = require('../../../models/clientForm');
+    // Notificação PESSOAL no sininho — cada user só vê suas próprias tasks
+    // vencidas. (WhatsApp removido na sprint Tasks v2; agora só sininho +
+    // crons morning/afternoon.)
+    const { createUserNotification } = require('../../../models/clientForm');
     for (const [userId, info] of Object.entries(byUser)) {
       const titles = info.tasks.map((t) => t.title);
       try {
-        await createNotification(
-          userId, 'task_overdue',
+        await createUserNotification(
+          userId, workspaceId, 'task_overdue',
           'Tarefas vencidas',
           `Você tem ${titles.length} tarefa(s) vencida(s)`,
           null,

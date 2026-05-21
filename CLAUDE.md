@@ -32,13 +32,16 @@ The dev server starts a background scheduler via `server/instrumentation.js` (en
 - AI: OpenAI Chat Completions + Responses API (web search), Anthropic Messages API, optional Perplexity Sonar. Routing is automatic by model ID substring (see Completion router below).
 - DOCX export uses `docx`, file extraction uses `pdf-parse` + `mammoth`, image optimization uses `sharp`.
 
-### Multi-tenancy (single-workspace mode)
+### Arquitetura de Dados (single-workspace mode)
 
 A plataforma opera em modo **single-workspace**: todos os usuários compartilham
 o mesmo `tenant_id`, definido por `WORKSPACE_TENANT_ID` no `.env`. A tabela
 `tenants` armazena USUÁRIOS (não workspaces) — cada linha é uma pessoa que faz
-login. O isolamento por usuário, quando necessário (ex: tasks pessoais), é
-feito via `assigned_to`/`created_by`, NÃO via `tenant_id`.
+login.
+
+**`tenant_id` NÃO isola dados entre usuários.** Filtrar por `tenant_id` é apenas
+o padrão de schema; o ID é o mesmo pra todo mundo. Isolamento real por pessoa
+é feito via `user_id` / `assigned_to` / `created_by` em colunas próprias.
 
 `infra/get-tenant-id.js → resolveTenantId(req)` sempre retorna o
 `WORKSPACE_TENANT_ID` (header `x-tenant-id` ainda tem prioridade para cron jobs
@@ -48,9 +51,29 @@ Auth (`lib/auth.js`, `pages/api/auth/*`, `hooks/useAuth.js`) usa scrypt + cookie
 HMAC. `lib/api-auth.requireAuth(req)` retorna o user; `user.tenant_id` aponta
 pro `WORKSPACE_TENANT_ID` por compatibilidade com handlers antigos.
 
-Tasks são a exceção: filtro `WHERE assigned_to = userId` no
-`models/task.model.getTasksByTenant`. View=`team` libera tudo do workspace
-(inclusive tasks que o usuário criou pra outros).
+**Compartilhado por padrão** (todo time vê e edita): clientes, financeiro,
+forms/onboarding, suporte/tutoriais, settings, brand books, copy/image
+generators, ads, social, content plan, pipeline, categorias/templates/configs
+de tasks, indicações, leads, base de dados.
+
+**Pessoal** (filtro `user_id`/`assigned_to` obrigatório em TODA query):
+- **Tasks individuais** (`client_tasks`): filtro `WHERE assigned_to = userId`
+  em `models/task.model.getTasksByTenant`. View=`team` libera tudo.
+- **Jarvis** (`jarvis_usage_log`): `WHERE user_id = userId`.
+- **Notificações** (`system_notifications`):
+  `WHERE (user_id = userId OR user_id IS NULL)`. `user_id IS NULL` =
+  broadcast (todo time vê). Criar via
+  `createUserNotification(userId, tenantId, ...)` (pessoal, force) ou
+  `createNotification(tenantId, type, ..., metadata, userId?)` (userId opcional
+  como 7º arg).
+- **Preferências de UI** (ex: `user_task_preferences`): `WHERE user_id = userId`.
+
+**Permissões (role) ≠ isolamento (user_id):**
+`user.role` (`user`/`admin`/`god`) controla quem pode EDITAR (gates em mutations).
+`user.id` controla quem VÊ quando o dado é pessoal. São independentes — Suporte,
+por exemplo, todo mundo vê (não é pessoal) mas só admin edita (gate de role).
+
+Quando em dúvida pra novas features → **compartilhado por padrão**. É agência.
 
 ### Directory layout (the parts that matter)
 ```
@@ -108,6 +131,54 @@ brandbook/                  Design system docs (foundations, motion, tokens).
                             05-ai-instructions.md uses Tailwind/Framer/Lucide
                             templates that DO NOT match this codebase — ignore.
 ```
+
+### Copy v2 (sprint maio/2026) — background-first, streaming, export
+
+**Geração e melhoria são jobs assíncronos.** O endpoint `POST /api/copy/jobs`
+aceita `kind: 'generate' | 'improve' | 'improve_text'` e retorna `202 + jobId`.
+O processamento ocorre via `setImmediate` no mesmo processo (`copyJobRunner.processCopyJob`).
+A UI abre `EventSource` em `/api/copy/jobs/[id]/stream` (SSE) com fallback
+automático pra polling 800ms se nenhum evento chegar em 3s. `partial_text` é
+gravado a cada ~60 chars/400ms durante o stream — fonte da verdade continua
+sendo `result_text` ao concluir.
+
+**Streaming usa `runCompletionStreamWithModel` ou `runCompletionStream`** em
+`models/ia/completion.js`, que coletam usage real via `stream_options.include_usage`
+(OpenAI) e `message_delta.usage` (Anthropic) pra logar tokens corretos.
+
+**Export é job separado** (`copy_export_jobs`, `models/copy/exportJobRunner.js`).
+3 templates HTML em `models/copy/exportTemplates/` + 3 espelhos DOCX em
+`models/copy/exportDocx.js`. Render PDF via `puppeteer-core` + `@sparticuz/chromium`
+em `infra/api/pdfRenderer.js` (browser singleton, A4 20/18mm, footer numerado,
+fontes carregadas via Google Fonts antes do `page.pdf()`).
+
+**Cache de contexto do cliente:** `loadClientContext` em `copyJobRunner` tem
+TTL 60s in-memory (sem invalidação manual — janela de 60s aceita por design).
+
+**Cleanup de exports:** `server/instrumentation.js` agenda `cleanupOldExports(7)`
+1x ao boot e a cada 24h — apaga arquivos físicos de `public/uploads/exports/`
+com mais de 7 dias e zera `result_url` no banco.
+
+### Modelos de Copy (sprint maio/2026)
+
+O seletor do Copy expõe a linha atual: `claude-opus-4-7` (premium),
+`claude-sonnet-4-6` (recomendado), `claude-haiku-4-5` (rápido) e `gpt-5.5`.
+Os IDs `claude-opus-4-5`, `claude-sonnet-4-5`, `gpt-4o` e `gpt-4o-mini`
+permanecem na lista marcados como `(legacy)` apenas para compat com
+sessões salvas. Preços ficam em `models/copy/tokenUsage.js → PRICES`.
+
+### Tracking de tokens no módulo Copy
+
+Toda chamada de IA originada do Copy DEVE chegar em `ai_token_usage`.
+Pontos cobertos hoje (Fase 1 da sprint v2):
+`copy_generate`, `copy_modify`, `copy_format_output`, `copy_structure_generate`,
+`copy_transcribe`, `copy_improve_text`, `copy_vision`, `copy_export_planning`.
+Quando criar uma rota nova que chama IA, importe `logUsage` de
+`models/copy/tokenUsage` e passe `tenantId`, `clientId` e `sessionId`
+sempre que disponíveis. Para chamadas via `runCompletion`, basta passar
+`opts.operationType` — o roteador já chama `logUsage` por baixo.
+`infra/api/vision.js` aceita `options.tenantId/clientId/sessionId/operationType`
+e loga sob `copy_vision` por padrão.
 
 ### AI completion routing
 All text generation goes through `models/ia/completion.js`. You pass a semantic level — `'weak'`, `'medium'`, or `'strong'` — and the router resolves it via `process.env.AI_MODEL_{LEVEL}`. If the resolved model ID contains `claude`, it calls `infra/api/anthropic.js`; otherwise `infra/api/openai.js`. `runCompletion` also silently logs token usage to `ai_token_usage` when `opts.tenantId` is provided. `runCompletionStream` is an async generator parsing SSE from either provider — use it for incremental UI updates.
@@ -168,6 +239,48 @@ DB-backed via `rate_limit_log` (no Redis). `infra/rateLimit.checkRateLimit(tenan
 - The `instrumentation.js` scheduler runs only when `NEXT_RUNTIME === 'nodejs'` and starts on dev server boot — be aware that long dev sessions will hit the Meta API on schedule for any due posts.
 - When adding a new agent prompt, place the file in `models/agentes/copycreator/prompts/`, register it in that directory's `index.js`, and add the entry to `pipelineConfig.PIPELINE_CONFIG` with correct `order`, `savesToKB`, `dependsOn`, and `outputPlaceholder`.
 - When calling the AI from a new feature, always pass `opts.tenantId` (and `clientId`/`operationType` when relevant) to `runCompletion` so token usage gets logged to `ai_token_usage`.
+
+### Image v2 (sprint maio/2026) — Arte Guia + Smart Selector inteligente
+
+**Smart Selector via LLM (default Claude Sonnet 4.6).** O autoMode determinístico
+(`models/agentes/imagecreator/autoMode.js`) virou *fallback* — quando o LLM
+falha (timeout, JSON inválido, modelo fora dos `enabled_models`), o worker
+cai pra ele. `smartSelectStrategy` em `models/agentes/imagecreator/smartSelector.js`
+recebe `inspirationTemplateContext` (count + categories) além de brandbook +
+refs + format pra decidir entre Nano Banana 2 / GPT Image 2 / Flux Kontext /
+Imagen 3 Cap. System prompt em `prompts/smartSelector.js` com regras explícitas
+de categoria de pedido (feed/story/ad/banner). Custo ~$0.003/decisão.
+
+**Arte Guia = brandbook + galeria de templates.** A tab "Brandbook" virou
+"Arte Guia" *só na UI* — chave técnica `brandbook` preservada em todo
+código/banco/API. Duas tabelas novas: `image_inspiration_templates` (globais
+por tenant) + `client_inspiration_templates` (por cliente). Model em
+`models/inspirationTemplate.model.js` com `getActiveGlobalTemplates`,
+`getClientTemplates`, `incrementUsageCount` (fire-and-forget) e
+`ensureAIDescription` (Vision lazy — só gera ai_description na primeira
+vez que o template é usado como ref real).
+
+**Fluxo Arte Guia → Geração.** O `ImageGeneratorModal` tem botão
+"+ Escolher da Arte Guia" que abre o `InspirationPickerModal` com 3 seções:
+refs fixas do brandbook + templates do cliente + templates globais. Items
+escolhidos viram refs `mode='inspiration'` levando `templateId`/`templateScope`
+no metadata. O worker chama `ensureAIDescription` em paralelo pra cada
+template, passa o array `inspirationTemplateDescriptions` pro Prompt Engineer
+que injeta no system prompt em bloco dedicado `# INSPIRATION TEMPLATES`.
+Após criar o job, `incrementUsageCount` roda em fire-and-forget.
+
+**Qualidade premium.** `quality: high` default no worker (override via
+`settings.quality_default`). `qualityCheck.js` roda Laplacian variance em
+thumb 256px + verifica resolução real vs esperada. Sinaliza `low_quality_warning`
+em `image_jobs` sem bloquear entrega.
+
+**Concorrência.** `MAX_CONCURRENT_GLOBAL=10` no worker (env
+`IMAGE_WORKER_MAX_CONCURRENT`). Vision por modo paralelizado, load de
+buffers paralelizado, fixed refs paralelizados.
+
+**Tracking.** Novo `operation_type`: `image_template_describe` (Vision lazy
+em templates) + `image_template_categorize` (reservado, não implementado) +
+`image_ref_classifier` (já existia, agora com label no dashboard).
 
 ### Gerador de Imagem
 
