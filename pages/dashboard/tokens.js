@@ -18,6 +18,15 @@ const OP_LABELS = {
   stage_modify: 'Modificacao de etapa',
   copy_generate: 'Geracao de copy',
   copy_modify: 'Modificacao de copy',
+  // ── Copy v2 (sprint maio/2026) ────────────────────────────────────────
+  copy_structure_generate: 'Copy — Gerador de Estrutura',
+  copy_transcribe:         'Copy — Transcricao de Audio',
+  copy_improve_text:       'Copy — Melhorar Texto',
+  copy_format_output:      'Copy — Formatador',
+  copy_vision:             'Copy — Analise de Imagem',
+  copy_export_planning:    'Copy — Reorganizacao (Export Planning)',
+  copy_export_enrich:      'Copy — Enriquecedor de Export (Sonnet 4.6)',
+  improve_text:            'Copy — Melhorar Texto (legado)',
   web_search: 'Pesquisa web',
   apply_modification: 'Modificacao com IA',
   // ── Gerador de Imagem (sprint v1.1) ────────────────────────────────────
@@ -32,6 +41,10 @@ const OP_LABELS = {
   image_brandbook_extract:                'Imagem — Brandbook Extract',
   image_brandbook_generate:               'Imagem — Brandbook Generate',
   image_brandbook_fixed_ref_describe:     'Imagem — Vision (fixed ref)',
+  // Sprint Image v2 (maio/2026) — Arte Guia
+  image_template_describe:                'Imagem — Vision (Template Inspiração)',
+  image_template_categorize:              'Imagem — Auto-categorizador',
+  image_ref_classifier:                   'Imagem — Classificador de Refs',
   general: 'Outros',
 };
 
@@ -39,6 +52,15 @@ const OP_COLORS = {
   pipeline: { bg: 'rgba(255,0,51,0.08)', color: '#ff6680' },
   copy_generate: { bg: 'rgba(34,197,94,0.08)', color: '#22c55e' },
   copy_modify: { bg: 'rgba(59,130,246,0.08)', color: '#3b82f6' },
+  // ── Copy v2 — paleta com tons proximos pra agrupar visualmente ─────
+  copy_structure_generate: { bg: 'rgba(34,197,94,0.05)',  color: '#15803d' },
+  copy_transcribe:         { bg: 'rgba(20,184,166,0.08)', color: '#14b8a6' },
+  copy_improve_text:       { bg: 'rgba(59,130,246,0.05)', color: '#1d4ed8' },
+  copy_format_output:      { bg: 'rgba(99,102,241,0.06)', color: '#6366f1' },
+  copy_vision:             { bg: 'rgba(236,72,153,0.06)', color: '#ec4899' },
+  copy_export_planning:    { bg: 'rgba(34,197,94,0.04)',  color: '#16a34a' },
+  copy_export_enrich:      { bg: 'rgba(168,85,247,0.08)', color: '#a855f7' },
+  improve_text:            { bg: 'rgba(59,130,246,0.05)', color: '#1d4ed8' },
   apply_modification: { bg: 'rgba(168,85,247,0.08)', color: '#a855f7' },
   web_search: { bg: 'rgba(249,115,22,0.08)', color: '#f97316' },
   stage_modify: { bg: 'rgba(59,130,246,0.08)', color: '#3b82f6' },
@@ -53,6 +75,10 @@ const OP_COLORS = {
   image_brandbook_extract:                { bg: 'rgba(245,158,11,0.06)', color: '#f59e0b' },
   image_brandbook_generate:               { bg: 'rgba(245,158,11,0.06)', color: '#f59e0b' },
   image_brandbook_fixed_ref_describe:     { bg: 'rgba(245,158,11,0.06)', color: '#f59e0b' },
+  // Sprint Image v2 — paleta da Arte Guia (tons de teal pra distinguir)
+  image_template_describe:                { bg: 'rgba(20,184,166,0.08)',  color: '#14b8a6' },
+  image_template_categorize:              { bg: 'rgba(20,184,166,0.05)',  color: '#0d9488' },
+  image_ref_classifier:                   { bg: 'rgba(99,102,241,0.06)',  color: '#6366f1' },
   general: { bg: 'rgba(82,82,82,0.08)', color: '#525252' },
 };
 

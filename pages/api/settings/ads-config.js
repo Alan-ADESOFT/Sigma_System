@@ -11,6 +11,8 @@
 import { resolveTenantId } from '../../../infra/get-tenant-id';
 import { getSetting, setSetting } from '../../../models/settings.model';
 
+const { requireAuth, requireAdmin } = require('../../../lib/api-auth');
+
 const ALLOWED_KEYS = [
   'ads_model_strong',
   'ads_model_medium',
@@ -40,6 +42,17 @@ const DEFAULTS = {
 };
 
 export default async function handler(req, res) {
+  // Patch de segurança (20260521): leitura exige auth; escrita exige admin/god
+  try {
+    if (req.method === 'GET') await requireAuth(req);
+    else                      await requireAdmin(req);
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ success: false, error: err.message });
+    }
+    throw err;
+  }
+
   const tenantId = await resolveTenantId(req);
 
   if (req.method === 'GET') {

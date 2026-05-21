@@ -16,11 +16,12 @@
 const { query, queryOne } = require('../../../infra/db');
 const taskModel = require('../../../models/task.model');
 
+const { verifyCronToken } = require('../../../lib/cron-auth');
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
 
-  const internalToken = req.headers['x-internal-token'];
-  if (internalToken !== process.env.INTERNAL_API_TOKEN) {
+  if (!verifyCronToken(req)) {
     return res.status(401).json({ error: 'Token inválido' });
   }
 

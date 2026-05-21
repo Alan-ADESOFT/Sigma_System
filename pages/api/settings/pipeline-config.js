@@ -15,6 +15,8 @@ import { getSetting, setSetting } from '../../../models/settings.model';
 import { query, queryOne } from '../../../infra/db';
 import { getOrSet, invalidate } from '../../../infra/cache';
 
+const { requireAuth, requireAdmin } = require('../../../lib/api-auth');
+
 const MODEL_KEYS = [
   'pipeline_model_weak',
   'pipeline_model_medium',
@@ -39,6 +41,17 @@ const ENV_DEFAULTS = {
 const AGENT_NAMES = ['agente1', 'agente2a', 'agente2b', 'agente3', 'agente4a', 'agente4b', 'agente5'];
 
 export default async function handler(req, res) {
+  // Patch de segurança (20260521): leitura exige auth; escrita exige admin/god
+  try {
+    if (req.method === 'GET') await requireAuth(req);
+    else                      await requireAdmin(req);
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ success: false, error: err.message });
+    }
+    throw err;
+  }
+
   const tenantId = await resolveTenantId(req);
 
   // ── GET ──────────────────────────────────────────────────────────────────

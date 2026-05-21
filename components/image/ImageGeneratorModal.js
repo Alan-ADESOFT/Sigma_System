@@ -31,6 +31,7 @@ import FormatSelector, { FORMATS } from './FormatSelector';
 import AspectRatioSelector from './AspectRatioSelector';
 import ModelSelector, { MODELS } from './ModelSelector';
 import ReferenceUploader from './ReferenceUploader';
+import InspirationPickerModal from './InspirationPickerModal';
 import PromptViewer from './PromptViewer';
 import FolderModal from './FolderModal';
 import TemplateModal from './TemplateModal';
@@ -83,6 +84,10 @@ export default function ImageGeneratorModal({
   const [description, setDescription] = useState('');
   const [observations, setObservations] = useState('');
   const [referenceUrls, setReferenceUrls] = useState([]);
+  // sprint Image v2 (maio/2026): rastreia ids dos templates da Arte Guia
+  // selecionados pra incrementar usage_count no backend apos a geracao.
+  const [pickedTemplateIds, setPickedTemplateIds] = useState([]); // [{ id, scope }]
+  const [showPicker, setShowPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [ignoreBrandbook, setIgnoreBrandbook] = useState(false);
   const [lastOptimized, setLastOptimized] = useState(null);
@@ -300,6 +305,9 @@ export default function ImageGeneratorModal({
         observations: observations.trim() || null,
         referenceImages: refsNormalized,
         useBrandbook: !ignoreBrandbook,
+        // sprint Image v2: ids dos templates escolhidos (pra incrementar
+        // usage_count no backend e gerar Vision lazy se ainda nao tiver)
+        inspirationTemplateIds: pickedTemplateIds,
       };
 
       const res = await fetch('/api/image/generate', {
@@ -629,6 +637,28 @@ export default function ImageGeneratorModal({
                   onChange={setReferenceUrls}
                   advancedMode={advancedMode}
                 />
+                {/* sprint Image v2: botao "Escolher da Arte Guia" — abre
+                    picker com refs fixas + templates do cliente + globais. */}
+                <button
+                  type="button"
+                  onClick={() => setShowPicker(true)}
+                  style={{
+                    marginTop: 6, width: '100%',
+                    padding: '7px 10px',
+                    background: 'rgba(255,0,51,0.06)',
+                    border: '1px dashed rgba(255,0,51,0.30)',
+                    borderRadius: 6,
+                    color: '#ff6680',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.55rem', fontWeight: 600,
+                    letterSpacing: '0.04em',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                  title="Escolher referencias visuais da Arte Guia (templates do cliente + globais + refs fixas do brandbook)"
+                >
+                  + Escolher da Arte Guia
+                </button>
               </div>
 
               <div className={styles.controlGroup}>
@@ -932,6 +962,36 @@ export default function ImageGeneratorModal({
           />
         )}
       </div>
+
+      {/* sprint Image v2: picker modal — escolher templates da Arte Guia
+          como referencia visual. Items selecionados viram refs com mode
+          'inspiration' (default — usuario pode trocar pra char/scene depois). */}
+      <InspirationPickerModal
+        open={showPicker}
+        onClose={() => setShowPicker(false)}
+        clientId={client?.id || null}
+        maxSelection={Math.max(1, 5 - (referenceUrls?.length || 0))}
+        onConfirm={(picked) => {
+          // Adiciona como refs (mode='inspiration' default). templateId/scope
+          // viajam no metadata pra o backend chamar ensureAIDescription
+          // (Vision lazy) e injetar no Prompt Engineer.
+          const newRefs = picked.map(p => ({
+            url: p.url,
+            mode: 'inspiration',
+            templateId:    p.scope !== 'fixed' ? p.id    : null,
+            templateScope: p.scope !== 'fixed' ? p.scope : null,
+          }));
+          const merged = [...(referenceUrls || []), ...newRefs].slice(0, 5);
+          setReferenceUrls(merged);
+          // Tambem rastreia ids pra incrementUsageCount via /api/image/generate
+          const ids = picked
+            .filter(p => p.scope !== 'fixed')
+            .map(p => ({ id: p.id, scope: p.scope }));
+          setPickedTemplateIds(prev => [...prev, ...ids]);
+          setShowPicker(false);
+          notify(`${picked.length} referencia(s) adicionada(s) da Arte Guia`, 'success');
+        }}
+      />
     </div>
   );
 }

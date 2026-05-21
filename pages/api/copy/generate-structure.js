@@ -15,6 +15,7 @@ import { resolveTenantId } from '../../../infra/get-tenant-id';
 import { resolveModel } from '../../../models/ia/completion';
 import { buildStructureGeneratorSystem } from '../../../models/copy/structurePrompt';
 import { extractFromFile } from '../../../infra/api/fileReader';
+const { logUsage } = require('../../../models/copy/tokenUsage');
 
 export const config = {
   api: { bodyParser: { sizeLimit: '30mb' } },
@@ -25,8 +26,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: 'Metodo nao permitido' });
   }
 
-  await resolveTenantId(req);
-  const { description, images, files } = req.body;
+  const tenantId = await resolveTenantId(req);
+  const { description, images, files, clientId } = req.body;
 
   if (!description?.trim()) {
     return res.status(400).json({ success: false, error: 'description obrigatoria' });
@@ -50,7 +51,7 @@ export default async function handler(req, res) {
       if (fileTexts.length) filesContent = fileTexts.join('\n---\n');
     }
 
-    // Processa imagens
+    // Processa imagens (passa tenant pra logar tokens de vision)
     let imagesDescription = '';
     if (images?.length) {
       const { analyzeMultipleImages } = require('../../../infra/api/vision');
@@ -58,7 +59,7 @@ export default async function handler(req, res) {
       const visionResult = await analyzeMultipleImages(
         imageUrls,
         'Descreva as imagens — sao referencia para criar uma estrutura de copy.',
-        { detail: 'high' }
+        { detail: 'high', tenantId, clientId, operationType: 'copy_vision' }
       );
       if (visionResult.analysis) imagesDescription = visionResult.analysis;
     }
@@ -91,6 +92,15 @@ export default async function handler(req, res) {
 
     const d = await r.json();
     let content = d.choices?.[0]?.message?.content || '';
+
+    // Tracking — chamada de IA explicita do gerador de estrutura
+    logUsage({
+      tenantId, modelUsed: model, provider: 'openai',
+      operationType: 'copy_structure_generate',
+      clientId: clientId || null,
+      tokensInput: d.usage?.prompt_tokens || 0,
+      tokensOutput: d.usage?.completion_tokens || 0,
+    });
 
     // Limpa possivel markdown (```json ... ```)
     content = content.replace(/^```json?\s*/i, '').replace(/\s*```\s*$/i, '').trim();

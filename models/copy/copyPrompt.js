@@ -217,11 +217,20 @@ ${currentOutput || '(vazio)'}`;
 
 /**
  * Passa o texto gerado pela IA de formatacao (modelo weak)
- * para organizar titulos, negritos, listas etc. pro editor
+ * para organizar titulos, negritos, listas etc. pro editor.
+ *
+ * Quando opts.tenantId vier, registra uso em ai_token_usage como
+ * 'copy_format_output' — fecha o gap de tracking nas chamadas internas
+ * disparadas por runGenerateCopy / runImproveCopy.
+ *
  * @param {string} text - Texto bruto gerado
+ * @param {object} [opts] - Tracking
+ * @param {string} [opts.tenantId]
+ * @param {string} [opts.clientId]
+ * @param {string} [opts.sessionId]
  * @returns {Promise<string>} Texto formatado (ou original se falhar)
  */
-async function formatCopyOutput(text) {
+async function formatCopyOutput(text, opts = {}) {
   if (!text) return text;
 
   try {
@@ -246,6 +255,20 @@ async function formatCopyOutput(text) {
     if (!r.ok) return text;
     const d = await r.json();
     const formatted = d.choices?.[0]?.message?.content;
+
+    if (opts.tenantId) {
+      try {
+        const { logUsage } = require('./tokenUsage');
+        logUsage({
+          tenantId: opts.tenantId, modelUsed: model, provider: 'openai',
+          operationType: 'copy_format_output',
+          clientId: opts.clientId || null, sessionId: opts.sessionId || null,
+          tokensInput: d.usage?.prompt_tokens || 0,
+          tokensOutput: d.usage?.completion_tokens || 0,
+        });
+      } catch {}
+    }
+
     return formatted || text;
   } catch (err) {
     console.error('[AVISO][CopyPrompt] Formatacao falhou, usando texto bruto', { error: err.message });

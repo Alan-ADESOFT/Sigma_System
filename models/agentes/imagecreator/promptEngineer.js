@@ -76,6 +76,15 @@ function calculateHash(input) {
         .slice(0, 400)
     : '';
 
+  // sprint v2: hash inclui descricoes dos templates da Arte Guia. Sem isso,
+  // mudar templates da Arte Guia entre geracoes nao invalida cache (errado).
+  const tplKey = Array.isArray(input.inspirationTemplateDescriptions)
+    ? input.inspirationTemplateDescriptions
+        .map(d => (d || '').slice(0, 100).toLowerCase())
+        .join('|')
+        .slice(0, 400)
+    : '';
+
   const payload = JSON.stringify({
     raw:        (input.rawDescription || '').trim().toLowerCase(),
     brandbook:  input.brandbookId || null,
@@ -87,6 +96,7 @@ function calculateHash(input) {
     neg:        (input.negativePrompt || '').trim().toLowerCase(),
     refs:       refsKey,
     fixed:      fixedKey,
+    tpl:        tplKey,
     smart:      input.smartDecision?.primary_model || null,
   });
   return crypto.createHash('md5').update(payload).digest('hex');
@@ -129,6 +139,7 @@ async function optimizePrompt(args) {
     referenceDescriptionsByMode,
     referenceDescriptions,
     fixedBrandReferencesDescriptions,
+    inspirationTemplateDescriptions,  // sprint v2 — templates da Arte Guia
     smartDecision,
     imageInputs,
     bypassCache,  // sprint v1.1 — força novo prompt ignorando cache
@@ -151,6 +162,7 @@ async function optimizePrompt(args) {
     observations, negativePrompt,
     referenceDescriptionsByMode, referenceDescriptions,
     fixedBrandReferencesDescriptions,
+    inspirationTemplateDescriptions,
     smartDecision,
   });
 
@@ -170,8 +182,11 @@ async function optimizePrompt(args) {
       jobId, hash, expected: expectedBbId, got: cachedBbId,
     });
   } else if (cached?.optimized_prompt) {
-    console.log('[INFO][PromptEngineer] cache hit', {
-      tenantId, jobId, hash, age: cached.created_at,
+    // [INFO][PromptEngineer] cache HIT — caps pra ficar facil de medir taxa
+    // de cache via grep nos logs de producao. tokensUsed=0 confirma que
+    // nenhuma chamada LLM foi feita (custo zero pra essa geracao).
+    console.log('[INFO][PromptEngineer] cache HIT', {
+      tenantId, jobId, hash, age: cached.created_at, tokensUsed: 0,
     });
     if (brandbook?.id) {
       console.log('[INFO][PromptEngineer] Brandbook injetado no prompt (via cache)', {
@@ -197,6 +212,7 @@ async function optimizePrompt(args) {
     observations, negativePrompt,
     referenceDescriptionsByMode, referenceDescriptions,
     fixedBrandReferencesDescriptions,
+    inspirationTemplateDescriptions,
     smartDecision,
     imageInputs,
   });

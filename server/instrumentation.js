@@ -44,6 +44,22 @@ async function register() {
   } catch (err) {
     console.error('[ERRO][instrumentation] imageWorker:', err.message);
   }
+
+  // Cleanup diario de exports de copy (>7 dias) — roda 1x ao boot e a cada 24h.
+  // Mantem barato pq apaga so files do disco + zera result_url no banco.
+  try {
+    const { cleanupOldExports } = require('../models/copy/exportJobRunner');
+    const runCleanup = async () => {
+      try { await cleanupOldExports(7); }
+      catch (err) { console.error('[ERRO][instrumentation] cleanupOldExports:', err.message); }
+    };
+    // Primeiro disparo defasado em 5min pra nao competir com o startup
+    setTimeout(runCleanup, 5 * 60_000);
+    setInterval(runCleanup, 24 * 60 * 60_000);
+    console.log('[INFO][instrumentation] cleanup de exports agendado (24h)');
+  } catch (err) {
+    console.error('[ERRO][instrumentation] copy export cleanup:', err.message);
+  }
 }
 
 module.exports = { register };

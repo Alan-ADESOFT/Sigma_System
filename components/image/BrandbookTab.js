@@ -20,6 +20,7 @@ import styles from '../../assets/style/brandbook.module.css';
 import BrandbookEditor from './BrandbookEditor';
 import BrandbookFromAIModal from './BrandbookFromAIModal';
 import BrandbookPdfUploadModal from './BrandbookPdfUploadModal';
+import InspirationTemplatesGallery from './InspirationTemplatesGallery';
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -118,7 +119,7 @@ export default function BrandbookTab({ clientId }) {
         <div className="glass-card" style={{ padding: 36, textAlign: 'center', color: 'var(--text-muted)' }}>
           <span className="spinner" style={{ width: 18, height: 18, margin: '0 auto 10px' }} />
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', letterSpacing: '0.1em' }}>
-            CARREGANDO BRANDBOOK...
+            CARREGANDO ARTE GUIA...
           </div>
         </div>
       </div>
@@ -132,11 +133,12 @@ export default function BrandbookTab({ clientId }) {
         <HowItWorksImage variant="brandbook" />
         <div className={`glass-card ${styles.empty}`}>
           <div className={styles.emptyIcon}><Icon name="palette" size={22} /></div>
-          <div className={styles.emptyTitle}>Crie o brandbook deste cliente</div>
+          <div className={styles.emptyTitle}>Crie a Arte Guia deste cliente</div>
           <p className={styles.emptySub}>
-            O brandbook é a identidade visual do cliente: paleta, tipografia, tom, regras
-            do que fazer e do que evitar. Ele é injetado automaticamente em todas as
-            gerações de imagem para garantir consistência de marca.
+            A Arte Guia une a identidade visual estruturada (paleta, tipografia, tom,
+            regras do/dont) com as referencias visuais da marca. Comece pelo
+            brandbook estruturado abaixo — voce adiciona templates de inspiracao
+            depois pra alimentar a galeria visual do cliente.
           </p>
 
           <div className={styles.optionsGrid}>
@@ -246,6 +248,32 @@ export default function BrandbookTab({ clientId }) {
         seedStructuredData={seedData}
         onSaved={handleSaved}
       />
+
+      {/* Sprint Image v2 (maio/2026): 3a secao da Arte Guia — galeria de
+          templates de inspiracao do cliente. Aparece sempre que ja ha
+          brandbook estruturado salvo (so no editor confirmado, nao no seed). */}
+      {brandbook && (
+        <div style={{ marginTop: 24 }}>
+          <div className="glass-card" style={{ padding: 18 }}>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.04em' }}>
+                Templates de Inspiracao
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.54rem', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.55 }}>
+                Galeria de artes-modelo deste cliente. O Smart Selector usa essas
+                imagens como guia de estilo ao decidir o modelo de geracao.
+                Voce pode escolher essas templates como referencia direta no Image
+                Generator (botao "Escolher da Arte Guia").
+              </div>
+            </div>
+            <InspirationTemplatesGallery
+              apiPath={`/api/image/templates/client/${clientId}`}
+              title="Templates do cliente"
+              emptyMessage="Sem templates ainda. Faca upload de artes-modelo deste cliente — elas viram referencia visual em cada geracao."
+            />
+          </div>
+        </div>
+      )}
 
       {showAI  && <BrandbookFromAIModal     clientId={clientId} onClose={() => setShowAI(false)}  onGenerated={handleAIGenerated} />}
       {showPdf && <BrandbookPdfUploadModal clientId={clientId} onClose={() => setShowPdf(false)} onExtracted={handlePdfExtracted} />}

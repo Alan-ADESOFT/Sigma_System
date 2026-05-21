@@ -14,6 +14,8 @@ import { resolveTenantId } from '../../../infra/get-tenant-id';
 import { query, queryOne } from '../../../infra/db';
 import { getSetting, setSetting, deleteSetting } from '../../../models/settings.model';
 
+const { requireAuth, requireAdmin } = require('../../../lib/api-auth');
+
 // ── Módulos de prompt ────────────────────────────────────────
 
 const { getAgent } = require('../../../models/agentes/copycreator/prompts/index');
@@ -171,6 +173,21 @@ function buildGenericPrompts(list, overrides) {
 // ── Handler ──────────────────────────────────────────────────
 
 export default async function handler(req, res) {
+  // Patch de segurança (20260521): leitura exige auth (qualquer user logado);
+  // POST/DELETE exigem admin/god — settings que afetam o workspace inteiro.
+  try {
+    if (req.method === 'GET') {
+      await requireAuth(req);
+    } else {
+      await requireAdmin(req);
+    }
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ success: false, error: err.message });
+    }
+    throw err;
+  }
+
   const tenantId = await resolveTenantId(req);
 
   // ── GET ────────────────────────────────────────────────────

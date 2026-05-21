@@ -26,6 +26,8 @@ const IMAGE_PRICES = {
   'fal-ai/flux-pro/kontext':        { quality_low: 0.04,  quality_med: 0.04,  quality_high: 0.04  },
   'fal-ai/flux-pro/kontext/max':    { quality_low: 0.06,  quality_med: 0.06,  quality_high: 0.06  },
   'gpt-image-2':                    { quality_low: 0.04,  quality_med: 0.08,  quality_high: 0.17  },
+  // gpt-image-1.5 — tier intermediario, ~30% mais barato que gpt-image-2 high
+  'gpt-image-1.5':                  { quality_low: 0.03,  quality_med: 0.06,  quality_high: 0.12  },
   'imagen-3.0-capability-001':      { quality_low: 0.04,  quality_med: 0.04,  quality_high: 0.04  },
   'imagen-4.0-generate-001':        { quality_low: 0.04,  quality_med: 0.04,  quality_high: 0.06  },
   'imagen-4.0-fast-generate-001':   { quality_low: 0.02,  quality_med: 0.02,  quality_high: 0.02  },

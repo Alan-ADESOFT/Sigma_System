@@ -86,30 +86,27 @@ async function runCompletion(modelLevel, systemPrompt, userMessage, maxTokens = 
 }
 
 /**
- * Streaming de completion — AsyncGenerator que yield chunks de texto
- * Suporta OpenAI e Anthropic via fetch nativo com SSE parsing.
+ * Implementacao interna do streaming SSE (compartilhada entre as variantes
+ * que recebem nivel semantico ou modelId direto).
  *
- * @param {string} modelLevel - 'weak' | 'medium' | 'strong'
- * @param {string} systemPrompt - Prompt do sistema
- * @param {string} userMessage - Mensagem do usuário
- * @param {number} [maxTokens=4000] - Limite de tokens
- * @yields {{ delta: string, fullText: string, done: boolean, modelUsed: string }}
+ * Coleta `usage` no fim do stream:
+ *   - OpenAI: passa `stream_options.include_usage = true` e ouve o ultimo
+ *     evento que carrega `usage` no JSON.
+ *   - Anthropic: ouve `message_start` (usage.input_tokens) e `message_delta`
+ *     (usage.output_tokens), somando.
+ * Usage volta no evento final `done: true` para o caller logar tokens.
  */
-async function* runCompletionStream(modelLevel, systemPrompt, userMessage, maxTokens = 4000) {
-  const model = resolveModel(modelLevel);
+async function* _streamSSE({ model, systemPrompt, userMessage, maxTokens }) {
   const provider = model.toLowerCase().includes('claude') ? 'Anthropic' : 'OpenAI';
   const providerTag = provider === 'Anthropic' ? '🟣 ANTHROPIC' : '🟢 OPENAI';
-  console.log(`[INFO][Completion:Stream] ──── ${providerTag} ──── Iniciando streaming`, { modelLevel, model });
+  console.log(`[INFO][Completion:Stream] ──── ${providerTag} ──── Iniciando streaming`, { model });
 
-  // Anthropic exige user message não-vazio. OpenAI tolera, mas padronizamos.
-  const safeUserMessage = (userMessage && String(userMessage).trim())
-    ? userMessage
-    : 'Continue.';
+  const safeUserMessage = (userMessage && String(userMessage).trim()) ? userMessage : 'Continue.';
 
   let fullText = '';
+  const usage = { input: 0, output: 0, total: 0 };
 
   if (provider === 'OpenAI') {
-    // ── OpenAI Streaming ──────────────────────────────────────────────────
     const key = process.env.OPENAI_API_KEY;
     if (!key) throw new Error('OPENAI_API_KEY não configurada no .env');
 
@@ -120,6 +117,7 @@ async function* runCompletionStream(modelLevel, systemPrompt, userMessage, maxTo
         model,
         max_tokens: maxTokens,
         stream: true,
+        stream_options: { include_usage: true },
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: safeUserMessage },
@@ -132,7 +130,6 @@ async function* runCompletionStream(modelLevel, systemPrompt, userMessage, maxTo
       throw new Error(`OpenAI Stream Error ${response.status}: ${err}`);
     }
 
-    // Parse SSE do ReadableStream
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -143,7 +140,7 @@ async function* runCompletionStream(modelLevel, systemPrompt, userMessage, maxTo
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // última linha pode estar incompleta
+      buffer = lines.pop() || '';
 
       for (const line of lines) {
         const trimmed = line.trim();
@@ -158,12 +155,17 @@ async function* runCompletionStream(modelLevel, systemPrompt, userMessage, maxTo
             fullText += delta;
             yield { delta, fullText, done: false, modelUsed: model };
           }
+          // Ultimo chunk com stream_options.include_usage carrega usage
+          if (json.usage) {
+            usage.input  = json.usage.prompt_tokens || 0;
+            usage.output = json.usage.completion_tokens || 0;
+            usage.total  = json.usage.total_tokens || (usage.input + usage.output);
+          }
         } catch {}
       }
     }
 
   } else {
-    // ── Anthropic Streaming ───────────────────────────────────────────────
     const key = process.env.ANTHROPIC_API_KEY;
     if (!key) throw new Error('ANTHROPIC_API_KEY não configurada no .env');
 
@@ -207,19 +209,47 @@ async function* runCompletionStream(modelLevel, systemPrompt, userMessage, maxTo
 
         try {
           const json = JSON.parse(payload);
-          // Anthropic envia content_block_delta com type 'text_delta'
+          if (json.type === 'message_start' && json.message?.usage) {
+            usage.input = json.message.usage.input_tokens || 0;
+          }
           if (json.type === 'content_block_delta' && json.delta?.text) {
             const delta = json.delta.text;
             fullText += delta;
             yield { delta, fullText, done: false, modelUsed: model };
           }
+          if (json.type === 'message_delta' && json.usage) {
+            usage.output = json.usage.output_tokens || usage.output;
+          }
         } catch {}
       }
     }
+    usage.total = usage.input + usage.output;
   }
 
-  console.log(`[SUCESSO][Completion:Stream] ──── ${providerTag} ──── Streaming concluido`, { model, totalLength: fullText.length });
-  yield { delta: '', fullText, done: true, modelUsed: model };
+  console.log(`[SUCESSO][Completion:Stream] ──── ${providerTag} ──── Streaming concluido`, { model, totalLength: fullText.length, usage });
+  yield { delta: '', fullText, done: true, modelUsed: model, usage };
+}
+
+/**
+ * Streaming de completion por nivel semantico ('weak' | 'medium' | 'strong').
+ * Resolve o modelo via env e delega para _streamSSE.
+ */
+async function* runCompletionStream(modelLevel, systemPrompt, userMessage, maxTokens = 4000) {
+  const model = resolveModel(modelLevel);
+  yield* _streamSSE({ model, systemPrompt, userMessage, maxTokens });
+}
+
+/**
+ * Streaming de completion com modelId direto (sem resolver por nivel).
+ * Usado pelo Copy quando o operador escolhe um modelo especifico no select.
+ *
+ * @param {string} modelId - Model ID completo (ex: 'claude-opus-4-7', 'gpt-5.5')
+ * @param {string} systemPrompt
+ * @param {string} userMessage
+ * @param {number} [maxTokens=4000]
+ */
+async function* runCompletionStreamWithModel(modelId, systemPrompt, userMessage, maxTokens = 4000) {
+  yield* _streamSSE({ model: modelId, systemPrompt, userMessage, maxTokens });
 }
 
 /**
@@ -323,4 +353,11 @@ async function runCompletionWithFallback(tenantId, modelLevel, systemPrompt, use
   }
 }
 
-module.exports = { runCompletion, resolveModel, runCompletionStream, runCompletionWithFallback, runCompletionWithModel };
+module.exports = {
+  runCompletion,
+  resolveModel,
+  runCompletionStream,
+  runCompletionStreamWithModel,
+  runCompletionWithFallback,
+  runCompletionWithModel,
+};

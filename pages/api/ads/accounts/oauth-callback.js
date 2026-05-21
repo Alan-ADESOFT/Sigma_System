@@ -18,9 +18,12 @@ const { queryOne } = require('../../../../infra/db');
 const metaAds = require('../../../../infra/api/metaAds');
 const adsAccount = require('../../../../models/ads/adsAccount.model');
 const { createNotification } = require('../../../../models/clientForm');
+const { requireEnv } = require('../../../../lib/env');
 
+/* Mesmo segredo do oauth-start — verifica o state que voltou do Meta.
+ * Fallback hardcoded foi removido nesta auditoria de segurança. */
 function getStateSecret() {
-  return process.env.SESSION_SECRET || 'sigma-ads-oauth-fallback-secret-change-in-prod';
+  return requireEnv('SESSION_SECRET');
 }
 
 function verifyState(state) {

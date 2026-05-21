@@ -118,11 +118,23 @@ async function saveContent(tenantId, content) {
 
 /**
  * Atualiza apenas o status de um conteúdo (ex: draft → approved).
+ *
+ * Patch de segurança (20260521): tenantId é obrigatório no WHERE pra
+ * consistência com o resto do schema (defesa em profundidade — mesmo que
+ * single-workspace o tenant seja o mesmo).
+ *
  * @param {string} id
  * @param {string} status
+ * @param {string} tenantId
  */
-async function updateContentStatus(id, status) {
-  await query(`UPDATE contents SET status = $1 WHERE id = $2`, [status, id]);
+async function updateContentStatus(id, status, tenantId) {
+  if (!tenantId) {
+    throw new Error('updateContentStatus: tenantId obrigatório');
+  }
+  await query(
+    `UPDATE contents SET status = $1 WHERE id = $2 AND tenant_id = $3`,
+    [status, id, tenantId]
+  );
 }
 
 /**

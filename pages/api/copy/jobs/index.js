@@ -31,8 +31,8 @@ export default async function handler(req, res) {
   const tenantId = await resolveTenantId(req);
   const { kind, params } = req.body || {};
 
-  if (!kind || !['generate', 'improve'].includes(kind)) {
-    return res.status(400).json({ success: false, error: 'kind deve ser generate ou improve' });
+  if (!kind || !['generate', 'improve', 'improve_text'].includes(kind)) {
+    return res.status(400).json({ success: false, error: 'kind deve ser generate, improve ou improve_text' });
   }
   if (!params?.sessionId) {
     return res.status(400).json({ success: false, error: 'params.sessionId obrigatorio' });
@@ -42,6 +42,9 @@ export default async function handler(req, res) {
   }
   if (kind === 'improve' && !params.instruction) {
     return res.status(400).json({ success: false, error: 'params.instruction obrigatorio' });
+  }
+  if (kind === 'improve_text' && !params.text) {
+    return res.status(400).json({ success: false, error: 'params.text obrigatorio' });
   }
 
   try {

@@ -48,9 +48,11 @@ const {
   classifyReferences,
   roleToLegacyMode,
 } = require('../models/agentes/imagecreator/refClassifier');
-// heuristicSelector/smartSelector preservados em disco pra compat reversa
-// com jobs antigos no histórico, mas o worker agora usa só autoMode.
+// Sprint v2 (maio/2026): worker agora usa SmartSelector (Claude Sonnet 4.6)
+// como cerebro padrao. autoMode determinstico permanece como fallback caso
+// o LLM falhe (timeout, rate limit, JSON invalido).
 const { decide: autoModeDecide } = require('../models/agentes/imagecreator/autoMode');
+const { selectStrategy: smartSelectStrategy } = require('../models/agentes/imagecreator/smartSelector');
 const { probeOpenAIImageModel } = require('../infra/api/imageProviders/_probe');
 const { setOpenAIResolved } = require('../models/imageSettings.model');
 const { getMaxImageInputs } = require('../models/agentes/imagecreator/modelCapabilities');
@@ -66,8 +68,9 @@ const POLL_MED_MS   = 5000;
 const POLL_SLOW_MS  = 10000;
 const IDLE_THRESHOLD_MED  = 5;
 const IDLE_THRESHOLD_SLOW = 20;
-// LIMITE GLOBAL v1.1 — 5 jobs simultâneos no worker (independente de tenant)
-const MAX_CONCURRENT_GLOBAL = 5;
+// LIMITE GLOBAL — sprint v2 (maio/2026): subimos pra 10 e expusemos via env.
+// Se Railway/providers começarem a 429-ar, baixar pra 7 via env sem deploy.
+const MAX_CONCURRENT_GLOBAL = parseInt(process.env.IMAGE_WORKER_MAX_CONCURRENT, 10) || 10;
 const CLEANUP_HOUR = 3;
 const CLEANUP_MINUTE = 0;
 // TTL do cache de descrições das fixed refs do brandbook (30 dias)
@@ -219,19 +222,19 @@ async function ensureFixedRefsDescriptions(brandbook, tenantId) {
     return cached;
   }
 
-  // Re-descreve todas
-  console.log('[INFO][Worker] Fixed refs cache miss — descrevendo via Vision', {
+  // Re-descreve todas EM PARALELO (sprint v2) — antes era serial,
+  // 5 fixed refs gastavam ~5*2s = 10s; agora ~2s + saturação inicial da API.
+  console.log('[INFO][Worker] Fixed refs cache miss — descrevendo via Vision (paralelo)', {
     brandbookId: brandbook.id, count: fixedRefs.length,
   });
-  const descs = [];
-  for (const fr of fixedRefs) {
+  const descs = await Promise.all(fixedRefs.map(async (fr) => {
     const result = await describeFixedReference(fr, tenantId);
-    descs.push({
+    return {
       url: fr.url,
       label: fr.label || null,
       description: result.description || '',
-    });
-  }
+    };
+  }));
   await updateFixedReferencesDescriptions(brandbook.id, descs);
   return descs;
 }
@@ -245,31 +248,40 @@ async function loadImageInputsForProvider({ refs, fixedRefs, maxCount }) {
   const out = [];
   if (!maxCount || maxCount <= 0) return out;
 
-  // Ordem de prioridade
-  const ordered = [
+  // Ordem de prioridade — character > scene > inspiration > fixed
+  const orderedRefs = [
     ...refs.filter(r => r.mode === 'character'),
     ...refs.filter(r => r.mode === 'scene'),
     ...refs.filter(r => r.mode === 'inspiration'),
-  ];
+  ].slice(0, maxCount);
 
-  for (const r of ordered) {
-    if (out.length >= maxCount) break;
-    const buffer = await loadInternalUpload(r.url);
-    if (!buffer) continue;
+  // Sprint v2: load buffers em paralelo. Antes era serial (5 refs = 5*200ms).
+  // Mantemos a ordem original via index — Promise.all preserva ordem.
+  const refBuffers = await Promise.all(
+    orderedRefs.map(r => loadInternalUpload(r.url).catch(() => null))
+  );
+
+  orderedRefs.forEach((r, i) => {
+    const buffer = refBuffers[i];
+    if (!buffer) return;
     out.push({
       url: r.url,
       buffer,
       role: r.mode,
       referenceId: out.length + 1,
     });
-  }
+  });
 
-  // Fixed refs entram no resto do espaço (se sobrar)
-  if (out.length < maxCount && Array.isArray(fixedRefs)) {
-    for (const fr of fixedRefs) {
-      if (out.length >= maxCount) break;
-      const buffer = await loadInternalUpload(fr.url);
-      if (!buffer) continue;
+  // Fixed refs entram no resto do espaco (tambem em paralelo)
+  if (out.length < maxCount && Array.isArray(fixedRefs) && fixedRefs.length) {
+    const slotsLeft = maxCount - out.length;
+    const candidates = fixedRefs.slice(0, slotsLeft);
+    const fixedBuffers = await Promise.all(
+      candidates.map(fr => loadInternalUpload(fr.url).catch(() => null))
+    );
+    candidates.forEach((fr, i) => {
+      const buffer = fixedBuffers[i];
+      if (!buffer || out.length >= maxCount) return;
       out.push({
         url: fr.url,
         buffer,
@@ -277,7 +289,7 @@ async function loadImageInputsForProvider({ refs, fixedRefs, maxCount }) {
         description: fr.description || fr.label,
         referenceId: out.length + 1,
       });
-    }
+    });
   }
 
   return out;
@@ -400,41 +412,95 @@ async function processJob(job) {
       referenceDescriptionsByMode = result.byMode;
     }
 
-    // 6. Decisão de modelo (v1.2: autoMode determinístico + probe GPT Image)
+    // 5b. Sprint Image v2: descricoes Vision dos TEMPLATES da Arte Guia
+    //     (lazy — gera apenas se ainda nao tiver ai_description em cache).
+    //     Em paralelo pra minimizar latencia. Templates aqui sao distintos
+    //     de inspiration refs comuns: levam um bloco extra no Prompt
+    //     Engineer com tag dedicada (INSPIRATION TEMPLATES).
+    const templateRefs = refs.filter(r => r.templateId && r.templateScope);
+    let inspirationTemplateDescriptions = [];
+    if (templateRefs.length > 0) {
+      try {
+        const { ensureAIDescription } = require('../models/inspirationTemplate.model');
+        const descs = await Promise.all(templateRefs.map(r =>
+          ensureAIDescription(r.templateId, r.templateScope, job.tenant_id)
+            .catch(() => null)
+        ));
+        inspirationTemplateDescriptions = descs.filter(Boolean);
+        console.log('[INFO][Worker] Inspiration templates carregados', {
+          jobId: job.id, count: inspirationTemplateDescriptions.length,
+        });
+      } catch (err) {
+        console.warn('[WARN][Worker] inspirationTemplate descriptions falhou', { error: err.message });
+      }
+    }
+
+    // 6. Decisao de modelo — sprint v2: SmartSelector (Claude Sonnet 4.6)
+    //    com fallback automatico pro autoMode deterministico se LLM falhar.
     let smartDecision = null;
     let chosenModel = job.model;
 
     if (job.model === 'auto') {
-      smartDecision = autoModeDecide({
-        rawDescription: job.raw_description,
-        refs,
-        enabledModels: settings.enabled_models || [],
-        openAIResolved: settings.openai_image_model_resolved || null,
-      });
+      // Coleta contexto de templates de inspiracao (Bloco D #21).
+      // Os templates sao injetados via referenceImageMetadata.mode='inspiration'
+      // pelo ImageGeneratorModal — aqui contamos os que vieram da Arte Guia
+      // pra alimentar o smart selector.
+      const templateRefs = refs.filter(r => r.mode === 'inspiration');
+      const inspirationTemplateContext = templateRefs.length > 0
+        ? {
+            count: templateRefs.length,
+            categories: [], // categorias virao via metadata da template no futuro
+          }
+        : null;
 
-      // Resolve GPT Image: se autoMode escolheu gpt-image-2 mas a org não tem,
-      // o resolved fica null e o gptImageActual() devolve gpt-image-2 mesmo
-      // assim — o provider lança 404. Como temos o probe rodando no boot, na
-      // prática o resolved está populado. Defesa em profundidade: se vier
-      // gpt-image-2 e resolved aponta pra outro, swap aqui.
+      try {
+        smartDecision = await smartSelectStrategy({
+          rawDescription: job.raw_description,
+          brandbook,
+          format: job.format,
+          refs,
+          observations: job.observations,
+          enabledModels: settings.enabled_models || [],
+          settings,
+          openAIResolved: settings.openai_image_model_resolved || null,
+          inspirationTemplateContext,
+          tenantId: job.tenant_id,
+          userId:   job.user_id,
+          clientId: job.client_id,
+          jobId:    job.id,
+        });
+      } catch (err) {
+        // Defesa adicional — se selectStrategy lancar (nao deveria, ele
+        // tem fallback interno), cai pro autoMode aqui mesmo.
+        console.warn('[WARN][Worker] smartSelector lancou — fallback autoMode', { error: err.message });
+        smartDecision = autoModeDecide({
+          rawDescription: job.raw_description,
+          refs,
+          enabledModels: settings.enabled_models || [],
+          openAIResolved: settings.openai_image_model_resolved || null,
+        });
+        smartDecision.fallback_used = true;
+        smartDecision.llm_failed = true;
+      }
+
+      // Defesa em profundidade — swap gpt-image-2 → resolved se org nao tem
       if (
-        chosenModel === 'gpt-image-2' &&
+        smartDecision.primary_model === 'gpt-image-2' &&
         settings.openai_image_model_resolved &&
         settings.openai_image_model_resolved !== 'gpt-image-2'
       ) {
-        const original = chosenModel;
-        chosenModel = settings.openai_image_model_resolved;
+        const original = smartDecision.primary_model;
+        const resolved = settings.openai_image_model_resolved;
         smartDecision = {
           ...smartDecision,
-          primary_model: chosenModel,
-          reasoning: `${smartDecision.reasoning} (org sem gpt-image-2 — fallback ${chosenModel})`,
-          openai_fallback: { from: original, to: chosenModel },
+          primary_model: resolved,
+          reasoning: `${smartDecision.reasoning} (org sem gpt-image-2 — fallback ${resolved})`,
+          openai_fallback: { from: original, to: resolved },
         };
-      } else {
-        chosenModel = smartDecision.primary_model;
       }
+      chosenModel = smartDecision.primary_model;
     } else {
-      // Modelo explícito (modo avançado Cmd+Shift+A) — não roda autoMode.
+      // Modelo explicito (modo avancado Cmd+Shift+A) — nao roda decisao.
       smartDecision = null;
     }
 
@@ -546,6 +612,8 @@ async function processJob(job) {
       negativePrompt: job.negative_prompt,
       referenceDescriptionsByMode,
       fixedBrandReferencesDescriptions: fixedRefDescriptions,
+      // sprint Image v2: descricoes dos templates de Arte Guia escolhidos
+      inspirationTemplateDescriptions,
       smartDecision,
       imageInputs: imageInputs.map(i => ({ role: i.role, referenceId: i.referenceId })),
       // Bypass cache automático quando há refs `character` — preservação de
@@ -570,6 +638,11 @@ async function processJob(job) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+    // sprint Image v2 (maio/2026): default 'high'. Settings.quality_default
+    // pode override pra 'medium' em tenants que priorizam custo (ex: testes).
+    // Providers que nao suportam tier 'high' caem no melhor disponivel.
+    const qualityTier = settings?.quality_default || 'high';
+
     let result;
     try {
       result = await generateImage({
@@ -582,7 +655,7 @@ async function processJob(job) {
         aspectRatio: job.aspect_ratio,
         imageInputs,
         referenceMode,
-        quality: 'medium',
+        quality: qualityTier,
         settings,
         signal: controller.signal,
       });
@@ -605,7 +678,30 @@ async function processJob(job) {
     // 10. Salva imagem + thumbnail
     const saved = await saveImage(job.tenant_id, job.id, result.imageBuffer, result.mimeType);
 
-    // 11. Calcula custo
+    // 10b. Sprint Image v2: quality check (resolucao + blur Laplaciano).
+    //      Custo ~50ms na thumb 256px. Nao bloqueia entrega — so flagga.
+    let qualityResult = null;
+    try {
+      const { checkQuality } = require('../models/agentes/imagecreator/qualityCheck');
+      qualityResult = await checkQuality(result.imageBuffer, {
+        width: job.width, height: job.height,
+      });
+      if (qualityResult.isLowQuality) {
+        console.warn('[WARN][Worker] low_quality_warning', {
+          jobId: job.id, reasons: qualityResult.reasons, blurScore: qualityResult.blurScore,
+        });
+      }
+      await query(
+        `UPDATE image_jobs
+            SET low_quality_warning = $2, quality_check = $3::jsonb
+          WHERE id = $1`,
+        [job.id, !!qualityResult.isLowQuality, JSON.stringify(qualityResult)]
+      );
+    } catch (err) {
+      console.warn('[WARN][Worker] qualityCheck falhou (silenciado)', { error: err.message });
+    }
+
+    // 11. Calcula custo (mesmo tier usado na geracao)
     const cost = calculateCost({
       provider,
       model: chosenModel,
@@ -614,7 +710,7 @@ async function processJob(job) {
       tokensInput: optResult.tokensInput,
       tokensOutput: optResult.tokensOutput,
       llmModel: settings.prompt_engineer_model,
-      quality: 'medium',
+      quality: qualityTier,
     });
 
     const durationMs = Date.now() - t0;

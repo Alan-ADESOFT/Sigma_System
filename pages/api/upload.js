@@ -17,6 +17,8 @@
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
+const { requireAuth } = require('../../lib/api-auth');
+
 export const config = {
   api: {
     bodyParser: false,
@@ -161,6 +163,12 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Patch de segurança (20260521): endpoint estava aberto a anônimos —
+    // qualquer um podia subir até 100MB. Agora exige usuário autenticado.
+    // (DoS por user logado fica residual; pra mitigar, ver Fase 2 — quota
+    // por user/IP.)
+    await requireAuth(req);
+
     // Lê o body completo
     const chunks = [];
     let totalSize = 0;
@@ -291,6 +299,9 @@ export default async function handler(req, res) {
             : 'image',
     });
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ success: false, error: err.message });
+    }
     console.error('[ERRO][API:/api/upload]', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: 'Erro interno ao salvar arquivo' });
   }

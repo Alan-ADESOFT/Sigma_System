@@ -114,87 +114,88 @@ async function describeReferencesByMode({ refs, tenantId, clientId, jobId }) {
     },
   });
 
-  // Processa cada modo em sequência (Vision API pode ter rate limit; ficamos
-  // conservadores). Cada chamada usa a instrução específica do modo.
-  for (const mode of ['inspiration', 'character', 'scene']) {
-    const urls = groups[mode];
-    if (urls.length === 0) continue;
+  // Sprint v2: processa os 3 modos EM PARALELO (Promise.all). Antes era
+  // serial — character (individual) bloqueava inspiration/scene. Agora os 3
+  // grupos rodam concorrentes; vision API tolera bem 3 chamadas simultaneas.
+  const modeJobs = ['inspiration', 'character', 'scene']
+    .filter(mode => groups[mode].length > 0)
+    .map(mode => processOneMode({
+      mode, urls: groups[mode], tenantId, clientId, jobId,
+    }));
 
-    // Para 'character', descrevemos UMA imagem por chamada (precisamos da
-    // descrição individual por sujeito). Pros outros modos, agrupar é OK.
-    const useIndividual = mode === 'character';
-
-    if (useIndividual) {
-      for (const url of urls) {
-        const buffer = await loadLocalUpload(url);
-        if (!buffer) continue;
-        try {
-          const result = await analyzeImage(buffer, VISION_INSTRUCTION_BY_MODE[mode], {
-            detail: 'high',
-            maxTokens: 700,
-          });
-          const text = (result?.analysis || '').trim();
-          if (text) byMode[mode].push(text);
-          tokens += result?.tokens || 0;
-          if (!modelUsed && result?.modelUsed) modelUsed = result.modelUsed;
-
-          // Token tracking — operação distinta por modo
-          if (tenantId) {
-            logUsage({
-              tenantId,
-              clientId: clientId || null,
-              sessionId: jobId || null,
-              modelUsed: result?.modelUsed || 'gpt-4o-mini',
-              provider: 'openai',
-              operationType: operationTypeForMode(mode),
-              tokensInput: result?.tokensInput || 0,
-              tokensOutput: result?.tokensOutput || 0,
-              metadata: { mode, refCount: 1 },
-            }).catch(() => {});
-          }
-        } catch (err) {
-          console.error('[ERRO][ReferenceVision] vision falhou', {
-            tenantId, jobId, mode, url, error: err.message,
-          });
-        }
-      }
-    } else {
-      // Modos inspiration/scene: agrupa numa chamada
-      const buffers = (await Promise.all(urls.map(loadLocalUpload))).filter(Boolean);
-      if (buffers.length === 0) continue;
-
-      try {
-        const result = await analyzeMultipleImages(buffers, VISION_INSTRUCTION_BY_MODE[mode], {
-          detail: 'high',
-          maxTokens: 600,
-        });
-        const text = (result?.analysis || '').trim();
-        if (text) byMode[mode].push(text);
-        tokens += result?.tokens || 0;
-        if (!modelUsed && result?.modelUsed) modelUsed = result.modelUsed;
-
-        if (tenantId) {
-          logUsage({
-            tenantId,
-            clientId: clientId || null,
-            sessionId: jobId || null,
-            modelUsed: result?.modelUsed || 'gpt-4o-mini',
-            provider: 'openai',
-            operationType: operationTypeForMode(mode),
-            tokensInput: result?.tokensInput || 0,
-            tokensOutput: result?.tokensOutput || 0,
-            metadata: { mode, refCount: buffers.length },
-          }).catch(() => {});
-        }
-      } catch (err) {
-        console.error('[ERRO][ReferenceVision] vision falhou', {
-          tenantId, jobId, mode, error: err.message,
-        });
-      }
-    }
+  const results = await Promise.all(modeJobs);
+  for (const r of results) {
+    if (!r) continue;
+    if (r.texts?.length) byMode[r.mode].push(...r.texts);
+    tokens += r.tokens || 0;
+    if (!modelUsed && r.modelUsed) modelUsed = r.modelUsed;
   }
 
   return { byMode, tokens, modelUsed };
+}
+
+/**
+ * Processa UM modo (helper interno extraido pra paralelizar via Promise.all).
+ * Character usa chamada individual por imagem; inspiration/scene agrupam
+ * todas as imagens numa unica chamada Vision.
+ */
+async function processOneMode({ mode, urls, tenantId, clientId, jobId }) {
+  const useIndividual = mode === 'character';
+  let texts = [];
+  let tokens = 0;
+  let modelUsed = null;
+
+  if (useIndividual) {
+    // Character: uma chamada Vision por imagem (precisamos descricao por sujeito).
+    // Sprint v2: paraleliza essas chamadas tambem com Promise.all.
+    const perRef = await Promise.all(urls.map(async (url) => {
+      const buffer = await loadLocalUpload(url);
+      if (!buffer) return null;
+      try {
+        const result = await analyzeImage(buffer, VISION_INSTRUCTION_BY_MODE[mode], {
+          detail: 'high', maxTokens: 700,
+          tenantId, clientId: clientId || null, sessionId: jobId || null,
+          operationType: operationTypeForMode(mode),
+        });
+        return result;
+      } catch (err) {
+        console.error('[ERRO][ReferenceVision] vision falhou', {
+          tenantId, jobId, mode, url, error: err.message,
+        });
+        return null;
+      }
+    }));
+
+    for (const r of perRef) {
+      if (!r) continue;
+      const text = (r.analysis || '').trim();
+      if (text) texts.push(text);
+      tokens += r.tokens || 0;
+      if (!modelUsed && r.modelUsed) modelUsed = r.modelUsed;
+    }
+  } else {
+    // Inspiration/scene: agrupa numa chamada
+    const buffers = (await Promise.all(urls.map(loadLocalUpload))).filter(Boolean);
+    if (buffers.length === 0) return { mode, texts: [], tokens: 0, modelUsed: null };
+
+    try {
+      const result = await analyzeMultipleImages(buffers, VISION_INSTRUCTION_BY_MODE[mode], {
+        detail: 'high', maxTokens: 600,
+        tenantId, clientId: clientId || null, sessionId: jobId || null,
+        operationType: operationTypeForMode(mode),
+      });
+      const text = (result?.analysis || '').trim();
+      if (text) texts.push(text);
+      tokens += result?.tokens || 0;
+      if (result?.modelUsed) modelUsed = result.modelUsed;
+    } catch (err) {
+      console.error('[ERRO][ReferenceVision] vision falhou', {
+        tenantId, jobId, mode, error: err.message,
+      });
+    }
+  }
+
+  return { mode, texts, tokens, modelUsed };
 }
 
 /**

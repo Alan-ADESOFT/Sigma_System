@@ -3,11 +3,17 @@ import DashboardLayout from '../../../components/DashboardLayout';
 import { useNotification } from '../../../context/NotificationContext';
 import styles from '../../../assets/style/settingsCopy.module.css';
 
+// Linha atual (maio/2026). Mantem legados pra retrocompatibilidade —
+// se um tenant tinha um legacy salvo em copy_model, o select ainda renderiza.
 const MODEL_OPTIONS = [
-  { value: 'claude-opus-4-5',   label: 'Claude Opus 4.5' },
-  { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-  { value: 'gpt-4o',            label: 'GPT-4o' },
-  { value: 'gpt-4o-mini',       label: 'GPT-4o Mini' },
+  { value: 'claude-opus-4-7',    label: 'Claude Opus 4.7  ·  ~12s  ·  premium  [TOP]' },
+  { value: 'claude-sonnet-4-6',  label: 'Claude Sonnet 4.6  ·  ~5s  ·  standard  [RECOMENDADO]' },
+  { value: 'claude-haiku-4-5',   label: 'Claude Haiku 4.5  ·  ~2s  ·  fast  [RAPIDO]' },
+  { value: 'gpt-5.5',            label: 'GPT-5.5  ·  ~6s  ·  standard' },
+  { value: 'claude-opus-4-5',    label: 'Claude Opus 4.5 (legacy)' },
+  { value: 'claude-sonnet-4-5',  label: 'Claude Sonnet 4.5 (legacy)' },
+  { value: 'gpt-4o',             label: 'GPT-4o (legacy)' },
+  { value: 'gpt-4o-mini',        label: 'GPT-4o Mini (legacy)' },
 ];
 
 /* ════════════════════════════════════════════════════════════════════════════

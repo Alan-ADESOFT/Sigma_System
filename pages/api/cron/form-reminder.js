@@ -13,14 +13,15 @@ import { query, queryOne } from '../../../infra/db';
 const { sendText } = require('../../../infra/api/zapi');
 const { getSetting } = require('../../../models/settings.model');
 
+const { verifyCronToken } = require('../../../lib/cron-auth');
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Método não permitido' });
   }
 
   // Autenticação via token interno
-  const token = req.headers['x-internal-token'];
-  if (!token || token !== process.env.INTERNAL_API_TOKEN) {
+  if (!verifyCronToken(req)) {
     return res.status(401).json({ success: false, error: 'Token inválido' });
   }
 

@@ -12,9 +12,14 @@ const crypto = require('crypto');
 const { resolveTenantId } = require('../../../../infra/get-tenant-id');
 const { queryOne } = require('../../../../infra/db');
 const metaAds = require('../../../../infra/api/metaAds');
+const { requireEnv } = require('../../../../lib/env');
 
+/* Reusa SESSION_SECRET pra assinar o state do OAuth Meta.
+ * Antes deste patch havia fallback hardcoded — agora falha em startup se env
+ * não estiver definido. Mesmo segredo do cookie de sessão por simplicidade
+ * operacional (rotaciona ambos juntos). */
 function getStateSecret() {
-  return process.env.SESSION_SECRET || 'sigma-ads-oauth-fallback-secret-change-in-prod';
+  return requireEnv('SESSION_SECRET');
 }
 
 function signState(payload) {

@@ -10,6 +10,7 @@
 
 const { resolveTenantId } = require('../../../infra/get-tenant-id');
 const { query, queryOne } = require('../../../infra/db');
+const { requireAuth, requireAdmin } = require('../../../lib/api-auth');
 
 const KEY_MORNING = 'task_bot_template_morning';
 const KEY_OVERDUE = 'task_bot_template_overdue';
@@ -53,6 +54,10 @@ async function setSetting(tenantId, key, value) {
 
 export default async function handler(req, res) {
   try {
+    // Patch de segurança (20260521): leitura exige auth; escrita exige admin/god
+    if (req.method === 'GET') await requireAuth(req);
+    else                      await requireAdmin(req);
+
     const tenantId = await resolveTenantId(req);
 
     if (req.method === 'GET') {
@@ -78,6 +83,9 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ error: 'Método não permitido' });
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ success: false, error: err.message });
+    }
     console.error('[ERRO][API:/api/settings/task-bot-templates]', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }

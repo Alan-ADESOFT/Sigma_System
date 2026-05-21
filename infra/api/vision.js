@@ -132,6 +132,21 @@ async function analyzeImage(imageInput, instructions, options = {}) {
     const data = await response.json();
     const analysis = data.choices?.[0]?.message?.content || '';
     const tokens = data.usage?.total_tokens || 0;
+    const tokensInput = data.usage?.prompt_tokens || 0;
+    const tokensOutput = data.usage?.completion_tokens || 0;
+
+    // Tracking opcional — so loga se o caller passar tenantId
+    if (options.tenantId) {
+      try {
+        const { logUsage } = require('../../models/copy/tokenUsage');
+        logUsage({
+          tenantId: options.tenantId, modelUsed: model, provider: 'openai',
+          operationType: options.operationType || 'copy_vision',
+          clientId: options.clientId || null, sessionId: options.sessionId || null,
+          tokensInput, tokensOutput,
+        });
+      } catch {}
+    }
 
     console.log('[SUCESSO][Vision] Análise concluída', { model, analysisLength: analysis.length, tokens });
     return { analysis, modelUsed: model, tokens };
@@ -207,6 +222,21 @@ async function analyzeMultipleImages(imageInputs, instructions, options = {}) {
     const data = await response.json();
     const analysis = data.choices?.[0]?.message?.content || '';
     const tokens = data.usage?.total_tokens || 0;
+    const tokensInput = data.usage?.prompt_tokens || 0;
+    const tokensOutput = data.usage?.completion_tokens || 0;
+
+    if (options.tenantId) {
+      try {
+        const { logUsage } = require('../../models/copy/tokenUsage');
+        logUsage({
+          tenantId: options.tenantId, modelUsed: model, provider: 'openai',
+          operationType: options.operationType || 'copy_vision',
+          clientId: options.clientId || null, sessionId: options.sessionId || null,
+          tokensInput, tokensOutput,
+          metadata: { imageCount: imageInputs.length },
+        });
+      } catch {}
+    }
 
     console.log('[SUCESSO][Vision] Análise múltipla concluída', { model, count: imageInputs.length, analysisLength: analysis.length, tokens });
     return { analysis, modelUsed: model, tokens };

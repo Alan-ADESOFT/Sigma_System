@@ -27,7 +27,8 @@ const DEFAULTS = {
   max_template_per_client:         20,
   brandbook_required:           false,
   auto_cleanup_days:                7,
-  prompt_reuse_window_hours:       24,
+  // Sprint v2 (maio/2026): subido de 24h pra 48h pra aumentar taxa de cache HIT
+  prompt_reuse_window_hours:       48,
 };
 
 /**

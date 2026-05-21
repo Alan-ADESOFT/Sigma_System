@@ -58,13 +58,13 @@ async function checkAndPublish() {
           const metaToken = post.access_token;
           if (!metaToken) {
             console.warn(`[Scheduler] Post "${post.title}" sem token Meta.`);
-            await updateContentStatus(post.id, 'failed');
+            await updateContentStatus(post.id, 'failed', post.tenant_id);
             continue;
           }
 
           const mediaArr = post.media_urls ? JSON.parse(post.media_urls) : [];
           if (mediaArr.length === 0) {
-            await updateContentStatus(post.id, 'failed');
+            await updateContentStatus(post.id, 'failed', post.tenant_id);
             continue;
           }
 
@@ -83,7 +83,7 @@ async function checkAndPublish() {
           const { publishImage, publishCarousel, publishReel, publishStory, getInstagramUserId } = require('./instagram-graph.service');
           const userId = await getInstagramUserId(metaToken);
           if (!userId) {
-            await updateContentStatus(post.id, 'failed');
+            await updateContentStatus(post.id, 'failed', post.tenant_id);
             continue;
           }
 
@@ -134,11 +134,11 @@ async function checkAndPublish() {
             }
           }
 
-          await updateContentStatus(post.id, success ? 'published' : 'failed');
+          await updateContentStatus(post.id, success ? 'published' : 'failed', post.tenant_id);
           console.log(`[Scheduler] "${post.title}" → ${success ? 'publicado' : 'falha'}`);
         } catch (err) {
           console.error(`[Scheduler] Erro ${post.id}:`, err.message);
-          await updateContentStatus(post.id, 'failed');
+          await updateContentStatus(post.id, 'failed', post.tenant_id);
         }
       }
     }));

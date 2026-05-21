@@ -17,13 +17,32 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNotification } from '../context/NotificationContext';
 import styles from '../assets/style/copyWorkspace.module.css';
+import ExportCopyModal from './copy/ExportCopyModal';
+import ExportPreviewModal from './copy/ExportPreviewModal';
 
+// Linha atual (maio/2026). Tier e avgSec usados no rotulo do <option>
+// pra ajudar o operador a escolher consciente entre velocidade e qualidade.
 const MODELS = [
-  { value: 'claude-opus-4-5',   label: 'Claude Opus 4.5' },
-  { value: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-  { value: 'gpt-4o',            label: 'GPT-4o' },
-  { value: 'gpt-4o-mini',       label: 'GPT-4o Mini' },
+  // Anthropic — linha atual
+  { value: 'claude-opus-4-7',    label: 'Claude Opus 4.7',    tier: 'premium',  avgSec: 12, badge: 'TOP' },
+  { value: 'claude-sonnet-4-6',  label: 'Claude Sonnet 4.6',  tier: 'standard', avgSec: 5,  badge: 'RECOMENDADO' },
+  { value: 'claude-haiku-4-5',   label: 'Claude Haiku 4.5',   tier: 'fast',     avgSec: 2,  badge: 'RAPIDO' },
+  // OpenAI — linha atual
+  { value: 'gpt-5.5',            label: 'GPT-5.5',            tier: 'standard', avgSec: 6,  badge: null },
+  // Legados (mantem pra compat de historico — nao quebra sessoes antigas)
+  { value: 'claude-opus-4-5',    label: 'Claude Opus 4.5 (legacy)',   tier: 'legacy', avgSec: 10 },
+  { value: 'claude-sonnet-4-5',  label: 'Claude Sonnet 4.5 (legacy)', tier: 'legacy', avgSec: 4 },
+  { value: 'gpt-4o',             label: 'GPT-4o (legacy)',            tier: 'legacy', avgSec: 4 },
+  { value: 'gpt-4o-mini',        label: 'GPT-4o Mini (legacy)',       tier: 'legacy', avgSec: 2 },
 ];
+
+function formatModelOptionLabel(m) {
+  const parts = [m.label];
+  if (m.badge) parts.push(`[${m.badge}]`);
+  parts.push(`~${m.avgSec}s`);
+  parts.push(m.tier);
+  return parts.join('  ·  ');
+}
 
 const PROMPT_PLACEHOLDERS = [
   'Crie uma copy direta focada no beneficio principal...',
@@ -76,7 +95,9 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
   const [saved, setSaved] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [activeJobId, setActiveJobId] = useState(null);
+  const [activeJobKind, setActiveJobKind] = useState(null);   // 'generate' | 'improve' | 'improve_text'
   const [improving, setImproving] = useState(false);
+  const [streaming, setStreaming] = useState(false);          // true quando SSE entregando chunks
   const [promptInput, setPromptInput] = useState('');
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const [phVisible, setPhVisible] = useState(true);
@@ -99,6 +120,14 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
   const [transcribing, setTranscribing] = useState(false);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+
+  // ── Export ──
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [previewInfo, setPreviewInfo] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   const activeSession = sessions.find(s => s.id === activeSessionId);
   const clientId = clientProp?.id || null;
@@ -202,15 +231,27 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
     setActiveSessionId(sessionId);
     const s = sessions.find(x => x.id === sessionId);
     if (s) restoreSession(s);
-    // Recarrega historico deste chat especifico via activeId
+    await reloadHistory(sessionId);
+  }
+
+  /**
+   * Recarrega o historico do chat ativo. Helper compartilhado — chamado
+   * apos cada acao que pode mudar o historico (gerar, melhorar, exportar,
+   * trocar de chat). Centraliza o fetch pra nao duplicar a logica.
+   */
+  async function reloadHistory(sessionIdOverride) {
+    const sid = sessionIdOverride || activeSessionId;
+    if (!sid) return;
     try {
-      const r = await fetch('/api/copy/session?folderId=' + folder.id + '&activeId=' + sessionId + (clientId ? '&clientId=' + clientId : ''));
+      const r = await fetch('/api/copy/session?folderId=' + folder.id + '&activeId=' + sid + (clientId ? '&clientId=' + clientId : ''));
       const d = await r.json();
       if (d.success) {
         setSessions(d.data.sessions);
         setHistory(d.data.history || []);
       }
-    } catch {}
+    } catch (err) {
+      console.error('[ERRO][CopyWorkspace] reloadHistory falhou', err);
+    }
   }
 
   async function createNewChat() {
@@ -295,23 +336,37 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
     } catch { notify('Erro ao salvar', 'error'); }
   }
 
+  /**
+   * Melhoria roda em background como job (kind='improve_text'). Usa o
+   * mesmo activeJobId que geracao/improve — o useEffect de polling/SSE
+   * cuida de aplicar o texto final e disparar reloadHistory.
+   */
   async function handleImproveText() {
     const fullText = editorRef.current?.innerText?.trim();
     if (!fullText) { notify('Nenhum texto para melhorar', 'warning'); return; }
+    if (activeJobId || generating || improving) return;
+    if (!activeSessionId) { notify('Selecione um chat antes de melhorar', 'warning'); return; }
+
     setImproving(true);
     try {
-      const r = await fetch('/api/agentes/improve-text', {
+      const r = await fetch('/api/copy/jobs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: fullText, mode: 'full' }),
+        body: JSON.stringify({
+          kind: 'improve_text',
+          params: { sessionId: activeSessionId, clientId, text: fullText, mode: 'full' },
+        }),
       });
       const d = await r.json();
-      if (!d.success) throw new Error(d.error);
-      if (editorRef.current) { editorRef.current.innerHTML = mdToHtml(d.data.text); }
-      setOutputText(d.data.text);
-      setSaved(false);
-      notify('Texto refinado pelo assistente', 'success');
-    } catch { notify('Falha ao melhorar texto', 'error'); }
-    finally { setImproving(false); }
+      if (!d.success || !d.data?.jobId) throw new Error(d.error || 'Falha ao enfileirar');
+
+      setActiveJobId(d.data.jobId);
+      setActiveJobKind('improve_text');
+      notify('Melhorando em segundo plano — voce pode fechar e seguir trabalhando.', 'info');
+    } catch (err) {
+      notify(err.message || 'Falha ao iniciar melhoria', 'error');
+      setImproving(false);
+    }
+    // setImproving(false) feito pelo polling/SSE quando done/error
   }
 
   // ── Transcricao de audio ──
@@ -401,8 +456,9 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
       if (!d.success || !d.data?.jobId) throw new Error(d.error || 'Falha ao enfileirar');
 
       // Limpa inputs imediatamente — usuário pode fechar modal e seguir trabalhando.
-      // Polling (useEffect abaixo) aplica o resultado ou notifica erro.
+      // SSE/polling (useEffect abaixo) aplica o resultado ou notifica erro.
       setActiveJobId(d.data.jobId);
+      setActiveJobKind(kind);
       setPromptInput('');
       setUploadedImages([]);
       setUploadedDocs([]);
@@ -411,56 +467,260 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
       notify(err.message?.includes('Limite') ? err.message : 'Falha ao iniciar geracao. Tente novamente.', 'error');
       setGenerating(false);
     }
-    // setGenerating(false) é feito pelo polling quando o job termina (done/error).
+    // setGenerating(false) é feito pelo polling/SSE quando o job termina (done/error).
   }
 
-  // ── Polling do job ativo (background) ──
-  // Aplica o texto do servidor no editor (mdToHtml escapa &<> antes de
-  // formatar markdown — mesmo padrão do restante do componente).
+  // ── SSE do job ativo (com fallback automatico pra polling 800ms) ──
+  //
+  // Estrategia:
+  //   1. Abre EventSource em /api/copy/jobs/[id]/stream e ouve:
+  //      - 'chunk' (partial_text crescendo durante geracao)
+  //      - 'done'  (texto final do banco, fonte da verdade)
+  //      - 'error' (falha do worker)
+  //   2. Se nenhum evento chegar em 3s (proxy bufferizando SSE),
+  //      paraleliza um polling de 800ms — o primeiro que entregar 'done'
+  //      vence e o cleanup mata o outro.
+  //
+  // Toda escrita no editor passa pelo helper interno renderToEditor, que
+  // delega ao mdToHtml — este escapa & < > antes de aplicar markdown,
+  // entao o conteudo recebido do servidor nunca chega cru ao DOM.
   useEffect(() => {
     if (!activeJobId) return;
+
     let cancelled = false;
-    const applyDoneText = (text) => {
-      setOutputText(text || '');
-      if (editorRef.current && text) {
-        const safeHtml = mdToHtml(text);
-        editorRef.current.innerHTML = safeHtml;
-        editorRef.current.scrollTop = 0;
-      }
-      setSaved(false);
+    let pollInterval = null;
+    let eventSource = null;
+    let initialFallbackTimer = null;
+    let receivedAnyEvent = false;
+
+    const renderToEditor = (text, scrollTo) => {
+      if (!editorRef.current) return;
+      const safeHtml = mdToHtml(text || '');
+      // mdToHtml escapou & < > acima — innerHTML aqui e o ponto unico de
+      // saida, mesmo padrao usado no restante do componente.
+      // eslint-disable-next-line no-unsanitized/property
+      editorRef.current.innerHTML = safeHtml;
+      if (scrollTo === 'top') editorRef.current.scrollTop = 0;
+      else if (scrollTo === 'bottom') editorRef.current.scrollTop = editorRef.current.scrollHeight;
     };
-    const interval = setInterval(async () => {
+
+    const applyPartial = (partial) => {
+      if (!partial || cancelled) return;
+      renderToEditor(partial, 'bottom');
+      setStreaming(true);
+    };
+
+    const finishOk = (text) => {
       if (cancelled) return;
-      try {
-        const r = await fetch('/api/copy/jobs/' + activeJobId);
-        const d = await r.json();
-        if (!d.success || !d.data) return;
-        const job = d.data;
-        if (job.status === 'done') {
-          clearInterval(interval);
-          if (cancelled) return;
-          setActiveJobId(null);
-          setGenerating(false);
-          applyDoneText(job.text);
-          notify('Copy pronta — revise e salve.', 'success');
-          fetch('/api/copy/session?folderId=' + folder.id + '&activeId=' + activeSessionId + (clientId ? '&clientId=' + clientId : ''))
-            .then(r => r.json())
-            .then(d => { if (d.success && !cancelled) setHistory(d.data.history || []); })
-            .catch(() => {});
-        } else if (job.status === 'error') {
-          clearInterval(interval);
-          if (cancelled) return;
-          setActiveJobId(null);
-          setGenerating(false);
-          notify('Falha ao gerar copy: ' + (job.error || 'erro desconhecido'), 'error');
+      const wasImproveText = activeJobKind === 'improve_text';
+      setOutputText(text || '');
+      renderToEditor(text || '', 'top');
+      setSaved(false);
+      setActiveJobId(null);
+      setActiveJobKind(null);
+      setGenerating(false);
+      setImproving(false);
+      setStreaming(false);
+      notify(wasImproveText ? 'Texto refinado pelo assistente' : 'Copy pronta — revise e salve.', 'success');
+      reloadHistory();
+    };
+
+    const finishErr = (msg) => {
+      if (cancelled) return;
+      setActiveJobId(null);
+      setActiveJobKind(null);
+      setGenerating(false);
+      setImproving(false);
+      setStreaming(false);
+      notify('Falha: ' + (msg || 'erro desconhecido'), 'error');
+    };
+
+    const closeAll = () => {
+      if (eventSource) { try { eventSource.close(); } catch {} eventSource = null; }
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      if (initialFallbackTimer) { clearTimeout(initialFallbackTimer); initialFallbackTimer = null; }
+    };
+
+    const startPolling = () => {
+      if (pollInterval || cancelled) return;
+      console.log('[INFO][CopyWorkspace] Polling 800ms ativo');
+      pollInterval = setInterval(async () => {
+        if (cancelled) return;
+        try {
+          const r = await fetch('/api/copy/jobs/' + activeJobId);
+          const d = await r.json();
+          if (!d.success || !d.data) return;
+          const job = d.data;
+          if (job.status === 'running' && job.partialText) applyPartial(job.partialText);
+          if (job.status === 'done') { closeAll(); finishOk(job.text); }
+          else if (job.status === 'error') { closeAll(); finishErr(job.error); }
+        } catch {
+          // erro de rede transitorio — proximo tick tenta de novo
         }
-      } catch {
-        // erro de rede transitório — próximo tick tenta de novo
+      }, 800);
+    };
+
+    try {
+      eventSource = new EventSource('/api/copy/jobs/' + activeJobId + '/stream');
+
+      eventSource.addEventListener('status', () => { receivedAnyEvent = true; });
+
+      eventSource.addEventListener('chunk', (ev) => {
+        receivedAnyEvent = true;
+        try { const d = JSON.parse(ev.data); if (d.partial) applyPartial(d.partial); } catch {}
+      });
+
+      eventSource.addEventListener('done', (ev) => {
+        receivedAnyEvent = true;
+        try {
+          const d = JSON.parse(ev.data);
+          closeAll();
+          finishOk(d.text || '');
+        } catch (err) { closeAll(); finishErr(err.message); }
+      });
+
+      eventSource.addEventListener('error', (ev) => {
+        // 'error' aqui pode ser custom (com data) OU falha de transporte
+        try {
+          if (ev.data) {
+            const d = JSON.parse(ev.data);
+            closeAll(); finishErr(d.error || 'Erro');
+            return;
+          }
+        } catch {}
+        // Falha de transporte — cai pra polling sem matar o SSE
+        if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+          eventSource = null;
+          startPolling();
+        }
+      });
+    } catch (err) {
+      console.warn('[INFO][CopyWorkspace] EventSource indisponivel', err.message);
+      startPolling();
+    }
+
+    // Failsafe: 3s sem eventos = proxy bloqueando SSE → paraleliza polling
+    initialFallbackTimer = setTimeout(() => {
+      if (!receivedAnyEvent && !cancelled) {
+        console.warn('[INFO][CopyWorkspace] Sem eventos SSE em 3s — paralelizando polling');
+        startPolling();
       }
-    }, 1500);
-    return () => { cancelled = true; clearInterval(interval); };
+    }, 3000);
+
+    return () => { cancelled = true; closeAll(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJobId]);
+
+  // ── Export handlers ─────────────────────────────────────────────────
+  // Fluxo:
+  //   1. handleOpenExport: abre o modal de escolha
+  //   2. handleRequestPreview: chama POST /api/copy/export?format=preview,
+  //      armazena o HTML e abre o ExportPreviewModal
+  //   3. handleDownload: chama POST /api/copy/export?format=pdf|docx,
+  //      faz polling em /api/copy/export/[jobId] ate status=done,
+  //      dispara download do result_url
+
+  function handleOpenExport() {
+    // Validacao rigorosa pra nao abrir o modal/gastar IA por engano:
+    //   - precisa ter sessao ativa
+    //   - precisa ter texto significativo (>30 chars apos trim)
+    if (!activeSessionId) {
+      notify('Selecione um chat antes de exportar.', 'warning');
+      return;
+    }
+    const text = (editorRef.current?.innerText || outputText || '').trim();
+    if (!text) {
+      notify('Nao da pra exportar: gere ou escreva uma copy primeiro.', 'warning');
+      return;
+    }
+    if (text.length < 30) {
+      notify(`Copy muito curta pra exportar (${text.length} chars). Escreva pelo menos uma frase completa.`, 'warning');
+      return;
+    }
+    setShowExportModal(true);
+  }
+
+  async function handleRequestPreview({ template, format, useBrandbook }) {
+    setPreviewInfo({ template, format, useBrandbook });
+    setShowExportModal(false);
+    setShowPreviewModal(true);
+    setPreviewLoading(true);
+    setPreviewHtml('');
+    try {
+      const r = await fetch('/api/copy/export', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: activeSessionId, template, format: 'preview',
+          useBrandbook, clientId,
+        }),
+      });
+      const d = await r.json();
+      if (!d.success) throw new Error(d.error);
+      setPreviewHtml(d.data.html || '');
+    } catch (err) {
+      notify('Falha ao gerar preview: ' + err.message, 'error');
+      setShowPreviewModal(false);
+    } finally { setPreviewLoading(false); }
+  }
+
+  async function handleDownload(format) {
+    if (!previewInfo) return;
+    setExporting(true);
+    try {
+      // 1. Cria job
+      const r = await fetch('/api/copy/export', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: activeSessionId,
+          template: previewInfo.template,
+          format,
+          useBrandbook: previewInfo.useBrandbook,
+          clientId,
+        }),
+      });
+      const d = await r.json();
+      if (!d.success || !d.data?.jobId) throw new Error(d.error || 'Falha ao enfileirar');
+
+      const jobId = d.data.jobId;
+
+      // 2. Polling 800ms ate status=done
+      const url = await new Promise((resolve, reject) => {
+        const start = Date.now();
+        const interval = setInterval(async () => {
+          if (Date.now() - start > 90_000) { clearInterval(interval); reject(new Error('Timeout — tente novamente.')); return; }
+          try {
+            const sr = await fetch('/api/copy/export/' + jobId);
+            const sd = await sr.json();
+            if (!sd.success || !sd.data) return;
+            if (sd.data.status === 'done' && sd.data.resultUrl) {
+              clearInterval(interval); resolve(sd.data.resultUrl);
+            } else if (sd.data.status === 'error') {
+              clearInterval(interval); reject(new Error(sd.data.error || 'erro desconhecido'));
+            }
+          } catch {}
+        }, 800);
+      });
+
+      // 3. Dispara download via <a download>
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      notify('Arquivo baixado.', 'success');
+      reloadHistory();
+    } catch (err) {
+      notify('Falha no download: ' + err.message, 'error');
+    } finally { setExporting(false); }
+  }
+
+  function handleBackFromPreview() {
+    setShowPreviewModal(false);
+    setShowExportModal(true);
+  }
 
   function applyHistoryAsDraft(item) {
     if (!item || !editorRef.current) return;
@@ -495,6 +755,23 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
             <span className={styles.badge}>COPY CREATOR</span>
             <span className={styles.folderName}>{folder.name}</span>
             {clientProp && <span className={styles.accountBadge}>{clientProp.company_name}</span>}
+            {activeJobId && (
+              <span
+                title="O job continua mesmo se voce fechar o modal — voce sera notificado no sininho."
+                style={{
+                  marginLeft: 4, padding: '3px 8px', borderRadius: 4,
+                  background: 'rgba(255,0,51,0.10)',
+                  border: '1px solid rgba(255,0,51,0.25)',
+                  color: '#ff6680',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.46rem', fontWeight: 700,
+                  textTransform: 'uppercase', letterSpacing: '0.08em',
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  animation: 'pulse 1.4s ease-in-out infinite',
+                }}>
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor' }} />
+                {streaming ? 'STREAMING' : 'EXECUTANDO EM SEGUNDO PLANO'}
+              </span>
+            )}
           </div>
           <button className={styles.btnClose} onClick={onClose}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
@@ -611,7 +888,9 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
               />
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', color: 'var(--text-muted)', marginBottom: 4 }}>Agente de IA</div>
               <select className={styles.selectWrap} value={selectedModel} onChange={e => setSelectedModel(e.target.value)}>
-                {MODELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                {MODELS.map(m => (
+                  <option key={m.value} value={m.value}>{formatModelOptionLabel(m)}</option>
+                ))}
               </select>
             </div>
 
@@ -740,6 +1019,19 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                   Copiar
                 </button>
+                <button
+                  className={styles.toolBtnWide}
+                  onClick={handleOpenExport}
+                  disabled={!hasOutput || generating || improving || exporting}
+                  title="Exportar como PDF ou DOCX, com brandbook do cliente"
+                  style={{ color: exporting ? '#a855f7' : undefined }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  {exporting ? 'Exportando...' : 'Exportar'}
+                </button>
                 <button className={styles.toolBtnWide} onClick={handleSave}>Salvar</button>
               </div>
             </div>
@@ -836,6 +1128,23 @@ export default function CopyWorkspace({ folder, client: clientProp, onClose }) {
           [contenteditable] h1, [contenteditable] h2, [contenteditable] h3 { color: var(--text-primary); }
         `}</style>
       </div>
+
+      {/* ── Modais de Export ── */}
+      <ExportCopyModal
+        open={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        onPreview={handleRequestPreview}
+        hasClient={!!clientProp}
+      />
+      <ExportPreviewModal
+        open={showPreviewModal}
+        onClose={() => setShowPreviewModal(false)}
+        onBack={handleBackFromPreview}
+        html={previewHtml}
+        loading={previewLoading}
+        info={previewInfo}
+        onDownload={handleDownload}
+      />
     </div>
   );
 }

@@ -7,6 +7,7 @@
  */
 
 import { resolveTenantId } from '../../../infra/get-tenant-id';
+const { logUsage } = require('../../../models/copy/tokenUsage');
 
 export const config = {
   api: { bodyParser: { sizeLimit: '25mb' } },
@@ -17,9 +18,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: 'Metodo nao permitido' });
   }
 
-  await resolveTenantId(req); // valida autenticacao
+  const tenantId = await resolveTenantId(req); // valida autenticacao
 
-  const { audio, mimeType } = req.body;
+  const { audio, mimeType, sessionId, clientId } = req.body;
   if (!audio) {
     return res.status(400).json({ success: false, error: 'audio obrigatorio (base64)' });
   }
@@ -72,6 +73,16 @@ export default async function handler(req, res) {
 
     const d = await r.json();
     console.log('[SUCESSO][API:copy/transcribe] Audio transcrito', { length: (d.text || '').length });
+
+    // Whisper-1 nao retorna usage (e e gratuito no momento), mas mantemos o
+    // log pra rastrear volume de chamadas por cliente/sessao no dashboard.
+    logUsage({
+      tenantId, modelUsed: 'whisper-1', provider: 'openai',
+      operationType: 'copy_transcribe',
+      clientId: clientId || null, sessionId: sessionId || null,
+      tokensInput: 0, tokensOutput: 0,
+      metadata: { transcriptLength: (d.text || '').length, mimeType: mimeType || null },
+    });
 
     return res.json({ success: true, text: d.text || '' });
   } catch (err) {

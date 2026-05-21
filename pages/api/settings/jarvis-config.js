@@ -9,8 +9,24 @@ import { resolveTenantId } from '../../../infra/get-tenant-id';
 import { getJarvisConfig, saveJarvisSetting, JARVIS_FUNCTIONS } from '../../../models/jarvis/config';
 import { getOrSet, invalidate } from '../../../infra/cache';
 
+const { requireAuth, requireAdmin } = require('../../../lib/api-auth');
+
 export default async function handler(req, res) {
   console.log('[INFO][API:/api/settings/jarvis-config] Requisição', { method: req.method });
+
+  // Patch de segurança (20260521): leitura exige auth; escrita exige admin/god.
+  // NOTA: este endpoint é usado também pra salvar settings de onboarding
+  // (vídeo de boas-vindas, templates) — também são config global, admin/god
+  // é o gate correto.
+  try {
+    if (req.method === 'GET') await requireAuth(req);
+    else                      await requireAdmin(req);
+  } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ success: false, error: err.message });
+    }
+    throw err;
+  }
 
   const tenantId = await resolveTenantId(req);
 

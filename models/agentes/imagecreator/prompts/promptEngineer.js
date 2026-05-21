@@ -113,6 +113,30 @@ function buildUserMessage(ctx) {
     }
   }
 
+  // ── INSPIRATION TEMPLATES (Arte Guia, sprint v2) ───────────────────────
+  // Diferente de FIXED BRAND ASSETS (que sao da identidade da marca), os
+  // INSPIRATION TEMPLATES sao artes-modelo escolhidas pelo operador no
+  // momento da geracao — guiam paleta, mood e composicao mas NAO devem
+  // ser copiados em elementos especificos. E como pegar referencia de
+  // estilo no Pinterest: voce absorve o "feel", nao reproduz literal.
+  if (Array.isArray(ctx.inspirationTemplateDescriptions) && ctx.inspirationTemplateDescriptions.length > 0) {
+    const lines = ctx.inspirationTemplateDescriptions
+      .map((d, i) => `Template [${i + 1}]:\n${d}`)
+      .join('\n\n');
+    parts.push(`# INSPIRATION TEMPLATES (Arte Guia — style references)
+Templates de inspiracao escolhidos pelo operador como guia visual.
+
+REGRA: USE como referencia de paleta, mood, tecnica fotografica, composicao
+e estilo geral. NAO COPIE elementos especificos (objetos, pessoas, cenas).
+A imagem final nao deve "parecer um remix" desses templates — deve apenas
+SEGUIR a estetica/linguagem visual deles.
+
+Quando o pedido envolve composicao complexa, peso esses templates mais que
+o STYLE GUIDE de refs comuns.
+
+${lines}`);
+  }
+
   // ── OBSERVATIONS / NEGATIVE PROMPT ─────────────────────────────────────
   if (ctx.observations) {
     parts.push(`# OBSERVAÇÕES (HARD CONSTRAINTS)\n${ctx.observations}`);

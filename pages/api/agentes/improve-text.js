@@ -11,6 +11,8 @@
 
 import { resolveModel } from '../../../models/ia/completion';
 import { formatCopyOutput } from '../../../models/copy/copyPrompt';
+import { resolveTenantId } from '../../../infra/get-tenant-id';
+const { logUsage } = require('../../../models/copy/tokenUsage');
 
 export const config = { api: { bodyParser: { sizeLimit: '5mb' } } };
 
@@ -45,7 +47,10 @@ REGRAS ABSOLUTAS:
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Metodo nao permitido' });
 
-  const { text, mode = 'full' } = req.body;
+  let tenantId = null;
+  try { tenantId = await resolveTenantId(req); } catch {}
+
+  const { text, mode = 'full', sessionId, clientId } = req.body;
   if (!text) return res.status(400).json({ success: false, error: 'text obrigatorio' });
 
   try {
@@ -71,9 +76,20 @@ export default async function handler(req, res) {
     const d = await r.json();
     let improved = d.choices?.[0]?.message?.content || text;
 
+    if (tenantId) {
+      logUsage({
+        tenantId, modelUsed: model, provider: 'openai',
+        operationType: 'copy_improve_text',
+        clientId: clientId || null, sessionId: sessionId || null,
+        tokensInput: d.usage?.prompt_tokens || 0,
+        tokensOutput: d.usage?.completion_tokens || 0,
+        metadata: { mode },
+      });
+    }
+
     // Reaplica o formatador para garantir consistência com o fluxo de gerar/modificar.
     // O revisor linguístico pode introduzir pequenas variações de markdown que quebram o render.
-    if (mode === 'full') improved = await formatCopyOutput(improved);
+    if (mode === 'full') improved = await formatCopyOutput(improved, { tenantId, clientId, sessionId });
 
     return res.json({ success: true, data: { text: improved } });
   } catch (err) {

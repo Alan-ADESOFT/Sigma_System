@@ -34,6 +34,7 @@ const MODEL_TO_PROVIDER = {
   'fal-ai/flux-pro/kontext':        'fal',
   'fal-ai/flux-pro/kontext/max':    'fal',
   'gpt-image-2':                    'openai',
+  'gpt-image-1.5':                  'openai',  // tier intermediario (probe fallback)
   'imagen-3.0-capability-001':      'vertex',
   'imagen-4.0-generate-001':        'vertex',
   'imagen-4.0-fast-generate-001':   'vertex',
