@@ -33,7 +33,9 @@ const TABS = [
   { key: 'database',   label: 'Base de Dados', icon: 'M4 7h16M4 12h16M4 17h7' },
   { key: 'afazeres',   label: 'Afazeres',      icon: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11' },
   { key: 'anexos',     label: 'Anexos',        icon: 'M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48' },
-  { key: 'brandbook',  label: 'Brandbook',     icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' },
+  // sprint Image v2 (maio/2026): Brandbook renomeado pra "Arte Guia" SO na UI.
+  // Chave 'brandbook' preservada — toda API/banco/codigo continua igual.
+  { key: 'brandbook',  label: 'Arte Guia',     icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' },
   { key: 'financeiro', label: 'Financeiro',    icon: 'M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' },
   { key: 'observacoes',label: 'Observações',   icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' },
   { key: 'respostas',  label: 'Respostas',     icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
@@ -452,12 +454,29 @@ function TabTarefas({ clientId }) {
    O link que vai na mensagem é do NOVO sistema de 15 dias:
    /onboarding/{token} (não mais /form/{token}).
 ═══════════════════════════════════════════════════════════ */
+/**
+ * Espelha `getClientGreetingName` do server (models/onboarding.js). Replica
+ * aqui pra evitar uma round-trip — o objeto `client` já tem os 2 campos.
+ * Quando 'responsible' + responsible_name preenchido → usa responsável;
+ * senão cai pro company_name. Mantenha em sync com o helper do server.
+ */
+function greetingNameFor(client) {
+  if (!client) return '';
+  if (client.onboarding_greeting_with === 'responsible'
+      && client.responsible_name
+      && String(client.responsible_name).trim()) {
+    return String(client.responsible_name).trim();
+  }
+  return client.company_name || '';
+}
+
 function WhatsAppFormModal({ client, onClose, onSent }) {
   const { notify } = useNotification();
   const [step, setStep]       = useState('generating'); // 'generating' | 'ready' | 'sending' | 'done'
   const [link, setLink]       = useState('');
   const [message, setMessage] = useState('');
   const [error, setError]     = useState(null);
+  const greetName = greetingNameFor(client);
 
   // Ao abrir: cria o progress (sem ativar) e monta a copy do dia 1
   useEffect(() => {
@@ -476,7 +495,7 @@ function WhatsAppFormModal({ client, onClose, onSent }) {
         setLink(json.link);
         setMessage(
           `⚠️ *SIGMA HACKER // ACESSO ATIVADO*\n\n` +
-          `Olá, *${client.company_name}*.\n\n` +
+          `Olá, *${greetName}*.\n\n` +
           `Isso não é um formulário de briefing.\n` +
           `É um *raio-X do seu negócio em 15 dias*.\n\n` +
           `Todo dia, uma etapa curta. Um vídeo + perguntas.\n` +
@@ -538,9 +557,33 @@ function WhatsAppFormModal({ client, onClose, onSent }) {
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
 
-      // 2. Ativa o onboarding (status=active, started_at=now, loga no cron log)
+      // 2. Sprint Forms v2 — envia o vídeo de boas-vindas global (se configurado).
+      // Falha aqui NÃO bloqueia o fluxo: o link já foi enviado, a jornada
+      // ainda precisa ser ativada. Operador é avisado por notify('warning').
+      try {
+        const vidRes = await fetch('/api/onboarding/send-welcome-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId: client.id }),
+        });
+        const vidJson = await vidRes.json();
+        if (vidJson.success && vidJson.sent) {
+          console.log('[SUCESSO][WhatsAppFormModal] Vídeo de boas-vindas enviado');
+        } else if (!vidJson.success) {
+          console.error('[ERRO][WhatsAppFormModal] Falha ao enviar vídeo', vidJson);
+          notify('Vídeo de boas-vindas não foi enviado (link foi enviado normalmente)', 'warning', 5000);
+        }
+      } catch (vidErr) {
+        console.error('[ERRO][WhatsAppFormModal] erro no vídeo de boas-vindas', vidErr);
+        notify('Vídeo de boas-vindas não foi enviado (link foi enviado normalmente)', 'warning', 5000);
+      }
+
+      // 3. Ativa o onboarding (status=active, started_at=now, loga no cron log)
       // Isso é feito DEPOIS do envio pra que, se a Z-API falhar, o onboarding
       // não fique ativo sem o cliente ter recebido nada.
+      // IMPORTANTE: a trava local "botão InfoCliente some após primeiro envio"
+      // depende disso. Pra reenviar, o operador precisa usar o Jarvis (que
+      // tem confirmação explícita anti-duplicação).
       try {
         const activateRes = await fetch('/api/onboarding/activate-first', {
           method: 'POST',
@@ -1541,6 +1584,9 @@ function TabInfo({ client, onSave }) {
     status:          client.status        || 'active',
     logo_url:        client.logo_url      || '',
     inactive_reason: client.extra_data?.inactive_reason || '',
+    // Sprint Forms v2 — nome do responsável + toggle de saudação
+    responsible_name:         client.responsible_name || '',
+    onboarding_greeting_with: client.onboarding_greeting_with || 'company',
   });
   const [links,    setLinks   ] = useState(client.important_links || []);
 
@@ -1745,6 +1791,73 @@ function TabInfo({ client, onSave }) {
               Derivado do valor mensal do contrato
             </div>
           </div>
+        </div>
+
+        {/* ── Sprint Forms v2: responsável + saudação ── */}
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10 }}>
+            <div>
+              <Label>Nome do responsável (opcional)</Label>
+              <input
+                value={form.responsible_name}
+                onChange={h('responsible_name')}
+                placeholder="Ex: João Silva"
+                style={INP}
+              />
+            </div>
+            <div>
+              <Label>Saudar nas mensagens com</Label>
+              <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+                {[
+                  { v: 'company',     l: 'Empresa' },
+                  { v: 'responsible', l: 'Responsável' },
+                ].map((opt) => {
+                  const active = form.onboarding_greeting_with === opt.v;
+                  return (
+                    <button
+                      key={opt.v}
+                      type="button"
+                      onClick={() => {
+                        setForm((p) => ({ ...p, onboarding_greeting_with: opt.v }));
+                        setSaved(false);
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        background: active ? 'rgba(255,0,51,0.10)' : 'rgba(10,10,10,0.6)',
+                        border: active
+                          ? '1px solid rgba(255,0,51,0.30)'
+                          : '1px solid rgba(255,255,255,0.06)',
+                        color: active ? '#ff6680' : 'var(--text-muted)',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '0.66rem',
+                        letterSpacing: '0.06em',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {opt.l}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          {form.onboarding_greeting_with === 'responsible' && !form.responsible_name?.trim() && (
+            <div style={{
+              padding: '8px 12px',
+              background: 'rgba(245, 158, 11, 0.06)',
+              border: '1px solid rgba(245, 158, 11, 0.20)',
+              borderRadius: 6,
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.62rem',
+              color: '#fbbf24',
+              lineHeight: 1.5,
+            }}>
+              Preencha o nome do responsável ou cairá no nome da empresa como fallback.
+            </div>
+          )}
         </div>
       </div>
 

@@ -18,6 +18,9 @@
  *   • users[]             — lista de usuários para o select
  *   • currentUserId       — id do usuário logado (default do responsável)
  *   • prefilledClientId   — quando vem da ficha do cliente (campo lock)
+ *   • initialDueDate      — pré-seleciona o dia (YYYY-MM-DD). Usado pelo
+ *                           Checklist quando o usuário clica "+ Nova tarefa"
+ *                           em um dia específico.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -107,6 +110,7 @@ export default function CreateTaskModal({
   users = [],
   currentUserId = null,
   prefilledClientId = null,
+  initialDueDate = null,
 }) {
   const { notify } = useNotification();
 
@@ -117,13 +121,22 @@ export default function CreateTaskModal({
   const [categoryId, setCategoryId] = useState('');
   const [assignedTo, setAssignedTo] = useState(currentUserId || '');
   const [clientId, setClientId] = useState(prefilledClientId || '');
-  const [selectedDate, setSelectedDate] = useState(todayIso());
+  // initialDueDate vence: se o Checklist passa um dia (>= hoje), começamos nele
+  const [selectedDate, setSelectedDate] = useState(() => {
+    if (initialDueDate && initialDueDate >= todayIso()) return initialDueDate;
+    return todayIso();
+  });
   const [subtasks, setSubtasks] = useState([]);
   const [subtasksRequired, setSubtasksRequired] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Semana mostrada no seletor — começa na semana do hoje
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  // Semana mostrada no seletor — começa na semana do dia selecionado
+  const [weekStart, setWeekStart] = useState(() => {
+    const seed = initialDueDate && initialDueDate >= todayIso()
+      ? new Date(initialDueDate + 'T00:00:00')
+      : new Date();
+    return startOfWeek(seed);
+  });
 
   /* ── ESC fecha o modal ──────────────────────────────────────────────── */
   useEffect(() => {

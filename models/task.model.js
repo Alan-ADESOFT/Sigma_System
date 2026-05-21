@@ -1,3 +1,17 @@
+/**
+ * models/task.model.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ * CRUD de tasks (client_tasks) + dependências + helpers para overdue/canComplete.
+ *
+ * Campos importantes pro Checklist v2:
+ *   • due_time      → TIME opcional. Usado pra ordenação e filtro "Hora".
+ *   • recurrence_id → FK pra task_recurrences. Tasks nascidas de uma recorrência
+ *                     trazem esse campo preenchido — é assim que o Checklist
+ *                     separa as seções "Recorrentes" vs "Não-recorrentes" sem
+ *                     heurística.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 const { query, queryOne } = require('../infra/db');
 
 // ─── Tasks by tenant (with filters) ───────────────────────────────────────
@@ -116,8 +130,9 @@ function normalizeSubtasks(arr) {
 async function createTask(data, tenantId) {
   const {
     title, description, client_id, assigned_to,
-    priority, due_date, status, category_id,
+    priority, due_date, due_time, status, category_id,
     estimated_hours, created_by, subtasks, subtasks_required,
+    recurrence_id,
   } = data;
 
   const subtasksJson = JSON.stringify(normalizeSubtasks(subtasks));
@@ -125,15 +140,16 @@ async function createTask(data, tenantId) {
   const task = await queryOne(
     `INSERT INTO client_tasks
        (tenant_id, title, description, client_id, assigned_to,
-        priority, due_date, status, category_id, estimated_hours, created_by, subtasks, subtasks_required)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13)
+        priority, due_date, due_time, status, category_id,
+        estimated_hours, created_by, subtasks, subtasks_required, recurrence_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15)
      RETURNING *`,
     [
       tenantId, title, description || null, client_id || null,
       assigned_to || null, priority || 'normal', due_date || null,
-      status || 'pending', category_id || null,
+      due_time || null, status || 'pending', category_id || null,
       estimated_hours || null, created_by || null, subtasksJson,
-      Boolean(subtasks_required),
+      Boolean(subtasks_required), recurrence_id || null,
     ]
   );
 
@@ -169,6 +185,14 @@ async function updateTask(id, data, actorId, tenantId) {
   const subtasksJson = subtasksProvided ? JSON.stringify(normalizeSubtasks(data.subtasks)) : null;
   const subtasksReqProvided = data.subtasks_required !== undefined;
 
+  // due_time: undefined  → mantém valor atual
+  //           null        → limpa explicitamente
+  //           'HH:MM[:SS]'→ atualiza
+  // Como o Postgres não distingue "não passou" de null via $param, marcamos
+  // com flag explícita pra usar CASE WHEN.
+  const dueTimeProvided = data.due_time !== undefined;
+  const dueTimeValue = dueTimeProvided ? data.due_time : null;
+
   const updated = await queryOne(
     `UPDATE client_tasks
         SET title             = COALESCE($3, title),
@@ -182,7 +206,8 @@ async function updateTask(id, data, actorId, tenantId) {
             estimated_hours   = COALESCE($11, estimated_hours),
             done              = $12,
             subtasks          = COALESCE($13::jsonb, subtasks),
-            subtasks_required = COALESCE($14, subtasks_required)
+            subtasks_required = COALESCE($14, subtasks_required),
+            due_time          = CASE WHEN $15::boolean THEN $16::time ELSE due_time END
       WHERE id = $1 AND tenant_id = $2
       RETURNING *`,
     [
@@ -193,6 +218,7 @@ async function updateTask(id, data, actorId, tenantId) {
       data.status || null, data.category_id || null,
       data.estimated_hours || null, done, subtasksJson,
       subtasksReqProvided ? Boolean(data.subtasks_required) : null,
+      dueTimeProvided, dueTimeValue,
     ]
   );
 
@@ -347,10 +373,106 @@ async function getTaskCountsByClient(clientId, tenantId) {
   return row || { total: 0, done: 0 };
 }
 
+/**
+ * Insere várias tasks de uma vez (bulk import via IA, etc.).
+ *
+ * Usa um único INSERT com múltiplos VALUES — atômico no Postgres, sem precisar
+ * de BEGIN/COMMIT (o driver Neon serverless é HTTP-based e não suporta
+ * transações multi-statement nativas).
+ *
+ * Retorna { created: [tasks], failed: [{ index, error }] }. Validações
+ * mínimas (title + assigned_to) acontecem aqui pra falhar cedo; o resto vem
+ * do banco.
+ */
+async function createMany(items, tenantId) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return { created: [], failed: [] };
+  }
+
+  const failed = [];
+  const valid = [];
+  items.forEach((it, index) => {
+    if (!it || !it.title || !String(it.title).trim()) {
+      failed.push({ index, error: 'title obrigatório' });
+      return;
+    }
+    if (!it.assigned_to) {
+      failed.push({ index, error: 'assigned_to obrigatório' });
+      return;
+    }
+    valid.push({ index, item: it });
+  });
+
+  if (valid.length === 0) return { created: [], failed };
+
+  // Monta VALUES dinâmico com 15 colunas por linha
+  const COLS = 15;
+  const placeholders = [];
+  const params = [];
+  let p = 1;
+
+  for (const { item } of valid) {
+    const subtasksJson = JSON.stringify(normalizeSubtasks(item.subtasks));
+    const row = [
+      tenantId,
+      String(item.title).trim(),
+      item.description || null,
+      item.client_id || null,
+      item.assigned_to || null,
+      item.priority || 'normal',
+      item.due_date || null,
+      item.due_time || null,
+      item.status || 'pending',
+      item.category_id || null,
+      item.estimated_hours || null,
+      item.created_by || null,
+      subtasksJson,
+      Boolean(item.subtasks_required),
+      item.recurrence_id || null,
+    ];
+    if (row.length !== COLS) {
+      throw new Error(`[createMany] linha com ${row.length} colunas, esperado ${COLS}`);
+    }
+    const rowPh = row.map((_, i) => `$${p + i}${i === 12 ? '::jsonb' : ''}`).join(',');
+    placeholders.push(`(${rowPh})`);
+    params.push(...row);
+    p += COLS;
+  }
+
+  const created = await query(
+    `INSERT INTO client_tasks
+       (tenant_id, title, description, client_id, assigned_to,
+        priority, due_date, due_time, status, category_id,
+        estimated_hours, created_by, subtasks, subtasks_required, recurrence_id)
+     VALUES ${placeholders.join(', ')}
+     RETURNING *`,
+    params
+  );
+
+  // Activity log das tasks criadas (best-effort, não bloqueia)
+  for (const t of created) {
+    if (t.created_by) {
+      try {
+        await query(
+          `INSERT INTO task_activity_log (task_id, tenant_id, actor_id, action)
+           VALUES ($1, $2, $3, 'created')`,
+          [t.id, tenantId, t.created_by]
+        );
+      } catch (err) {
+        console.warn('[WARN][createMany] activity log falhou', { taskId: t.id, error: err.message });
+      }
+    }
+  }
+
+  console.log('[SUCESSO][createMany]', { created: created.length, failed: failed.length });
+  return { created, failed };
+}
+
 module.exports = {
   getTasksByTenant,
   getTasksByClient,
   createTask,
+  createMany,
   updateTask,
   deleteTask,
   markOverdue,

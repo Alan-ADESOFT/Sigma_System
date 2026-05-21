@@ -22,7 +22,14 @@
  * Usado por:
  *   pages/api/onboarding/*          — APIs públicas (current-stage, submit, ...)
  *   pages/api/onboarding/admin/*    — APIs do admin (config das etapas)
- *   pages/api/cron/onboarding-daily — disparador diário do WhatsApp
+ *   pages/api/cron/onboarding-daily   — disparador diário do WhatsApp
+ *   pages/api/cron/onboarding-incentive — cron de cutucada às 10h (sprint v2)
+ *
+ * Settings (chaves) usadas pelo onboarding (key/value em `settings`):
+ *   onboarding_welcome_video_url          — URL do vídeo global de boas-vindas
+ *   onboarding_welcome_video_filename     — nome do arquivo (UI admin)
+ *   onboarding_welcome_video_description  — caption pra envio no WhatsApp
+ *   onboarding_msg_incentive              — template do cron de incentivo
  *
  * NOTA: Este arquivo usa ES modules (import/export). Outros models do projeto
  * usam CommonJS — a precedência é o `pages/api/cron/form-reminder.js` que
@@ -158,6 +165,9 @@ export async function getProgress(clientId) {
 /**
  * Busca progresso pelo token público (URL /onboarding/{token}).
  * Inclui dados do cliente já no JOIN — economiza uma query.
+ *
+ * Trazemos responsible_name e onboarding_greeting_with desde a query base pra
+ * o snapshot conseguir saudar o cliente corretamente sem disparar outra query.
  */
 export async function getProgressByToken(token) {
   return queryOne(
@@ -165,12 +175,34 @@ export async function getProgressByToken(token) {
         op.*,
         mc.company_name,
         mc.phone,
-        mc.email
+        mc.email,
+        mc.responsible_name,
+        mc.onboarding_greeting_with
       FROM onboarding_progress op
       JOIN marketing_clients mc ON mc.id = op.client_id
       WHERE op.token = $1`,
     [token]
   );
+}
+
+/**
+ * Resolve qual nome usar pra saudar o cliente em mensagens (caption, WhatsApp,
+ * cron). Quando o toggle é 'responsible' E o nome do responsável está
+ * preenchido, usa o responsável. Senão cai pro company_name (fallback seguro).
+ *
+ * Por que isso vive aqui (não num helper de string solto): mensagens de
+ * onboarding nascem em vários pontos — cron diário, cron de incentivo, modal de
+ * envio, Jarvis. Centralizar evita o bug "trocaram em 3 lugares e esqueceram
+ * o 4º".
+ */
+export function getClientGreetingName(client) {
+  if (!client) return '';
+  if (client.onboarding_greeting_with === 'responsible'
+      && client.responsible_name
+      && String(client.responsible_name).trim()) {
+    return String(client.responsible_name).trim();
+  }
+  return client.company_name || '';
 }
 
 /**
@@ -615,7 +647,9 @@ export async function findActiveOnboardings(tenantId = null) {
         op.current_stage,
         op.current_day,
         mc.company_name,
-        mc.phone
+        mc.phone,
+        mc.responsible_name,
+        mc.onboarding_greeting_with
       FROM onboarding_progress op
       JOIN marketing_clients mc ON mc.id = op.client_id
       WHERE ${where}`,
@@ -767,5 +801,184 @@ export function getNextStageTeaser(currentStageNumber) {
     description: next.description,
     timeEstimate: next.timeEstimate,
     questionCount: countQuestions(next),
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DAY SNAPSHOT — usado pelo DayNavigator no /onboarding/[token]
+═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Devolve a lista dos 15 dias com status agregado, em UMA query consolidada.
+ *
+ * status possíveis por dia:
+ *   - 'answered'         → o cliente já submetido a etapa daquele dia
+ *   - 'today'            → é o dia atual (currentDay) e a etapa não foi submetida
+ *   - 'released_pending' → dia passado, etapa liberada mas não respondida (catch-up)
+ *   - 'released'         → dia passado de descanso (kind='rest') ou completed pre-currentDay
+ *   - 'locked'           → dia futuro
+ *
+ * Performance: 1 query SQL pra todas as etapas (LEFT JOIN responses) — sem N+1.
+ * O caller (endpoint day-snapshot) só monta o array final em memória.
+ */
+export async function buildDayList(progress) {
+  if (!progress) return null;
+  const currentDay = computeCurrentDay(progress.started_at);
+
+  // Mapa stage -> response (uma query). LEFT JOIN garante etapas sem resposta.
+  const rows = await query(
+    `SELECT
+        c.stage_number,
+        c.day_release,
+        c.title,
+        r.submitted,
+        r.submitted_at
+      FROM onboarding_stages_config c
+      LEFT JOIN onboarding_stage_responses r
+        ON r.client_id = $1 AND r.stage_number = c.stage_number
+      WHERE c.tenant_id = $2
+      ORDER BY c.day_release ASC`,
+    [progress.client_id, progress.tenant_id]
+  );
+
+  const byDay = new Map();
+  for (const r of rows) {
+    byDay.set(Number(r.day_release), {
+      stage: Number(r.stage_number),
+      title: r.title,
+      submitted: !!r.submitted,
+      submittedAt: r.submitted_at,
+    });
+  }
+
+  const days = [];
+  for (let d = 1; d <= TOTAL_DAYS; d++) {
+    if (REST_DAY_NUMBERS.includes(d)) {
+      days.push({
+        day: d,
+        kind: 'rest',
+        status: d <= currentDay ? 'released' : 'locked',
+      });
+      continue;
+    }
+    const info = byDay.get(d);
+    let status;
+    if (info?.submitted) status = 'answered';
+    else if (d === currentDay) status = 'today';
+    else if (d < currentDay) status = 'released_pending';
+    else status = 'locked';
+
+    days.push({
+      day: d,
+      kind: 'stage',
+      stage: info?.stage || null,
+      title: info?.title || null,
+      status,
+      submittedAt: info?.submittedAt || null,
+    });
+  }
+
+  return { currentDay, totalDays: TOTAL_DAYS, days };
+}
+
+/**
+ * Monta o detalhe (igual ao current-stage) pra UM dia específico.
+ *
+ * `readOnly` é derivado: true quando a etapa daquele dia já foi submetida —
+ * o cliente vê as próprias respostas mas não consegue alterar. False quando
+ * ainda dá pra responder (today ou catch-up).
+ *
+ * Para dias futuros (locked), o detalhe é um payload mínimo que o front
+ * renderiza com placeholder de cadeado. Para dia de descanso, retorna a
+ * mensagem do dia.
+ */
+export async function buildDayDetail(progress, dayNumber) {
+  if (!progress) return { state: 'not_found' };
+
+  const currentDay = computeCurrentDay(progress.started_at);
+  const day = Number(dayNumber);
+  if (!Number.isFinite(day) || day < 1 || day > TOTAL_DAYS) {
+    return { state: 'invalid_day' };
+  }
+
+  // Dia de descanso
+  if (REST_DAY_NUMBERS.includes(day)) {
+    const restRow = await queryOne(
+      `SELECT message FROM onboarding_rest_days_config
+        WHERE tenant_id = $1 AND day_number = $2`,
+      [progress.tenant_id, day]
+    );
+    return {
+      state: 'rest_day',
+      day,
+      kind: 'rest',
+      readOnly: true,
+      message: restRow?.message || REST_DAYS[day] || '',
+      locked: day > currentDay, // visualmente "trancado" se ainda não chegou
+    };
+  }
+
+  // Etapa do dia (ou null se a config não tem)
+  const stage = getStageByDay(day);
+  if (!stage) {
+    return { state: 'invalid_day' };
+  }
+
+  // Dia futuro — payload minimalista (placeholder de cadeado)
+  if (day > currentDay) {
+    // Calcula a data de liberação prevista (started_at + (day-1) dias em BRT)
+    const start = new Date(progress.started_at);
+    const releaseDate = new Date(start);
+    releaseDate.setDate(start.getDate() + (day - 1));
+    return {
+      state: 'locked',
+      day,
+      kind: 'stage',
+      stage: { number: stage.stage, title: stage.title },
+      releaseDate: releaseDate.toISOString(),
+      readOnly: true,
+      locked: true,
+    };
+  }
+
+  // Dia <= currentDay → carrega config + resposta
+  const [config, response] = await Promise.all([
+    getStageConfig(progress.tenant_id, stage.stage),
+    getStageResponse(progress.client_id, stage.stage),
+  ]);
+
+  const stagePayload = {
+    number: stage.stage,
+    day,
+    title: config?.title || stage.title,
+    description: config?.description || stage.description,
+    timeEstimate: config?.time_estimate || stage.timeEstimate,
+    insight: config?.insight_text || stage.insight,
+    questions: config?.questions_json || stage.questions,
+    questionCount: (config?.questions_json || stage.questions || [])
+      .filter(q => !q.id?.startsWith?.('_extra_')).length,
+    video: {
+      url: config?.video_url || null,
+      duration: config?.video_duration || null,
+      watched: response?.video_watched || false,
+    },
+  };
+
+  const submitted = !!response?.submitted;
+
+  return {
+    state: submitted ? 'stage_done' : 'stage_ready',
+    day,
+    kind: 'stage',
+    readOnly: submitted, // se já enviou, modo leitura
+    stage: stagePayload,
+    response: response
+      ? {
+          responses: response.responses_json || {},
+          submitted: !!response.submitted,
+          videoWatched: !!response.video_watched,
+        }
+      : null,
+    nextStage: getNextStageTeaser(stage.stage),
   };
 }

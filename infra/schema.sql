@@ -808,6 +808,21 @@ CREATE INDEX IF NOT EXISTS idx_onb_notif_client ON onboarding_notifications_log(
 ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS onboarding_started_at TIMESTAMPTZ;
 ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS onboarding_status     TEXT DEFAULT 'not_started';
 
+-- Sprint Forms v2 (20260520): saudação por responsável (vs empresa).
+-- Migration espelhada em infra/migrations/004_forms_v2_welcome_video_20260520.sql
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS responsible_name         TEXT;
+ALTER TABLE marketing_clients ADD COLUMN IF NOT EXISTS onboarding_greeting_with TEXT NOT NULL DEFAULT 'company';
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_onboarding_greeting_with'
+  ) THEN
+    ALTER TABLE marketing_clients
+      ADD CONSTRAINT chk_onboarding_greeting_with
+      CHECK (onboarding_greeting_with IN ('company', 'responsible'));
+  END IF;
+END $$;
+
 -- ============================================================
 -- RESUMO IA DO FORMULÁRIO
 -- ============================================================
@@ -1062,6 +1077,27 @@ ALTER TABLE task_recurrences ADD COLUMN IF NOT EXISTS subtasks          JSONB NO
 ALTER TABLE task_recurrences ADD COLUMN IF NOT EXISTS subtasks_required BOOLEAN NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS idx_task_recurrences_tenant ON task_recurrences(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_task_recurrences_active ON task_recurrences(is_active);
+
+-- ============================================================
+-- 42.1. SPRINT TASKS V2 (Checklist) — due_time, recurrence_id, preferências
+-- Migration espelhada em infra/migrations/003_tasks_v2_checklist_20260520.sql
+-- ============================================================
+ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS due_time TIME;
+ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS recurrence_id TEXT
+  REFERENCES task_recurrences(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_client_tasks_recurrence ON client_tasks(recurrence_id);
+
+CREATE TABLE IF NOT EXISTS user_task_preferences (
+    id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id      TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    default_view TEXT NOT NULL DEFAULT 'checklist',
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(tenant_id, user_id),
+    CHECK (default_view IN ('kanban', 'lista', 'checklist'))
+);
+CREATE INDEX IF NOT EXISTS idx_user_task_prefs_tenant ON user_task_preferences(tenant_id, user_id);
 
 -- ============================================================
 -- 43. CONTENT PLANNING (planejamento mensal de conteúdo)
@@ -1411,6 +1447,54 @@ CREATE INDEX IF NOT EXISTS idx_ads_public_tokens_status    ON ads_public_report_
 DROP TABLE IF EXISTS stage_quality_scores;
 
 -- ============================================================
+-- SUPPORT CENTER — tutoriais internos do time (sprint 20260520)
+-- Migration espelhada em infra/migrations/005_support_center_20260520.sql
+-- ============================================================
+CREATE TABLE IF NOT EXISTS support_modules (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    description TEXT,
+    icon        TEXT DEFAULT 'book',
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    created_by  TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_support_modules_tenant_order ON support_modules(tenant_id, sort_order);
+
+CREATE TABLE IF NOT EXISTS support_lessons (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    module_id   TEXT NOT NULL REFERENCES support_modules(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    description TEXT,
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    created_by  TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_support_lessons_module_order ON support_lessons(module_id, sort_order);
+
+CREATE TABLE IF NOT EXISTS support_media (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    lesson_id       TEXT NOT NULL REFERENCES support_lessons(id) ON DELETE CASCADE,
+    kind            TEXT NOT NULL CHECK (kind IN ('video', 'attachment')),
+    title           TEXT,
+    description     TEXT,
+    file_url        TEXT NOT NULL,
+    file_name       TEXT,
+    file_size_bytes BIGINT,
+    mime_type       TEXT,
+    sort_order      INTEGER NOT NULL DEFAULT 0,
+    created_by      TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_support_media_lesson_order ON support_media(lesson_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_support_media_lesson_kind  ON support_media(lesson_id, kind);
+
+-- ============================================================
 -- FUNCAO + TRIGGERS: atualizar updated_at automaticamente
 -- ============================================================
 CREATE OR REPLACE FUNCTION update_updated_at()
@@ -1435,7 +1519,8 @@ BEGIN
         'client_form_summaries',
         'instagram_accounts','instagram_scheduled_posts',
         'task_comments','meetings','task_templates','task_bot_config',
-        'task_recurrences',
+        'task_recurrences','user_task_preferences',
+        'support_modules','support_lessons',
         'finance_categories',
         'content_plan_statuses','content_plans','content_plan_creatives','content_plan_share_tokens',
         'referrals','referral_config',
@@ -2012,7 +2097,7 @@ CREATE TABLE IF NOT EXISTS image_settings (
     max_template_per_client         INTEGER NOT NULL DEFAULT 20,
     brandbook_required              BOOLEAN NOT NULL DEFAULT false,
     auto_cleanup_days               INTEGER NOT NULL DEFAULT 7,
-    prompt_reuse_window_hours       INTEGER NOT NULL DEFAULT 24,
+    prompt_reuse_window_hours       INTEGER NOT NULL DEFAULT 48,  -- sprint v2: subido de 24 → 48
     created_at                      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at                      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -2181,6 +2266,15 @@ INSERT INTO image_model_capabilities VALUES
    0.04, 0.08, 0.17,
    ARRAY['image_edit','mask_edit','high_fidelity'],
    NULL, now()),
+  -- Sprint Image v2.1: gpt-image-1.5 estava no probe e nos enabled_models
+  -- mas faltava registro nesta tabela — Smart Selector escolhia e o worker
+  -- nao resolvia provider. Ate 4 inputs como o gpt-image-2.
+  ('gpt-image-1.5','openai','GPT Image 1.5',
+   'Tier intermediario OpenAI — fallback quando org nao tem gpt-image-2',
+   true, true, 4, true, false,
+   0.03, 0.06, 0.12,
+   ARRAY['image_edit','versatile','fallback'],
+   NULL, now()),
   ('imagen-3.0-capability-001','vertex','Imagen 3 Capability',
    'Subject types tipados (PERSON/PRODUCT/ANIMAL) + face mesh',
    true, true, 4, true, true,
@@ -2246,3 +2340,91 @@ CREATE TABLE IF NOT EXISTS copy_generation_jobs (
 );
 CREATE INDEX IF NOT EXISTS idx_copy_jobs_session ON copy_generation_jobs(session_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_copy_jobs_active  ON copy_generation_jobs(status) WHERE status IN ('pending','running');
+
+-- ─── Copy v2 (sprint maio/2026) ──────────────────────────────────────────────
+-- partial_text armazena o texto parcial conforme chega via streaming SSE.
+-- O frontend abre EventSource em /api/copy/jobs/[id]/stream e renderiza esse
+-- campo em tempo real. Quando status='done', result_text e a fonte da verdade.
+ALTER TABLE copy_generation_jobs ADD COLUMN IF NOT EXISTS partial_text TEXT;
+
+-- Sprint maio/2026 — Export de copy em background (PDF/DOCX) com 3 templates
+-- (landing, planning, freeform). Worker dispara via setImmediate como o copy
+-- generation. result_url aponta pra public/uploads/exports/...
+CREATE TABLE IF NOT EXISTS copy_export_jobs (
+    id                 TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id          TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    session_id         TEXT NOT NULL REFERENCES copy_sessions(id) ON DELETE CASCADE,
+    client_id          TEXT REFERENCES marketing_clients(id) ON DELETE SET NULL,
+    template           TEXT NOT NULL,            -- 'landing' | 'planning' | 'freeform'
+    format             TEXT NOT NULL,            -- 'pdf' | 'docx'
+    use_brandbook      BOOLEAN DEFAULT TRUE,
+    status             TEXT NOT NULL DEFAULT 'pending',  -- pending | running | done | error
+    result_url         TEXT,
+    result_size_bytes  INTEGER,
+    error_message      TEXT,
+    duration_ms        INTEGER,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at         TIMESTAMPTZ,
+    finished_at        TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_copy_export_jobs_session ON copy_export_jobs(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_copy_export_jobs_active  ON copy_export_jobs(status) WHERE status IN ('pending','running');
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- SPRINT IMAGE GENERATOR v2 (maio/2026) — Arte Guia + qualidade premium
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Tudo idempotente. Tres mudancas:
+--   1. image_inspiration_templates  (templates globais por tenant)
+--   2. client_inspiration_templates (templates especificos por cliente)
+--   3. image_jobs.low_quality_warning (flag opcional pos-saveImage)
+--
+-- Rationale: o usuario relatou que o gerador escolhe modelos errados e
+-- entrega imagens de baixa qualidade. A "Arte Guia" e a evolucao do
+-- brandbook — agora une identidade visual estruturada + galeria de
+-- artes-modelo que servem de inspiracao constante. Globais (banco do
+-- tenant) + por cliente. O Smart Selector consome esse contexto.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- Templates globais (banco de inspiracoes do tenant — qualquer cliente acessa)
+CREATE TABLE IF NOT EXISTS image_inspiration_templates (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    category        TEXT NOT NULL,           -- 'feed' | 'story' | 'ad' | 'banner' | 'capa' | 'quote' | 'outros'
+    title           TEXT NOT NULL,
+    url             TEXT NOT NULL,
+    thumbnail_url   TEXT,
+    description     TEXT,
+    ai_description  TEXT,                    -- Vision detalhada (cache lazy)
+    ai_described_at TIMESTAMPTZ,
+    usage_count     INTEGER NOT NULL DEFAULT 0,
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_inspir_tpl_tenant_cat
+    ON image_inspiration_templates(tenant_id, category, is_active);
+
+-- Templates por cliente (artes especificas daquele cliente)
+CREATE TABLE IF NOT EXISTS client_inspiration_templates (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    client_id       TEXT NOT NULL REFERENCES marketing_clients(id) ON DELETE CASCADE,
+    category        TEXT,
+    title           TEXT NOT NULL,
+    url             TEXT NOT NULL,
+    thumbnail_url   TEXT,
+    description     TEXT,
+    ai_description  TEXT,
+    ai_described_at TIMESTAMPTZ,
+    usage_count     INTEGER NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_inspir_tpl_client
+    ON client_inspiration_templates(client_id, created_at DESC);
+
+-- Flag de baixa qualidade pos-geracao (Bloco D #23). Aparece como badge
+-- discreto no card; nao bloqueia entrega. Detectado por blur Laplacian e
+-- resolucao real abaixo do esperado.
+ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS low_quality_warning BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS quality_check JSONB DEFAULT '{}';

@@ -20,6 +20,7 @@
 
 import { useState, useEffect } from 'react';
 import DashboardLayout from '../../components/DashboardLayout';
+import MediaUploader from '../../components/MediaUploader';
 import { useNotification } from '../../context/NotificationContext';
 import styles from '../../assets/style/onboarding.module.css';
 
@@ -1079,6 +1080,19 @@ Você já olhou seu negócio com lupa por 12 dias.
 Amanhã e depois: objetivos e fechamento. Vamos terminar com força.`,
   },
   {
+    key: 'onboarding_msg_incentive',
+    label: 'Incentivo Diário',
+    description: 'Enviada às 10h pra quem não respondeu a etapa do dia. Não é enviada pra quem está em dia.',
+    placeholders: ['{NOME}', '{ETAPA}', '{LINK}'],
+    defaultValue: `Oi, *{NOME}*.
+
+A etapa *{ETAPA}* de hoje ainda tá te esperando. Sem cobrança — só lembrando que tá tudo aqui quando você puder:
+
+{LINK}
+
+5 a 7 minutos é o que separa hoje da próxima etapa.`,
+  },
+  {
     key: 'onboarding_msg_completion',
     label: 'Conclusão',
     description: 'Enviada quando o cliente completa todas as 12 etapas.',
@@ -1171,7 +1185,10 @@ function OnboardingMessagesTab({ notify }) {
         </div>
       </div>
 
-      {MSG_TEMPLATES.map((tmpl, idx) => {
+      {/* ── VÍDEO DE BOAS-VINDAS GLOBAL (sprint Forms v2) ── */}
+      <WelcomeVideoSection notify={notify} />
+
+      {MSG_TEMPLATES.map((tmpl) => {
         const val = values[tmpl.key] || tmpl.defaultValue;
         const isSaving = saving[tmpl.key];
         const isSaved = saved[tmpl.key];
@@ -1252,6 +1269,232 @@ function OnboardingMessagesTab({ notify }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   WelcomeVideoSection (sprint Forms v2)
+   ──────────────────────────────────────────────────────────
+   Upload do vídeo de boas-vindas global + descrição (caption).
+   Quando configurado, é enviado via Z-API junto com o link do
+   onboarding (botão WhatsApp do InfoCliente e reenvio do Jarvis).
+   Grava 3 chaves em `settings`:
+     onboarding_welcome_video_url
+     onboarding_welcome_video_filename
+     onboarding_welcome_video_description
+═══════════════════════════════════════════════════════════ */
+function WelcomeVideoSection({ notify }) {
+  const [videoUrl, setVideoUrl] = useState('');
+  const [filename, setFilename] = useState('');
+  const [description, setDescription] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const DEFAULT_CAPTION = `Olá! Esse é um vídeo curto explicando como funciona o seu formulário de raio-X do negócio. Cada dia, uma etapa nova libera no WhatsApp. Sem pressão, no seu ritmo. Bora começar?`;
+
+  // Carrega valores atuais
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/settings/jarvis-config');
+        const d = await r.json();
+        if (d.success && d.config) {
+          setVideoUrl(d.config.onboarding_welcome_video_url || '');
+          setFilename(d.config.onboarding_welcome_video_filename || '');
+          setDescription(d.config.onboarding_welcome_video_description || '');
+        }
+      } catch (err) {
+        console.error('[ERRO][WelcomeVideo] load', err);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  async function saveKey(key, value) {
+    const r = await fetch('/api/settings/jarvis-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value: value || '' }),
+    });
+    const d = await r.json();
+    if (!d.success) throw new Error(d.error || `falha em ${key}`);
+  }
+
+  /* Callback do MediaUploader — recebe [{url, mime, size, name}] */
+  async function handleUploaded(items) {
+    const item = Array.isArray(items) && items[0];
+    if (!item?.url) return;
+    setSaving(true);
+    try {
+      await saveKey('onboarding_welcome_video_url', item.url);
+      await saveKey('onboarding_welcome_video_filename', item.name || '');
+      setVideoUrl(item.url);
+      setFilename(item.name || '');
+      console.log('[SUCESSO][WelcomeVideo] upload salvo', { url: item.url });
+      notify('Vídeo de boas-vindas salvo.', 'success');
+    } catch (err) {
+      console.error('[ERRO][WelcomeVideo] saveUpload', err);
+      notify('Erro ao salvar vídeo: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveDescription() {
+    setSaving(true);
+    try {
+      await saveKey('onboarding_welcome_video_description', description);
+      notify('Descrição salva.', 'success');
+    } catch (err) {
+      notify('Erro: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRemove() {
+    if (!confirm('Remover o vídeo de boas-vindas? Os clientes deixarão de recebê-lo no envio.')) return;
+    setSaving(true);
+    try {
+      await Promise.all([
+        saveKey('onboarding_welcome_video_url', ''),
+        saveKey('onboarding_welcome_video_filename', ''),
+      ]);
+      setVideoUrl('');
+      setFilename('');
+      notify('Vídeo removido.', 'success');
+    } catch (err) {
+      notify('Erro: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return null;
+
+  return (
+    <div className="glass-card" style={{ padding: '20px 24px', marginBottom: 20 }}>
+      <div style={{
+        fontFamily: 'var(--font-mono)', fontSize: '0.56rem',
+        color: 'var(--text-muted)', letterSpacing: '0.10em',
+        textTransform: 'uppercase', marginBottom: 12,
+      }}>
+        // VÍDEO DE BOAS-VINDAS GLOBAL
+      </div>
+
+      {!videoUrl ? (
+        <>
+          <p style={{
+            fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
+            color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 14,
+          }}>
+            Nenhum vídeo de boas-vindas configurado. Quando configurado, será
+            enviado no WhatsApp junto com o link do onboarding.
+          </p>
+          <MediaUploader
+            accept="video"
+            multiple={false}
+            value={[]}
+            onChange={handleUploaded}
+            label="Selecione o vídeo (MP4, até 100MB)"
+          />
+        </>
+      ) : (
+        <>
+          <video
+            src={videoUrl}
+            controls
+            style={{
+              width: '100%', maxHeight: 340, background: '#000',
+              borderRadius: 8, marginBottom: 12,
+            }}
+          />
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: '0.64rem',
+            color: 'var(--text-muted)', marginBottom: 14,
+          }}>
+            {filename ? `Arquivo: ${filename}` : videoUrl}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+            <MediaUploader
+              accept="video"
+              multiple={false}
+              value={[]}
+              onChange={handleUploaded}
+              label="Substituir vídeo"
+            />
+            <button
+              onClick={handleRemove}
+              disabled={saving}
+              style={{
+                padding: '8px 16px', borderRadius: 6, cursor: 'pointer',
+                background: 'transparent', border: '1px solid rgba(255,0,51,0.30)',
+                color: '#ff6680', fontFamily: 'var(--font-mono)',
+                fontSize: '0.65rem', textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+              }}
+            >
+              Remover vídeo
+            </button>
+          </div>
+        </>
+      )}
+
+      <div style={{ marginTop: 16 }}>
+        <label style={{
+          display: 'block',
+          fontFamily: 'var(--font-mono)', fontSize: '0.58rem',
+          color: 'var(--text-muted)', letterSpacing: '0.08em',
+          textTransform: 'uppercase', marginBottom: 6,
+        }}>
+          Descrição (caption do vídeo no WhatsApp)
+        </label>
+        <textarea
+          rows={4}
+          value={description || ''}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder={DEFAULT_CAPTION}
+          style={{
+            width: '100%', padding: '12px 14px', resize: 'vertical',
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 8, color: '#f0f0f0',
+            fontFamily: 'var(--font-mono)', fontSize: '0.72rem',
+            lineHeight: 1.6, outline: 'none',
+          }}
+        />
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <button
+            onClick={handleSaveDescription}
+            disabled={saving}
+            style={{
+              padding: '7px 18px', borderRadius: 6,
+              cursor: saving ? 'not-allowed' : 'pointer',
+              background: 'rgba(255,0,51,0.1)',
+              border: '1px solid rgba(255,0,51,0.25)',
+              color: '#ff6680', fontFamily: 'var(--font-mono)',
+              fontSize: '0.65rem', fontWeight: 600,
+            }}
+          >
+            {saving ? 'Salvando…' : 'Salvar descrição'}
+          </button>
+          <button
+            onClick={() => setDescription(DEFAULT_CAPTION)}
+            style={{
+              padding: '7px 14px', borderRadius: 6, cursor: 'pointer',
+              background: 'transparent',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+            }}
+          >
+            Restaurar padrão
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -21,7 +21,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import OnboardingStageView from '../../components/OnboardingStageView';
+import OnboardingStageView, { ReadOnlyStageView } from '../../components/OnboardingStageView';
+import OnboardingDayNavigator, { LockedDayView } from '../../components/OnboardingDayNavigator';
 import { useNotification } from '../../context/NotificationContext';
 import styles from '../../assets/style/onboarding.module.css';
 import refStyles from '../../assets/style/indicacao.module.css';
@@ -81,8 +82,18 @@ export default function OnboardingPage() {
   const [snapshot, setSnapshot] = useState(null);
   const [error, setError] = useState(null);
 
+  /* ─── Sprint Forms v2: navegador de dias ───
+   * `daysList` é a lista das 15 cápsulas (vem do /day-snapshot sem `day=`).
+   * `selectedDay` é o dia que o cliente clicou — null = view padrão (today).
+   * `dayDetail` é o detalhe quando o cliente selecionou um dia ≠ today.
+   * `loadingDay` é o flag local pra evitar flicker durante navegação. */
+  const [daysList, setDaysList] = useState(null);
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [dayDetail, setDayDetail] = useState(null);
+  const [loadingDay, setLoadingDay] = useState(false);
+
   /* ─── Carrega o snapshot da API ─── */
-  const loadStage = useCallback(async () => {
+  const loadStage = useCallback(async (opts = {}) => {
     if (!token) return;
     setLoading(true);
     try {
@@ -101,10 +112,62 @@ export default function OnboardingPage() {
     } finally {
       setLoading(false);
     }
+
+    // Após cada load (especialmente pós-submit) recarrega a lista de dias.
+    // `noCache=true` força o navegador a não usar o cache HTTP de 60s.
+    try {
+      const init = opts.noCache ? { cache: 'no-store' } : undefined;
+      const r = await fetch(`/api/onboarding/day-snapshot?token=${encodeURIComponent(token)}`, init);
+      const d = await r.json();
+      if (d.success && Array.isArray(d.days)) {
+        setDaysList(d);
+      }
+    } catch (err) {
+      console.warn('[OnboardingPage] falha ao carregar lista de dias', err);
+    }
   }, [token]);
 
   useEffect(() => {
     loadStage();
+  }, [loadStage]);
+
+  /* ─── Quando o cliente clica em um dia do navegador ───
+   * Se for o dia atual (currentDay), limpa o detail e volta pra view padrão.
+   * Senão, busca o detalhe daquele dia. */
+  const handleSelectDay = useCallback(async (day) => {
+    if (!daysList) return;
+    if (day === daysList.currentDay) {
+      setSelectedDay(null);
+      setDayDetail(null);
+      return;
+    }
+    setSelectedDay(day);
+    setLoadingDay(true);
+    setDayDetail(null);
+    try {
+      const res = await fetch(`/api/onboarding/day-snapshot?token=${encodeURIComponent(token)}&day=${day}`);
+      const data = await res.json();
+      if (!data.success) {
+        notify(data.error || 'Não foi possível carregar este dia', 'error');
+        setSelectedDay(null);
+        return;
+      }
+      setDayDetail(data);
+    } catch (err) {
+      console.error('[OnboardingPage] erro ao carregar dia', err);
+      notify('Erro de conexão', 'error');
+      setSelectedDay(null);
+    } finally {
+      setLoadingDay(false);
+    }
+  }, [daysList, token, notify]);
+
+  /* Callback usado após submeter — força invalidação do cache do navigator
+     pra refletir a etapa que acabou de virar "answered". */
+  const handleSubmitted = useCallback(() => {
+    setSelectedDay(null);
+    setDayDetail(null);
+    loadStage({ noCache: true });
   }, [loadStage]);
 
   /* ─── Calcula progresso geral pra barra do topo ─── */
@@ -130,6 +193,22 @@ export default function OnboardingPage() {
         <span className={styles.topBarLabel}>// Onboarding</span>
       </header>
 
+      {/* Navegador de dias (canto superior direito) — sprint Forms v2 */}
+      {daysList && (
+        <div style={{
+          position: 'fixed',
+          top: 16,
+          right: 16,
+          zIndex: 50,
+        }}>
+          <OnboardingDayNavigator
+            days={daysList.days}
+            selectedDay={selectedDay ?? daysList.currentDay}
+            onSelect={handleSelectDay}
+          />
+        </div>
+      )}
+
       {/* ── PROGRESS BAR (só quando temos snapshot ativo) ── */}
       {snapshot && (snapshot.state === 'stage_ready' || snapshot.state === 'stage_done') && (
         <>
@@ -148,7 +227,42 @@ export default function OnboardingPage() {
 
         {!loading && error && <ErrorScreen reason={error} />}
 
-        {!loading && !error && snapshot && (
+        {/* Dia selecionado via Navigator (não é o today) — renderiza detalhe. */}
+        {!loading && !error && selectedDay && (
+          <>
+            {loadingDay && <LoadingScreen />}
+            {!loadingDay && dayDetail && dayDetail.state === 'rest_day' && (
+              <RestDayScreen day={dayDetail.day} message={dayDetail.message} />
+            )}
+            {!loadingDay && dayDetail && dayDetail.state === 'locked' && (
+              <LockedDayView
+                day={dayDetail.day}
+                stage={dayDetail.stage}
+                releaseDate={dayDetail.releaseDate}
+              />
+            )}
+            {!loadingDay && dayDetail && dayDetail.state === 'stage_done' && (
+              <ReadOnlyStageView
+                day={dayDetail.day}
+                stage={dayDetail.stage}
+                response={dayDetail.response}
+              />
+            )}
+            {!loadingDay && dayDetail && dayDetail.state === 'stage_ready' && (
+              <OnboardingStageView
+                token={token}
+                day={dayDetail.day}
+                stage={dayDetail.stage}
+                response={dayDetail.response}
+                nextStage={dayDetail.nextStage}
+                onSubmitted={handleSubmitted}
+              />
+            )}
+          </>
+        )}
+
+        {/* Sem dia selecionado: comportamento default (today). */}
+        {!loading && !error && !selectedDay && snapshot && (
           <>
             {snapshot.state === 'not_started'  && <NotStartedScreen />}
             {snapshot.state === 'expired'      && <ExpiredScreen />}
@@ -163,7 +277,8 @@ export default function OnboardingPage() {
                 stage={snapshot.stage}
                 response={snapshot.response}
                 nextStage={snapshot.nextStage}
-                onSubmitted={loadStage}
+                onSubmitted={handleSubmitted}
+                preloadDay={daysList?.currentDay ? daysList.currentDay + 1 : null}
               />
             )}
 
@@ -173,7 +288,7 @@ export default function OnboardingPage() {
                 stage={snapshot.stage}
                 nextStage={snapshot.nextStage}
                 token={token}
-                onAdvanced={loadStage}
+                onAdvanced={handleSubmitted}
               />
             )}
           </>

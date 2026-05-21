@@ -1,9 +1,13 @@
 /**
  * CRON: tasks-overdue
  * 1. Marca tasks com due_date passada como 'overdue'
- * 2. Cria notificacao no sininho por usuario afetado
- * 3. Envia WhatsApp para cada usuario com bot ativo usando o template overdue
- *    (per-user > tenant global > hardcoded)
+ * 2. Cria notificação no sininho por usuário afetado
+ *
+ * IMPORTANTE: a partir da sprint Tasks v2 este cron NÃO envia mais WhatsApp.
+ * Os lembretes via Z-API ficam concentrados em tasks-morning (8h) e
+ * tasks-afternoon (16h) — dois lembretes por dia, sem terceiro envio extra.
+ * O sininho continua disparando aqui pra a Atrasada virar evidente na UI assim
+ * que o cron rodar de manhã.
  *
  * @route POST /api/cron/tasks-overdue
  * @protection Header x-internal-token (INTERNAL_API_TOKEN)
@@ -11,12 +15,6 @@
  */
 const { query, queryOne } = require('../../../infra/db');
 const taskModel = require('../../../models/task.model');
-const { sendText } = require('../../../infra/api/zapi');
-const {
-  resolveTemplate,
-  renderTemplate,
-  formatTaskList,
-} = require('../../../models/taskBotMessages');
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
@@ -26,29 +24,26 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Token inválido' });
   }
 
-  console.log('[CRON][tasks-overdue] Início');
+  console.log('[INFO][CRON][tasks-overdue] Início');
 
   try {
     const workspaceId = process.env.WORKSPACE_TENANT_ID;
     if (!workspaceId) {
-      console.error('[CRON][tasks-overdue] WORKSPACE_TENANT_ID não configurado');
+      console.error('[ERRO][CRON][tasks-overdue] WORKSPACE_TENANT_ID não configurado');
       return res.status(500).json({ success: false, error: 'WORKSPACE_TENANT_ID ausente' });
     }
 
     const marked = await taskModel.markOverdue(workspaceId);
     const totalMarked = marked.length;
-    let totalDispatched = 0;
 
-    // Agrupa por usuario responsavel
+    // Agrupa por usuário responsável (só pra contar e notificar sininho)
     const byUser = {};
     for (const t of marked) {
       const task = await queryOne(
-        `SELECT ct.id, ct.title, ct.priority, ct.assigned_to,
-                tn.name AS user_name,
-                tc.name AS category_name
+        `SELECT ct.id, ct.title, ct.assigned_to,
+                tn.name AS user_name
            FROM client_tasks ct
            LEFT JOIN tenants tn ON tn.id = ct.assigned_to
-           LEFT JOIN task_categories tc ON tc.id = ct.category_id
           WHERE ct.id = $1`,
         [t.id]
       );
@@ -60,12 +55,10 @@ export default async function handler(req, res) {
       }
     }
 
-    // Notificacao no sininho + envio WhatsApp
+    // Notificação no sininho (WhatsApp removido — agora só morning + afternoon)
     const { createNotification } = require('../../../models/clientForm');
     for (const [userId, info] of Object.entries(byUser)) {
       const titles = info.tasks.map((t) => t.title);
-
-      // 1) Sininho
       try {
         await createNotification(
           userId, 'task_overdue',
@@ -77,31 +70,10 @@ export default async function handler(req, res) {
       } catch (err) {
         console.warn('[WARN][CRON][tasks-overdue] sininho falhou para', userId, err.message);
       }
-
-      // 2) WhatsApp — apenas se o usuario tem bot ativo configurado
-      try {
-        const botCfg = await queryOne(
-          `SELECT * FROM task_bot_config
-            WHERE tenant_id = $1 AND user_id = $2 AND is_active = true`,
-          [workspaceId, userId]
-        );
-        if (botCfg && botCfg.phone) {
-          const template = await resolveTemplate(botCfg, workspaceId, 'overdue');
-          const msg = renderTemplate(template, {
-            nome: info.name || 'usuário',
-            tarefas: formatTaskList(info.tasks),
-            count: info.tasks.length,
-          });
-          await sendText(botCfg.phone, msg);
-          totalDispatched++;
-        }
-      } catch (err) {
-        console.error('[CRON][tasks-overdue] WhatsApp falhou para', userId, err.message);
-      }
     }
 
-    console.log('[CRON][tasks-overdue] Fim', { totalMarked, totalDispatched });
-    return res.json({ success: true, totalMarked, totalDispatched });
+    console.log('[SUCESSO][CRON][tasks-overdue] Fim', { totalMarked, affectedUsers: Object.keys(byUser).length });
+    return res.json({ success: true, totalMarked });
   } catch (err) {
     console.error('[ERRO][CRON][tasks-overdue]', err.message);
     return res.status(500).json({ success: false, error: err.message });

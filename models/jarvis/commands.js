@@ -758,13 +758,25 @@ async function cmdClientesSemFormulario(params, tenantId) {
   };
 }
 
+/**
+ * Sprint Forms v2 — trava anti-duplicação do reenvio de formulário pelo Jarvis.
+ *
+ * Decide qual fluxo (e qual confirmAction) usar com base no status do
+ * onboarding_progress:
+ *   • Sem progress / not_started → 'send_onboarding' (1º envio, ativa jornada)
+ *   • active / paused            → 'resend_onboarding' (cutucada SEM resetar started_at)
+ *   • completed                  → erro amigável, sem confirmAction
+ *
+ * A contagem de dias da jornada começa no PRIMEIRO envio do formulário.
+ * Reenviar NÃO reseta a contagem — apenas reenvia o mesmo link.
+ * Reset só é possível via ferramenta admin "Controle de Dias".
+ */
 async function cmdEnviarFormulario(params, tenantId, userId) {
   console.log('[INFO][Jarvis:EnviarFormulario]', { tenantId, userId, params });
 
   const nome = (params?.nome || '').trim();
   if (!nome) return { summary: 'Informe o nome do cliente para quem deseja enviar o formulário.', data: null };
 
-  // Bloqueia "enviar para todos"
   if (/\btodos\b|\btodas\b|\bgeral\b/i.test(nome)) {
     return {
       summary: 'Por segurança, não é permitido enviar o formulário para todos os clientes de uma vez. Informe o nome de um cliente específico.',
@@ -775,17 +787,9 @@ async function cmdEnviarFormulario(params, tenantId, userId) {
   const client = await findClientByName(tenantId, nome);
   if (!client) return { summary: `Não encontrei nenhum cliente com o nome "${nome}". Verifique o nome e tente novamente.`, data: null };
 
-  // Verifica se já preencheu
-  if (client.form_done) {
-    return {
-      summary: `${client.company_name} já preencheu o formulário de briefing. Não é necessário enviar novamente.`,
-      data: null,
-    };
-  }
-
-  // Verifica se tem telefone cadastrado
   const fullClient = await queryOne(
-    `SELECT id, company_name, phone, email FROM marketing_clients WHERE id = $1`,
+    `SELECT id, company_name, phone, email, responsible_name, onboarding_greeting_with
+       FROM marketing_clients WHERE id = $1`,
     [client.id]
   );
 
@@ -796,17 +800,66 @@ async function cmdEnviarFormulario(params, tenantId, userId) {
     };
   }
 
+  // Busca progresso atual do onboarding
+  const progress = await queryOne(
+    `SELECT status, started_at, current_day, current_stage
+       FROM onboarding_progress WHERE client_id = $1`,
+    [client.id]
+  );
+
+  // Conta etapas já respondidas
+  const submitted = await queryOne(
+    `SELECT COUNT(*)::int AS n
+       FROM onboarding_stage_responses
+      WHERE client_id = $1 AND submitted = true`,
+    [client.id]
+  );
+  const submittedCount = submitted?.n || 0;
+
   const preview = {
     client_id: client.id,
     client_name: client.company_name,
     phone: fullClient.phone,
   };
 
+  // (a) Primeiro envio — sem progress ou not_started
+  if (!progress || progress.status === 'not_started') {
+    return {
+      summary: `O formulário será enviado pela primeira vez para ${client.company_name} (${fullClient.phone}). A contagem de 15 dias começa nesse momento. Confirme para enviar.`,
+      data: preview,
+      requiresConfirmation: true,
+      confirmAction: 'send_onboarding',
+    };
+  }
+
+  // (c) Concluído
+  if (progress.status === 'completed') {
+    const completedAt = progress.started_at
+      ? new Date(progress.started_at).toLocaleDateString('pt-BR')
+      : '?';
+    return {
+      summary: `✅ O formulário do ${client.company_name} já foi 100% concluído (iniciado em ${completedAt}). Não faz sentido reenviar.`,
+      data: null,
+    };
+  }
+
+  // (b) Já enviado (active/paused) — pede confirmação explícita pra reenvio
+  const startedLabel = progress.started_at
+    ? new Date(progress.started_at).toLocaleDateString('pt-BR')
+    : '?';
   return {
-    summary: `Formulário de briefing será enviado via WhatsApp para ${client.company_name} (${fullClient.phone}). Confirme para enviar.`,
-    data: preview,
+    summary:
+      `⚠️ O formulário de ${client.company_name} já foi enviado em ${startedLabel}. ` +
+      `Ele está no dia ${progress.current_day || '?'} da jornada, com ${submittedCount} etapa(s) respondida(s). ` +
+      `Deseja REENVIAR o link mesmo assim? A contagem de dias NÃO será resetada.`,
+    data: {
+      ...preview,
+      started_at: progress.started_at,
+      current_day: progress.current_day,
+      submitted_count: submittedCount,
+    },
     requiresConfirmation: true,
-    confirmAction: 'send_form',
+    confirmAction: 'resend_onboarding',
   };
 }
 

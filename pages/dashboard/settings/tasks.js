@@ -805,18 +805,23 @@ export default function SettingsTasksPage() {
                     </div>
                   </div>
 
-                  {/* Mensagem de tasks atrasadas */}
+                  {/* Mensagem da tarde — sprint Tasks v2 (mai/2026)
+                      O cron tasks-overdue parou de enviar WhatsApp; o
+                      segundo lembrete do dia agora é o tasks-afternoon (16h),
+                      que reaproveita o template `message_overdue` por baixo.
+                      Mantemos a chave do banco igual pra evitar migração de
+                      coluna; visualmente expomos como "Mensagem da tarde". */}
                   <div className={styles.botSection}>
                     <div className={styles.botSectionLabel}>
                       <span className={styles.botSectionLabelDot} />
-                      Mensagem de tarefas atrasadas
+                      Mensagem da tarde
                     </div>
                     <div className={styles.messageBox}>
                       <textarea
                         className={styles.messageTextarea}
                         value={cfg.message_overdue || ''}
                         onChange={(e) => updateBotField(cfg.user_id, 'message_overdue', e.target.value)}
-                        placeholder="Mensagem para tarefas vencidas..."
+                        placeholder="Mensagem enviada todas as tardes às 16h..."
                       />
                       <div className={styles.messageTagsRow}>
                         {['{nome}', '{tarefas}', '{count}'].map((tag) => (
@@ -830,6 +835,9 @@ export default function SettingsTasksPage() {
                           </button>
                         ))}
                       </div>
+                    </div>
+                    <div className={styles.messageHint}>
+                      Lembrete vespertino — listagem das tarefas ainda pendentes do dia.
                     </div>
                   </div>
 
@@ -952,11 +960,14 @@ export default function SettingsTasksPage() {
               </div>
             </div>
 
-            {/* Template tarefas atrasadas */}
+            {/* Template global "Mensagem da tarde" — mapeado para
+                templates.overdue por baixo (mesmo motivo descrito na seção
+                por usuário). Usado como ponto de partida ao adicionar um
+                novo usuário ao bot. */}
             <div className={styles.botSection}>
               <div className={styles.botSectionLabel}>
                 <span className={styles.botSectionLabelDot} />
-                Template — tarefas atrasadas
+                Template — mensagem da tarde
                 <button
                   type="button"
                   onClick={() => restoreDefault('overdue')}
@@ -973,10 +984,7 @@ export default function SettingsTasksPage() {
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em',
                     cursor: 'pointer',
-                    transition: 'all 0.15s',
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,0,51,0.4)'; e.currentTarget.style.color = 'var(--brand-500)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                 >
                   Restaurar padrão
                 </button>
@@ -986,7 +994,7 @@ export default function SettingsTasksPage() {
                   className={styles.messageTextarea}
                   value={templates.overdue}
                   onChange={(e) => setTemplates((p) => ({ ...p, overdue: e.target.value }))}
-                  placeholder="Mensagem padrão para tarefas atrasadas..."
+                  placeholder="Mensagem padrão da tarde..."
                 />
                 <div className={styles.messageTagsRow}>
                   {['{nome}', '{tarefas}', '{count}'].map((tag) => (
@@ -1002,7 +1010,7 @@ export default function SettingsTasksPage() {
                 </div>
               </div>
               <div className={styles.messageHint}>
-                Estes templates serão usados como ponto de partida ao adicionar um novo usuário ao bot. Cada usuário ainda pode personalizar individualmente.
+                Estes templates são o ponto de partida ao adicionar um novo usuário ao bot. Cada usuário ainda pode personalizar individualmente.
               </div>
             </div>
           </div>

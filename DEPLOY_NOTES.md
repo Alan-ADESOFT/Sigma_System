@@ -31,7 +31,8 @@ Configurar via cron-job.org, GitHub Actions, ou qualquer serviço de cron extern
 | `/api/cron/task-recurrences` | POST | `0 10 * * *` (7h BRT) | Cria tasks recorrentes do dia |
 | `/api/cron/tasks-morning` | POST | `0 11 * * *` (8h BRT) | Resumo matinal de tarefas via WhatsApp |
 | `/api/cron/tasks-afternoon` | POST | `0 19 * * *` (16h BRT) | Lembrete vespertino de tarefas pendentes |
-| `/api/cron/tasks-overdue` | POST | `0 11 * * *` (8h BRT) | Marca tarefas atrasadas + notificação |
+| `/api/cron/tasks-overdue` | POST | `0 11 * * *` (8h BRT) | Marca tarefas atrasadas + notificação sininho (não envia WhatsApp — sprint Tasks v2) |
+| `/api/cron/onboarding-incentive` | POST | `0 13 * * *` (10h BRT) | Cutuca clientes que ainda não responderam a etapa do dia (sprint Forms v2) |
 | `/api/cron/finance-charges` | POST | `0 11 * * *` (8h BRT) | Cobranças de parcelas via WhatsApp |
 
 Header obrigatório em todas: `x-internal-token: {valor de INTERNAL_API_TOKEN}`
@@ -39,6 +40,39 @@ Header obrigatório em todas: `x-internal-token: {valor de INTERNAL_API_TOKEN}`
 ## Schema do banco
 Rodar `infra/schema.sql` contra o banco para garantir que todas as tabelas e colunas existem.
 O arquivo é idempotente (IF NOT EXISTS + ADD COLUMN IF NOT EXISTS).
+
+## Central de Suporte — sprint 20260520
+
+**Migration:** `infra/migrations/005_support_center_20260520.sql` cria 3 tabelas:
+- `support_modules` — agrupador (título, descrição, ícone, sort_order).
+- `support_lessons` — aulas dentro de cada módulo.
+- `support_media` — vídeos e anexos (CHECK kind IN ('video','attachment')).
+
+CASCADE em tudo: apagar módulo apaga aulas e mídias do banco. **Arquivos físicos
+em `public/uploads/` permanecem órfãos** — dívida técnica registrada no README
+(sprint futuro de garbage collection).
+
+**`/api/upload` ampliado:** agora aceita também:
+- `application/pdf`
+- `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (DOCX)
+- `application/msword` (DOC legado)
+
+Limites por categoria: vídeo 100MB · documento 25MB · imagem 10MB.
+
+**Nova pasta:** `public/uploads/documents/` (criada on-demand pelo handler).
+Garantir permissões de escrita no deploy (Railway já garante).
+
+## Settings (key/value) — sprint Forms v2
+
+As 4 chaves abaixo são usadas pelo módulo de onboarding e podem ser configuradas
+em `pages/dashboard/onboarding-config.js` (tab "Mensagens"):
+
+- `onboarding_welcome_video_url` — URL pública do vídeo de boas-vindas (MP4).
+- `onboarding_welcome_video_filename` — nome do arquivo (UI mostra ao admin).
+- `onboarding_welcome_video_description` — caption do vídeo no WhatsApp.
+  Aceita placeholder `{NOME}` (substituído por `getClientGreetingName`).
+- `onboarding_msg_incentive` — template do cron de incentivo (10h BRT).
+  Placeholders: `{NOME}`, `{ETAPA}`, `{LINK}`.
 
 ## O que está oculto (TEMPORÁRIO)
 Estes itens estão ocultos na sidebar mas os arquivos continuam no projeto:

@@ -679,6 +679,8 @@ export default function JarvisOrb({ userName }) {
       : action === 'save_expense'     ? 'Nova Despesa'
       : action === 'generate_summary' ? 'Rodar Pipeline'
       : action === 'send_form'        ? 'Enviar Formulário'
+      : action === 'send_onboarding'  ? 'Iniciar Onboarding (Dia 1)'
+      : action === 'resend_onboarding'? 'Reenviar Link (sem resetar)'
       : 'Confirmar Ação';
     const rows = [];
     if (action === 'create_task') {
@@ -718,6 +720,16 @@ export default function JarvisOrb({ userName }) {
     } else if (action === 'send_form') {
       rows.push(['Cliente', data?.client_name]);
       rows.push(['WhatsApp', data?.phone]);
+    } else if (action === 'send_onboarding') {
+      rows.push(['Cliente', data?.client_name]);
+      rows.push(['WhatsApp', data?.phone]);
+      rows.push(['Tipo', 'Primeiro envio — inicia contagem de 15 dias']);
+    } else if (action === 'resend_onboarding') {
+      rows.push(['Cliente', data?.client_name]);
+      rows.push(['WhatsApp', data?.phone]);
+      if (data?.current_day) rows.push(['Dia atual', String(data.current_day)]);
+      if (data?.submitted_count != null) rows.push(['Respondidas', `${data.submitted_count} etapa(s)`]);
+      rows.push(['Importante', 'Contagem NÃO será resetada']);
     }
     const isProcessing = confirming || state === 'processing';
     return (

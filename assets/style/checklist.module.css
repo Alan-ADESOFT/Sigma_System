@@ -1,0 +1,408 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   checklist.module.css
+   View Checklist (doc-style) do módulo Tasks.
+
+   Filosofia: grade vertical leve, sem cards. O destaque vem da tipografia
+   monoespaçada e do contraste do checkbox. Linhas riscadas quando concluídas.
+   ───────────────────────────────────────────────────────────────────────── */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ── Tabs de dia ───────────────────────────────────────────────────────── */
+.dayTabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  background: rgba(10, 10, 10, 0.5);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+}
+
+.dayTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.dayTab:hover {
+  color: var(--text-secondary);
+  border-color: var(--border-subtle);
+}
+
+.dayTabActive {
+  background: rgba(255, 0, 51, 0.10);
+  color: #ff6680;
+  border-color: rgba(255, 0, 51, 0.25);
+}
+
+.dayTabToday {
+  font-weight: 700;
+}
+
+.dayTabNumber {
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: inherit;
+}
+
+.dayTabCount {
+  margin-left: 4px;
+  min-width: 18px;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 9px;
+  font-size: 0.58rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.dayTabCountActive {
+  background: rgba(255, 0, 51, 0.18);
+  color: var(--brand-300);
+}
+
+/* ── Barra de filtros ──────────────────────────────────────────────────── */
+.filterBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filterPill {
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: 18px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.filterPill:hover {
+  border-color: var(--border-hover);
+  color: var(--text-secondary);
+}
+
+.filterPillActive {
+  background: rgba(255, 0, 51, 0.10);
+  border-color: rgba(255, 0, 51, 0.30);
+  color: #ff6680;
+}
+
+/* ── Seções (Recorrentes / Não-recorrentes / Atrasadas / Cliente) ──────── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 4px 8px 4px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.sectionLabel {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.sectionLabelOverdue {
+  color: var(--brand-300);
+}
+
+.sectionLabelClient {
+  color: var(--text-primary);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.sectionCount {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── Linha da checklist (ChecklistRow) ─────────────────────────────────── */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.025);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.row:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.checkbox {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--border-subtle);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.checkbox:hover {
+  border-color: var(--brand-300);
+}
+
+.checkboxDone {
+  background: var(--brand-500);
+  border-color: var(--brand-500);
+  color: #fff;
+}
+
+.checkboxBlocked {
+  cursor: not-allowed;
+  opacity: 0.4;
+  border-color: var(--border-default);
+}
+
+.checkboxBlocked:hover {
+  border-color: var(--border-default);
+}
+
+.rowTime {
+  flex: 0 0 56px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.rowTimeEmpty {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.rowText {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: 0.86rem;
+  color: var(--text-primary);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowTitleDone {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.rowMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.rowMetaClient {
+  color: var(--text-secondary);
+}
+
+.rowBadges {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.badge {
+  font-family: var(--font-mono);
+  font-size: 0.54rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+
+.badgeRecurring {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  border-color: var(--border-subtle);
+}
+
+.badgeUrgente {
+  background: rgba(255, 0, 51, 0.15);
+  color: var(--brand-300);
+  border-color: rgba(255, 0, 51, 0.30);
+}
+
+.badgeAlta {
+  background: rgba(255, 165, 0, 0.10);
+  color: #ffaa55;
+  border-color: rgba(255, 165, 0, 0.25);
+}
+
+.badgeNormal {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  border-color: var(--border-subtle);
+}
+
+.badgeBaixa {
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-muted);
+  border-color: var(--border-default);
+}
+
+.badgeLocked {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+}
+
+.avatar {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0;
+}
+
+/* ── Botão + Nova tarefa por seção ─────────────────────────────────────── */
+.addBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  align-self: flex-start;
+}
+
+.addBtn:hover {
+  border-color: var(--brand-300);
+  color: var(--brand-300);
+}
+
+/* ── Estados (loading, vazio) ──────────────────────────────────────────── */
+.sectionEmpty {
+  padding: 12px 4px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  font-style: italic;
+}
+
+.dayEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 20px;
+  text-align: center;
+}
+
+.dayEmptyIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.dayEmptyText {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.skeleton {
+  height: 36px;
+  border-radius: 6px;
+  background: linear-gradient(90deg,
+    rgba(255, 255, 255, 0.02),
+    rgba(255, 255, 255, 0.05),
+    rgba(255, 255, 255, 0.02));
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  margin-bottom: 6px;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

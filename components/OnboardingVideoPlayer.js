@@ -79,6 +79,39 @@ export default function OnboardingVideoPlayer({ videoUrl, videoDuration, already
   const videoRef = useRef(null);
   const provider = detectProvider(videoUrl);
 
+  /* ─── Lazy-load via IntersectionObserver (sprint Forms v2) ───
+   * Por que: o vídeo é o asset mais pesado da página (~2-10MB ou iframe que
+   * dispara requests externos). Antes ele baixava no mount. Agora só
+   * renderizamos o <video>/<iframe> quando a section entra no viewport (ou
+   * 200px antes). Preserva o `alreadyWatched` (se já assistiu, não precisa
+   * lazy — libera direto pro fluxo continuar). */
+  const containerRef = useRef(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    if (alreadyWatched) {
+      setInView(true);
+      return;
+    }
+    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
+      setInView(true); // fallback ambientes sem IntersectionObserver
+      return;
+    }
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          setInView(true);
+          observer.disconnect(); // 1x apenas
+          break;
+        }
+      }
+    }, { rootMargin: '200px' });
+    observer.observe(el);
+    return () => observer.disconnect(); // cleanup contra memory leak
+  }, [alreadyWatched]);
+
   /* Marca como assistido — chama o callback uma única vez */
   function markAsWatched() {
     if (watched) return;
@@ -151,12 +184,32 @@ export default function OnboardingVideoPlayer({ videoUrl, videoDuration, already
 
   return (
     <>
-      <div className={styles.videoFrame}>
-        {provider === 'mp4' && (
+      <div className={styles.videoFrame} ref={containerRef}>
+        {/* Lazy: enquanto não entrou no viewport, mostra placeholder leve.
+            Quando entra, monta o player real. */}
+        {!inView && (
+          <div
+            className={styles.videoPlaceholder}
+            style={{
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+            }}
+            onClick={() => setInView(true)}
+          >
+            <PlayIcon />
+            <div>// Carregar vídeo</div>
+          </div>
+        )}
+
+        {inView && provider === 'mp4' && (
           <video ref={videoRef} src={videoUrl} controls playsInline preload="metadata" />
         )}
 
-        {provider === 'youtube' && (
+        {inView && provider === 'youtube' && (
           <iframe
             src={youtubeEmbed(videoUrl)}
             title="Vídeo da etapa"
@@ -165,11 +218,11 @@ export default function OnboardingVideoPlayer({ videoUrl, videoDuration, already
           />
         )}
 
-        {provider === 'vimeo' && (
+        {inView && provider === 'vimeo' && (
           <iframe src={videoUrl} title="Vídeo da etapa" allow="autoplay; fullscreen" allowFullScreen />
         )}
 
-        {(provider === 'panda' || provider === 'bunny') && (
+        {inView && (provider === 'panda' || provider === 'bunny') && (
           <iframe src={videoUrl} title="Vídeo da etapa" allow="autoplay; fullscreen" allowFullScreen />
         )}
       </div>

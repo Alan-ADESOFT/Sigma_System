@@ -19,14 +19,45 @@ import { useState, useRef } from 'react';
 import { useNotification } from '../context/NotificationContext';
 import styles from '../assets/style/mediaUploader.module.css';
 
+// Presets nomeados. `accept` aceita também uma string CSV livre de MIMEs
+// (ex: "application/pdf,image/png") — sprint Central de Suporte ampliou o
+// componente sem quebrar quem usa os presets antigos.
 const ACCEPT_MAP = {
-  image: 'image/jpeg,image/png,image/webp,image/gif',
-  video: 'video/mp4,video/quicktime,video/webm',
-  both:  'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm',
+  image:    'image/jpeg,image/png,image/webp,image/gif',
+  video:    'video/mp4,video/quicktime,video/webm',
+  both:     'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm',
+  document: 'application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword',
 };
 
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+const MAX_IMAGE_BYTES    = 10 * 1024 * 1024;
+const MAX_VIDEO_BYTES    = 100 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
+
+/** Resolve o `accept` da prop: preset nomeado OU string CSV livre. */
+function resolveAccept(accept) {
+  if (typeof accept !== 'string') return ACCEPT_MAP.both;
+  if (ACCEPT_MAP[accept]) return ACCEPT_MAP[accept];
+  // Considera CSV livre se contém '/' (sniff básico de MIME) ou vírgula
+  if (accept.includes('/') || accept.includes(',')) return accept;
+  return ACCEPT_MAP.both;
+}
+
+/** Classifica o MIME pra escolher o limite de tamanho certo. */
+function maxBytesFor(mime) {
+  if (mime?.startsWith('video/')) return MAX_VIDEO_BYTES;
+  if (mime === 'application/pdf'
+      || mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      || mime === 'application/msword') return MAX_DOCUMENT_BYTES;
+  return MAX_IMAGE_BYTES;
+}
+
+function limitLabelFor(mime) {
+  if (mime?.startsWith('video/')) return '100MB';
+  if (mime === 'application/pdf'
+      || mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      || mime === 'application/msword') return '25MB';
+  return '10MB';
+}
 
 function fmtSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -52,7 +83,7 @@ export default function MediaUploader({
     const list = Array.from(files);
 
     // Filtra por tipo aceito (validação CLIENT-side, complemento ao backend)
-    const acceptedTypes = ACCEPT_MAP[accept].split(',');
+    const acceptedTypes = resolveAccept(accept).split(',').map((s) => s.trim()).filter(Boolean);
     const filtered = list.filter((f) => acceptedTypes.includes(f.type));
     if (filtered.length < list.length) {
       notify('Alguns arquivos foram ignorados (tipo não aceito)', 'info');
@@ -62,12 +93,11 @@ export default function MediaUploader({
       return;
     }
 
-    // Valida tamanho
+    // Valida tamanho — limite varia por tipo (vídeo 100MB, doc 25MB, imagem 10MB)
     for (const f of filtered) {
-      const max = f.type.startsWith('video/') ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+      const max = maxBytesFor(f.type);
       if (f.size > max) {
-        const limit = f.type.startsWith('video/') ? '100MB' : '10MB';
-        notify(`${f.name}: excede ${limit}`, 'error');
+        notify(`${f.name}: excede ${limitLabelFor(f.type)}`, 'error');
         return;
       }
     }
@@ -142,12 +172,18 @@ export default function MediaUploader({
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
             <div className={styles.dropText}>
-              Arraste {accept === 'video' ? 'um vídeo' : accept === 'image' ? 'uma imagem' : 'uma mídia'} ou clique para selecionar
+              Arraste {accept === 'video' ? 'um vídeo'
+                : accept === 'image' ? 'uma imagem'
+                : accept === 'document' ? 'um documento'
+                : 'um arquivo'} ou clique para selecionar
             </div>
             <div className={styles.dropHint}>
               {accept === 'video' && 'MP4, MOV, WebM · até 100MB'}
               {accept === 'image' && 'JPG, PNG, WebP, GIF · até 10MB'}
+              {accept === 'document' && 'PDF, DOCX · até 25MB'}
               {accept === 'both' && 'JPG/PNG/WebP/GIF (10MB) · MP4/MOV/WebM (100MB)'}
+              {accept !== 'video' && accept !== 'image' && accept !== 'document' && accept !== 'both'
+                && 'Tipos aceitos: ver o seu acesso · vídeo 100MB · documento 25MB · imagem 10MB'}
             </div>
           </>
         )}
@@ -155,7 +191,7 @@ export default function MediaUploader({
         <input
           ref={inputRef}
           type="file"
-          accept={ACCEPT_MAP[accept]}
+          accept={resolveAccept(accept)}
           multiple={multiple}
           onChange={(e) => handleFiles(e.target.files)}
           style={{ display: 'none' }}

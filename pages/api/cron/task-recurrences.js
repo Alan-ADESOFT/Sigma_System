@@ -64,6 +64,9 @@ export default async function handler(req, res) {
             created_by: rec.created_by || null,
             subtasks: freshSubs,
             subtasks_required: Boolean(rec.subtasks_required),
+            // Marca a task como nascida desta recorrência — o Checklist usa esse
+            // campo pra separar a seção "Recorrentes" das tasks avulsas.
+            recurrence_id: rec.id,
           }, tenant.id);
 
           await recurrenceModel.markRunToday(rec.id, tenant.id);

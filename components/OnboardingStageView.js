@@ -78,14 +78,128 @@ function MicIcon() {
 }
 
 // Tempo mínimo (em segundos) que o cliente vê a página antes do botão
-// liberar. Conta DESDE O MOUNT, não desde o fim do vídeo. Mantém uma
-// barreira temporal pequena pra evitar tap-and-skip e dar respiro visual.
-const COUNTDOWN_SECONDS = 10;
+// liberar. Sprint Forms v2: 10s → 3s. Continua zero quando o vídeo já foi
+// assistido. Conta DESDE O MOUNT, em paralelo ao vídeo.
+const COUNTDOWN_SECONDS = 3;
+
+/* ═══════════════════════════════════════════════════════════
+   ReadOnlyStageView (sprint Forms v2)
+   ──────────────────────────────────────────────────────────
+   Renderizado pela página /onboarding/[token] quando o cliente clica em um
+   dia passado JÁ respondido. Mostra somente Q→A das respostas salvas — sem
+   inputs, sem countdown, sem botão de envio, sem áudio IA. Componente
+   separado pro hooks order ficar limpo (não compartilhar effects com a
+   versão editável).
+═══════════════════════════════════════════════════════════ */
+export function ReadOnlyStageView({ day, stage, response }) {
+  if (!stage) return null;
+  const responses = response?.responses || {};
+  const questions = stage.questions || [];
+
+  function renderAnswer(q) {
+    const v = responses[q.id];
+    if (v === undefined || v === null || v === '') {
+      return <em style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>— (sem resposta)</em>;
+    }
+    if (Array.isArray(v)) {
+      return v.join(', ');
+    }
+    if (typeof v === 'object') {
+      return Object.entries(v)
+        .map(([k, val]) => `${k}: ${val}`)
+        .join(' · ');
+    }
+    return String(v);
+  }
+
+  return (
+    <div style={{ animation: 'fadeInUp 0.5s ease-out both' }}>
+      <div className={styles.stageHeader}>
+        <div className={styles.stageDayTag}>
+          <span className={styles.stageDayDot} />
+          DIA {day} · ETAPA {stage.number} — MODO LEITURA
+        </div>
+        <h1 className={styles.stageTitleBig}>{stage.title}</h1>
+        {stage.description && <p className={styles.stageDescription}>{stage.description}</p>}
+      </div>
+
+      <div className={styles.formCard}>
+        <div className={styles.formHeader}>
+          <span className={styles.formHeaderTitle}>// SUAS RESPOSTAS DA ETAPA {stage.number}</span>
+        </div>
+        <div style={{
+          padding: '10px 12px',
+          background: 'rgba(59, 130, 246, 0.05)',
+          border: '1px solid rgba(59, 130, 246, 0.18)',
+          borderRadius: 8,
+          marginBottom: 14,
+          fontFamily: 'var(--font-mono)',
+          fontSize: '0.66rem',
+          color: 'var(--text-secondary)',
+          letterSpacing: '0.02em',
+        }}>
+          Esta etapa já foi respondida. As respostas abaixo são apenas para consulta.
+        </div>
+
+        {questions.map((q) => {
+          if (q.id?.startsWith?.('_extra_')) return null;
+          return (
+            <div key={q.id} style={{ padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+              <div style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.6rem',
+                color: 'var(--text-muted)',
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                marginBottom: 4,
+              }}>
+                {q.label || q.id}
+              </div>
+              <div style={{
+                fontSize: '0.82rem',
+                color: 'var(--text-primary)',
+                lineHeight: 1.45,
+                whiteSpace: 'pre-wrap',
+              }}>
+                {renderAnswer(q)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default function OnboardingStageView({
   token, day, stage, response, nextStage, onSubmitted,
+  preloadDay = null, // sprint v2: dia a pré-carregar em background (currentDay + 1)
 }) {
   const { notify } = useNotification();
+
+  /* ─── Pré-carrega o próximo dia no idle do navegador ───
+   * Por que: o gargalo percebido pelo cliente é o tempo entre submeter uma
+   * etapa e a próxima aparecer. Disparar fetch silencioso pro próximo dia
+   * deixa a navegação instantânea (cache HTTP do dia-snapshot é 60s). */
+  useEffect(() => {
+    if (!token || !preloadDay) return;
+    const fire = () => {
+      fetch(`/api/onboarding/day-snapshot?token=${encodeURIComponent(token)}&day=${preloadDay}`)
+        .catch(() => {});
+    };
+    let idle, fallback;
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idle = window.requestIdleCallback(fire, { timeout: 3000 });
+    } else {
+      fallback = setTimeout(fire, 1500);
+    }
+    return () => {
+      if (idle && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(idle);
+      }
+      if (fallback) clearTimeout(fallback);
+    };
+  }, [token, preloadDay]);
 
   /* ─── Estado do fluxo (countdown → form → submit → celebração) ───
    * O vídeo continua sendo exibido, mas não é mais barreira — só registramos

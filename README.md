@@ -386,3 +386,313 @@ node scripts/test-brandbook-injection.js <clientId>
 Falha exit 1 com diagnostico (cache divergente, brandbook nao carregado,
 worker nao processando, etc).
 
+
+## Central de Suporte (Tutoriais Internos)
+
+Base de conhecimento interna do time, acessível por todos os usuários
+autenticados via sidebar (categoria **SUPORTE**, antes da categoria SISTEMA).
+
+**Hierarquia:** Módulos → Aulas → Mídias (vídeos e anexos).
+
+- **Módulos** agrupam temas (ex: "Como usar o módulo de Tasks").
+- **Aulas** são unidades dentro do módulo — cada uma tem título, descrição em
+  texto livre (whiteSpace pre-wrap) e zero-ou-mais vídeos + anexos.
+- **Mídias** podem ser vídeos (MP4/MOV/WebM, até 100MB) ou anexos
+  (PDF/DOCX/imagens, até 25MB para docs / 10MB para imagens).
+
+**Permissões:**
+- Leitura: qualquer usuário autenticado.
+- Criar/editar/excluir: apenas `admin` ou `god` (checagem server-side via
+  `isAdmin` em `lib/api-auth.js`).
+
+**Rotas:**
+- `/dashboard/suporte` — grid de módulos.
+- `/dashboard/suporte/[moduleId]` — módulo com aulas em acordeão (1 aberta
+  por vez), player de vídeo principal, lista de vídeos extras, descrição da
+  aula e materiais auxiliares com botão de download. Imagens abrem em lightbox.
+
+**Endpoints:**
+- `GET/POST /api/support/modules`
+- `GET/PUT/DELETE /api/support/modules/[id]` (GET retorna estrutura aninhada
+  com aulas + vídeos/anexos)
+- `POST /api/support/lessons` · `PUT/DELETE /api/support/lessons/[id]`
+- `POST /api/support/media`   · `PUT/DELETE /api/support/media/[id]`
+
+**Upload:** `pages/api/upload.js` foi ampliado nessa sprint pra aceitar PDF e
+DOCX além de imagens/vídeos. Os arquivos ficam em `public/uploads/{videos,
+images, documents}/`.
+
+**Dívida técnica conhecida:** quando um módulo, aula ou mídia é apagado, o
+banco apaga os registros em cascata, mas os arquivos físicos em
+`public/uploads/` **permanecem órfãos**. Um sprint futuro deve implementar
+garbage collection (cron que varre os arquivos sem referência no banco).
+
+## Histórico de alterações
+
+### 2026-05-20 — Central de Suporte — Tutoriais internos (módulos > aulas > mídias)
+
+**Schema (`infra/migrations/005_support_center_20260520.sql`):**
+- `support_modules`, `support_lessons`, `support_media` — CASCADE total entre níveis.
+- `support_media.kind` com CHECK em `('video', 'attachment')`.
+- Triggers de `updated_at` nos 2 primeiros; índices em `(tenant_id, sort_order)`, `(module_id, sort_order)`, `(lesson_id, sort_order)` e `(lesson_id, kind)`.
+- Espelhado em `infra/schema.sql`.
+
+**Backend:**
+- `models/support.model.js` — CRUD completo + `getModuleFull` aninhado em 2 queries (módulo+aulas e mídias filtradas por `ANY($1::text[])`), sem N+1. Ownership validators (`isModuleOfTenant`, `isLessonOfTenant`).
+- 6 endpoints REST em `pages/api/support/` (modules, lessons, media). Multi-tenant via `resolveTenantId`. Mutations bloqueadas por `isAdmin(user)` server-side — front esconde botões, backend rejeita 403.
+- `pages/api/upload.js` — whitelist ampliada pra `application/pdf`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `application/msword`. Sniff de magic bytes pra PDF (`%PDF`), DOCX (PK zip header) e DOC legado (CFB header). Nova subpasta `documents/`, limite 25MB. Retorno ganhou `kind: 'document'`.
+
+**Frontend:**
+- `pages/dashboard/suporte/index.js` — grid responsivo 3/2/1 colunas com cards `glass-card`. Estado vazio com CTA pra admin. Botões edit/delete em hover (admin-only).
+- `pages/dashboard/suporte/[moduleId].js` — breadcrumb + header do módulo + acordeão de aulas (uma aberta por vez). Aula expandida mostra player principal (`preload="metadata"`), lista vertical de vídeos extras, descrição (`whiteSpace: pre-wrap`), grid de anexos. Imagens abrem lightbox simples (modal full-screen, ESC fecha).
+- `components/SupportModuleModal.jsx` — criar/editar módulo com seletor visual de ícone (lista alinhada ao `ICONS` exportado pelo `DashboardLayout`).
+- `components/SupportLessonModal.jsx` — criar/editar aula (título + descrição multi-linha + sort_order).
+- `components/SupportMediaModal.jsx` — tabs Vídeo/Anexo. Reusa `MediaUploader` (que agora aceita preset `'document'` + qualquer CSV de MIMEs arbitrário).
+- `components/SupportMediaCard.jsx` — card visual por tipo: PDF (vermelho), DOC (azul), imagem (verde com miniatura clicável), genérico. Botão "Baixar" via `<a download>`.
+- `assets/style/support.module.css` — único CSS module com todos os estilos (cards, acordeão, mídia, lightbox, modais, skeletons). Zero hex hardcoded — só CSS variables.
+
+**Componentes ampliados:**
+- `components/MediaUploader.js` — `accept` agora aceita também strings CSV livres (ex: `"application/pdf,image/png"`), além dos presets `image|video|both|document`. Limite dinâmico por tipo (`maxBytesFor` / `limitLabelFor`).
+- `components/DashboardLayout.js` — `ICONS` virou export nomeado (`export const ICONS`) pra ser reutilizado nas páginas de suporte. Categoria SUPORTE adicionada antes da SISTEMA (tag `21c`, `minRole: 'user'`, ícone `book` que já existia).
+
+**Privacidade:** `WHERE tenant_id = $X` em **todas** as queries do model. Endpoints checam ownership via `isModuleOfTenant`/`isLessonOfTenant` antes de inserir/atualizar. Mutations sempre por `isAdmin(user)` server-side.
+
+**Dívida técnica:** ao apagar módulo/aula/mídia, o banco apaga em cascata mas os arquivos físicos em `public/uploads/` ficam órfãos. Garbage collection fica pra sprint futuro.
+
+### 2026-05-20 — Forms v2 — Navegação por dias, vídeo de boas-vindas, incentivo diário, anti-duplicação no Jarvis
+
+**Schema (`infra/migrations/004_forms_v2_welcome_video_20260520.sql`):**
+- `marketing_clients.responsible_name TEXT` — nome do contato responsável (opcional).
+- `marketing_clients.onboarding_greeting_with TEXT NOT NULL DEFAULT 'company'` — toggle de saudação. CHECK em `('company','responsible')`.
+- Espelhado em `infra/schema.sql`.
+- 4 novas chaves em `settings` (não exigem DDL — key/value): `onboarding_welcome_video_url`, `onboarding_welcome_video_filename`, `onboarding_welcome_video_description`, `onboarding_msg_incentive`. Documentadas em `DEPLOY_NOTES.md`.
+
+**Página do cliente — seletor de dias (`/onboarding/[token]`):**
+- `components/OnboardingDayNavigator.jsx` + `assets/style/dayNavigator.module.css`. Grid 5×3 desktop, carrossel horizontal mobile (`< 720px`, `scroll-snap`).
+- `<DayCapsule />` único renderer (regra de componentização). Status por cor: verde (respondida), azul (hoje), amarelo (catch-up), 🔒 (futuro), 💤 (descanso).
+- Dia clicado: passado respondido → `<ReadOnlyStageView />` (novo export do `OnboardingStageView.js`); futuro → `<LockedDayView />` com data de liberação; descanso → mensagem; today/catch-up → fluxo normal editável.
+- Cache de 60s no GET sem `day`. Pós-submit, o front força `cache: 'no-store'` pra invalidar.
+
+**Endpoint novo (`pages/api/onboarding/day-snapshot.js`):**
+- Sem auth — token controla acesso (igual `current-stage`).
+- `GET ?token=` → lista os 15 dias em UMA query consolidada (LEFT JOIN config × responses) — sem N+1.
+- `GET ?token=&day=N` → detalhe do dia (com flag `readOnly` derivada de `submitted`).
+
+**Aceleração do formulário:**
+- `COUNTDOWN_SECONDS: 10 → 3` em `OnboardingStageView` (zero se vídeo já assistido).
+- `OnboardingVideoPlayer` agora é lazy: `IntersectionObserver` (rootMargin 200px) — só monta o `<video>`/`<iframe>` quando entra no viewport. Cleanup no unmount.
+- Preload da próxima etapa via `requestIdleCallback` (fallback `setTimeout(1500)`) dentro do `OnboardingStageView` — aquece o cache HTTP do `/day-snapshot?day=currentDay+1`.
+- `pages/api/onboarding/current-stage.js` reduziu queries de ~5 → 3: query consolidada `stages_config LEFT JOIN responses`. `console.time('[PERF][current-stage]')` pra medir em produção.
+
+**Vídeo de boas-vindas global (admin):**
+- Nova section "VÍDEO DE BOAS-VINDAS GLOBAL" na tab Mensagens de `pages/dashboard/onboarding-config.js`. Reusa `<MediaUploader accept="video" multiple={false} />` (sem duplicar component).
+- Upload via `/api/upload` (até 100MB, salva em `public/uploads/videos/`).
+- Preview com `<video controls>`. Botões "Substituir" e "Remover". Caption editável com placeholder `{NOME}`.
+- Novo template `onboarding_msg_incentive` no array `MSG_TEMPLATES` (incentivo diário às 10h).
+
+**Ficha do cliente — saudação personalizada:**
+- Campo `responsible_name` + toggle `onboarding_greeting_with` em `TabInfo` de `pages/dashboard/clients/[id].js`. Aviso amarelo quando toggle = "responsável" mas o campo está vazio.
+- `models/client.model.js.updateClient` aceita os 2 campos novos.
+- Helper centralizado `getClientGreetingName(client)` em `models/onboarding.js`. Mirror no front (`greetingNameFor`) pra mensagens do modal — fallback seguro pra `company_name` se o toggle apontar pra responsável vazio.
+- Aplicado em: cron diário (`onboarding-daily.js`), cron de incentivo, modal WhatsApp do InfoCliente, fluxo do Jarvis (`send_onboarding`/`resend_onboarding`).
+
+**Modal WhatsApp do InfoCliente — envia link + vídeo:**
+- Após `send-whatsapp` dar sucesso, chama `POST /api/onboarding/send-welcome-video` (novo endpoint) que busca settings, monta caption e dispara `sendVideo` na Z-API. Falha do vídeo NÃO bloqueia o fluxo — `activate-first` ainda roda.
+- Botão WhatsApp continua sumindo quando `formStatus !== 'not_sent'`. Trava local; reenvio sai pelo Jarvis.
+
+**Z-API — wrapper `sendVideo` (`infra/api/zapi.js`):**
+- Novo `sendVideo(phone, videoUrl, caption)` mapeado pro endpoint `/send-video` da Z-API.
+
+**Jarvis — trava anti-duplicação:**
+- `cmdEnviarFormulario` agora consulta `onboarding_progress`:
+  - Sem progress / `not_started` → `confirmAction: 'send_onboarding'` (1º envio, ativa jornada).
+  - `active`/`paused` → `confirmAction: 'resend_onboarding'` (aviso explícito, NÃO mexe em `started_at`).
+  - `completed` → erro amigável sem confirmação.
+- `pages/api/jarvis/confirm.js` ganhou os 2 novos action handlers; `resend_onboarding` loga em `onboarding_notifications_log` com `type='manual_resend'` (auditoria).
+- `JarvisOrb.js` mostra labels específicos por action + linhas de preview ("Importante: contagem NÃO será resetada").
+- `models/jarvis/tools.js` descreve a regra na própria tool (a IA vê via system prompt).
+
+**Cron novo `onboarding-incentive` (`pages/api/cron/onboarding-incentive.js`):**
+- Horário: 10h BRT (cron UTC `0 13 * * *`).
+- Cutuca SÓ quem não respondeu a etapa do `currentDay`. Skip: dias de descanso, sem phone, já notificado hoje (UNIQUE em `onboarding_notifications_log (client_id, day_number, type)` com `type='incentive'`).
+- Renderiza template `onboarding_msg_incentive` ou default; substitui `{NOME}` via `getClientGreetingName`, `{ETAPA}` e `{LINK}`.
+
+**Privacidade:** o `day-snapshot` valida o token e só retorna dados do progress correspondente — nunca outro cliente. Token expirado retorna 410.
+
+**`started_at` é sagrado.** Reenviar (botão InfoCliente ou Jarvis confirmado) NUNCA mexe em `started_at`. Reset só via ferramenta admin "Controle de Dias" (`/api/onboarding/admin/set-day`).
+
+### 2026-05-20 — Tasks v2 — Checklist default, modo Time por cliente, importação em massa via IA, bot 2× ao dia
+
+**Schema (`infra/migrations/003_tasks_v2_checklist_20260520.sql`):**
+- `client_tasks.due_time TIME` — horário opcional, ordenação/filtro no Checklist.
+- `client_tasks.recurrence_id TEXT REFERENCES task_recurrences(id) ON DELETE SET NULL` — identifica tasks geradas por recorrência; permite ao Checklist separar "Recorrentes" / "Não-recorrentes" sem heurística. O cron `task-recurrences` agora grava esse campo.
+- `user_task_preferences (user_id, default_view)` — persiste view padrão por usuário (default global = `checklist`). Endpoint `GET/PUT /api/users/preferences`.
+- `infra/schema.sql` espelhado, lista de triggers de `updated_at` atualizada.
+
+**Nova view Checklist (default):**
+- `components/ChecklistView.jsx` + `assets/style/checklist.module.css`.
+- Layout doc-style: tabs de dia (SEG-SEX; SAB/DOM aparecem só se tiver task), seção `// ATRASADAS` fixa no topo, seções `// RECORRENTES` / `// NÃO-RECORRENTES` em modo Eu, agrupamento por cliente em modo Time (com "Internas / Sem cliente" no fim).
+- Filtros: Sem filtro | Prioridade | Hora (com tasks sem hora indo pro final).
+- Checkbox risca tarefa concluída; clicar no texto abre `TaskDetailModal` reusado. Dependências bloqueiam visualmente o checkbox e o backend (`updateTask`) valida — sem dupla regra.
+- `<ChecklistRow />` único renderer de linha — modo Eu vs Time muda só via props (mostra cliente vs avatar do responsável; recorrente ganha badge ↻).
+
+**Toggle de view (3 opções) + default por usuário:**
+- `Checklist | Kanban | Lista` no header. Checklist primeiro (default global).
+- Página de tasks carrega `/api/users/preferences` no mount; troca de view dispara `PUT` em background (otimista).
+
+**Modo Time agrupa por cliente:**
+- Vale para Checklist e Lista. Kanban segue com colunas por dia (mudar quebra a leitura do board — fora de escopo).
+
+**Importação em massa via IA (`Importar Ata`):**
+- `components/BulkImportModal.jsx` (passo 1 — upload texto/arquivo .txt/.md/.docx/.pdf, máx 5MB) + `components/BulkImportPreview.jsx` (passo 2 — preview editável agrupado por responsável).
+- `POST /api/tasks/bulk-import/parse` extrai texto (mammoth/pdf-parse), carrega contexto (users, clients, categorias) e chama `models/tasks/bulkImportAI.parseBulkImport`. Usa `runCompletion('medium', ..., { operationType: 'tasks_bulk_import' })` — tracking automático no `ai_token_usage`.
+- Prompt instrui a IA a NÃO inventar usuário/cliente; quando não dá pra resolver responsável → fallback = criador da importação + warning.
+- `POST /api/tasks/bulk-import/commit` recebe array final editado e usa `taskModel.createMany` (INSERT batch atômico via VALUES multi-row). Notifica responsáveis (uma notificação agregada por usuário). `created_by` é sempre o usuário do cookie, nunca vindo do client.
+
+**Bot WhatsApp passa a 2 lembretes/dia (matinal + vespertino):**
+- `pages/api/cron/tasks-overdue.js` — removido envio Z-API. Continua marcando `overdue` no banco e disparando sininho. Crons `tasks-morning` (8h) e `tasks-afternoon` (16h) seguem ativos.
+- `pages/dashboard/settings/tasks.js` — campo "Mensagem de tarefas atrasadas" virou "Mensagem da tarde" (mapeado em cima de `message_overdue` por baixo pra evitar migração de coluna; o cron afternoon já usa esse template). Idem para o template global.
+
+**Multi-tenancy:** todos os endpoints novos (`/api/users/preferences`, `/api/tasks/bulk-import/*`) chamam `resolveTenantId(req)` + `requireAuth(req)`. `created_by` na importação é forçado pro `user.id` do cookie.
+
+**Reaproveitamento:** Checklist usa helpers do `pages/dashboard/tasks/index.js` (`isoDate`, `addDays`, `isOverdue`, `taskDueIso`) via props — zero drift de fuso. `TaskDetailModal` e `CreateTaskModal` reusados sem reescrita (CreateTaskModal ganhou só `initialDueDate` opcional).
+
+### 2026-05-06 — Copy v2.1 — Export editorial SIGMA (fix `spawn ENOEXEC` + IA enricher)
+
+**Bug fix `spawn ENOEXEC` no PDF (dev macOS/Windows):**
+- `infra/api/pdfRenderer.js` agora detecta ambiente. Em prod Linux/Railway usa `@sparticuz/chromium`. Em dev macOS/Windows usa o Chrome do sistema (busca em `/Applications/Google Chrome.app/...`, `C:\Program Files\Google\Chrome\...` etc) ou respeita `PUPPETEER_EXECUTABLE_PATH`.
+- Mensagem de erro útil quando Chrome não é encontrado.
+
+**IA-first export (Sonnet 4.6 enricher):**
+- Novo `models/copy/exportEnricher.js` chama `claude-sonnet-4-6` ANTES da renderização. Recebe a copy bruta + template + nome do cliente, devolve JSON estruturado: `{ documentTitle, documentSubtitle, sections: [{ kind, eyebrow, title, content, items, qa, attribution }] }`.
+- Section kinds: `hero`, `section`, `callout`, `list`, `quote`, `cta`, `faq`. Cada um tem layout dedicado.
+- System prompt impede invenção de conteúdo — IA reorganiza, escolhe hierarquia, decide o que vira hero/callout/CTA, mas usa só palavras presentes na copy.
+- Fallback determinístico se Sonnet falhar (parser markdown legado).
+- Por que Sonnet 4.6 e não Haiku 4.5: tarefa exige juízo arquitetural; diferença de custo é só ~$0.044/export. Operationtype novo: `copy_export_enrich`.
+
+**Brandbook SIGMA fixo (feedback do usuário):**
+- Removido `getActiveBrandbook` do flow de export. Identidade hardcoded em `models/copy/exportTemplates/_shared.js`: preto `#0a0a0a`, branco `#ffffff`, vermelho `#ff0033`, Inter (corpo) + JetBrains Mono (eyebrows).
+- Visual editorial: cover com brand mark + título grande + subhead + meta tripartite (cliente/data/sistema). Sections numeradas estilo livro de design (`01 / DIAGNÓSTICO`), divisores horizontais finos, callouts com barra lateral vermelha, CTA invertido (fundo preto), quotes com aspa vermelha gigante.
+- Templates `landingPage.js` / `contentPlanning.js` / `freeform.js` viraram wrappers finos — diferem só pela `templateLabel` na cover.
+- DOCX (`exportDocx.js`) reescrito do zero: também consome o JSON estruturado, com mesma identidade SIGMA via `Packer/Document/Paragraph/TextRun`.
+
+**UI:**
+- `ExportCopyModal`: toggle "Aplicar brandbook do cliente" virou indicador "Identidade SIGMA editorial" (disabled, só informativo).
+- `ExportPreviewModal`: texto loading "Sonnet 4.6 estruturando..." em vez de "Renderizando layout com brandbook". Sidebar mostra "Estruturado por: Claude Sonnet 4.6".
+
+**Smoke test:**
+```sql
+SELECT operation_type, COUNT(*), SUM(tokens_total), SUM(estimated_cost_usd)
+FROM ai_token_usage
+WHERE created_at > now() - interval '5 minutes' AND operation_type = 'copy_export_enrich'
+GROUP BY operation_type;
+```
+
+### 2026-05-06 — Image v2 (Arte Guia, Smart Selector inteligente, qualidade premium)
+
+**Fase 1 — Latência:**
+- `MAX_CONCURRENT_GLOBAL` do `imageWorker` subiu de 5 → 10 (configurável via env `IMAGE_WORKER_MAX_CONCURRENT`).
+- `loadImageInputsForProvider` e `ensureFixedRefsDescriptions`: serial → `Promise.all`.
+- `describeReferencesByMode`: 3 modos (inspiration/character/scene) agora rodam em paralelo via `Promise.all`. Character ainda gera 1 chamada Vision por imagem, mas as imagens entre si também rodam paralelas.
+- TTL do cache do Prompt Engineer ampliado de 24h → 48h (default em `image_settings.prompt_reuse_window_hours`). Log `[INFO][PromptEngineer] cache HIT` em caps com `tokensUsed=0` pra facilitar grep de hit-rate.
+
+**Fase 1 — Smart Selector via LLM:**
+- `models/agentes/imagecreator/smartSelector.js` agora usa `claude-sonnet-4-6` por padrão (~$0.003/decisão). Pode ser override via `settings.smart_mode_model` pra cair pro `gpt-4o-mini`.
+- System prompt enriquecido em `prompts/smartSelector.js` com regras de Arte Guia + categoria do pedido (feed/story/ad/banner) + Nano Banana 2 vs GPT Image 2 vs Flux Kontext.
+- Fallback: se LLM falhar (timeout, JSON inválido, modelo fora dos enabled), cai pro `autoMode.decide` determinístico (mantido em disco).
+- Worker (`server/imageWorker.js`) chama `smartSelectStrategy` em vez de `autoModeDecide`. autoMode permanece como fallback.
+
+**Fase 2 — Arte Guia (templates de inspiração):**
+- 2 tabelas novas em `infra/schema.sql` + `infra/migrations/002_inspiration_templates.sql`: `image_inspiration_templates` (globais por tenant) + `client_inspiration_templates` (por cliente). Coluna nova `low_quality_warning` + `quality_check` em `image_jobs`.
+- `models/inspirationTemplate.model.js` — CRUD compartilhado (scope=global|client) com `incrementUsageCount` (fire-and-forget) e `ensureAIDescription` (Vision lazy via `image_template_describe`).
+- Endpoints `GET/POST/PUT/DELETE /api/image/templates/global` e `/api/image/templates/client/[clientId]`.
+- Settings page `/dashboard/settings/image-templates` (entrada nova no sidebar). Upload em batch, edição inline de título e categoria, ativar/desativar.
+- 3 componentes: `InspirationTemplatesUpload` (botão reutilizável), `InspirationTemplatesGallery` (grid inline) e `InspirationPickerModal` (seleção multi com 3 seções: refs fixas + cliente + globais).
+- **UI rename**: tab "Brandbook" virou "Arte Guia" no `pages/dashboard/clients/[id].js`. Chave técnica `brandbook` preservada em todo o código/banco/API. Apenas labels visíveis mudaram. `BrandbookTab` ganhou 3ª seção embaixo do editor com galeria de templates do cliente.
+- `ImageGeneratorModal`: botão "+ Escolher da Arte Guia" abaixo do `ReferenceUploader` abre o picker. Imagens escolhidas viram refs `mode='inspiration'` levando `templateId`/`templateScope` no metadata. Backend incrementa `usage_count` fire-and-forget.
+
+**Fase 3 — Qualidade premium:**
+- `quality: high` default na geração (worker usa `settings.quality_default || 'high'`).
+- Smart Selector recebe contexto de templates (`inspirationTemplateContext`) e o prompt entende a regra: 2+ templates + brandbook ativo + composição complexa → Nano Banana 2.
+- Prompt Engineer aceita `inspirationTemplateDescriptions` (array vindo de `ensureAIDescription`). System prompt ganhou bloco `# INSPIRATION TEMPLATES (Arte Guia — style references)` com regra "use como guia, não copie literalmente". Hash de cache também inclui essas descrições.
+- Worker chama `ensureAIDescription` em paralelo pra cada template escolhido (Vision lazy — só gera na primeira vez, depois cache no banco).
+- `qualityCheck.js`: `sharp.metadata()` + Laplacian variance em thumb 256px. Se resolução real < 70% do esperado OU variância < 80, seta `low_quality_warning=true` e grava detalhes em `quality_check` JSON. Não bloqueia entrega.
+
+**Tracking de tokens (auditoria completa):**
+- Novos `operation_type` no dashboard: `image_template_describe`, `image_template_categorize`, `image_ref_classifier`.
+- Cobertura atual: `image_generation`, `image_prompt_engineer`, `image_smart_selector`, `image_title_generator`, `image_brandbook_extract`, `image_brandbook_generate`, `image_brandbook_fixed_ref_describe`, `image_reference_describe_*`, `image_ref_classifier`, `image_template_describe`.
+
+**Custos esperados:**
+- Smart Selector LLM: ~$0.003/decisão × 100 jobs/dia = ~$9/mês.
+- `quality: high` default: ~+30% no custo de geração (varia por modelo). Override via `settings.quality_default`.
+- Vision lazy de templates: 1× por template (cacheado) × N templates × $0.005 ≈ desprezível em uso normal.
+
+**Smoke test pós-deploy:**
+```sql
+SELECT operation_type, COUNT(*), SUM(tokens_total), SUM(estimated_cost_usd)
+FROM ai_token_usage
+WHERE created_at > now() - interval '10 minutes'
+  AND operation_type LIKE 'image_%'
+GROUP BY operation_type
+ORDER BY COUNT(*) DESC;
+
+SELECT id, model, low_quality_warning, quality_check->>'blurScore' AS blur,
+       quality_check->>'reasons' AS reasons
+FROM image_jobs
+WHERE created_at > now() - interval '10 minutes'
+  AND status = 'done'
+ORDER BY created_at DESC LIMIT 10;
+```
+
+### 2026-05-06 — Copy v2, Fases 2–4 (background-first, streaming, export profissional)
+
+**Fase 2 — Histórico em tempo real + streaming + melhoria em background:**
+- Streaming SSE real durante geração: o runner usa `runCompletionStreamWithModel`/`runCompletionStream` e grava `partial_text` em `copy_generation_jobs` a cada ~60 chars/400ms.
+- Endpoint `GET /api/copy/jobs/[id]/stream` (SSE, polling do banco a 400ms): emite `status`, `chunk`, `done`, `error`. Heartbeat de 15s pra sobreviver a proxies. `X-Accel-Buffering: no`.
+- `CopyWorkspace` abre EventSource primeiro; se nenhum evento chegar em 3s, paraleliza polling de 800ms (o primeiro `done` vence). `reloadHistory()` virou helper único — chamado depois de gerar, melhorar e exportar.
+- Badge `EXECUTANDO EM SEGUNDO PLANO` / `STREAMING` no header enquanto há `activeJobId`.
+- Melhoria de texto agora roda em background como `kind: 'improve_text'` (`runImproveText` em `copyJobRunner`). O endpoint legado `/api/agentes/improve-text` continua funcionando, mas a UI usa o job novo.
+- Cache TTL 60s em `loadClientContext` (sem invalidação manual — janela aceita).
+
+**Fase 3 — Export HTML→PDF/DOCX com pré-visualização e brandbook:**
+- Tabela nova `copy_export_jobs` (em `infra/schema.sql` + `infra/migrations/001_copy_v2_export_and_streaming.sql`). Idempotente.
+- Botão "Exportar" no toolbar do CopyWorkspace abre `ExportCopyModal` (3 templates × 2 formatos × brandbook on/off) → `ExportPreviewModal` mostra HTML em iframe → botões "Baixar PDF/DOCX" disparam o job.
+- `POST /api/copy/export`:
+  - `format='preview'` → retorna HTML síncrono (~200ms).
+  - `format='pdf'|'docx'` → cria `copy_export_jobs`, dispara via `setImmediate`, retorna `202 + jobId`. `GET /api/copy/export/[jobId]` faz polling.
+- 3 templates HTML (`models/copy/exportTemplates/{landingPage,contentPlanning,freeform}.js`) + helpers (`_shared.js` com `applyBrandbook`, `markdownToHtml`, `baseStyles`, `buildDocument`).
+- 3 espelhos DOCX (`models/copy/exportDocx.js`) reaproveitando o parser markdown→docx do export legado de clientes.
+- Render PDF via `puppeteer-core` + `@sparticuz/chromium` (singleton de browser, A4 20/18mm, footer numerado, `document.fonts.ready` antes de imprimir, `page-break-inside: avoid` em todo card/seção).
+- Storage em `public/uploads/exports/{tenantId}/{yyyy-mm}/{jobId}.{ext}`.
+- Brandbook do cliente carrega via `getActiveBrandbook` — fallback automático pra identidade SIGMA (`#ff0033`/Inter/JetBrains Mono) com aviso amarelo no preview quando não encontrado.
+
+**Fase 4 — Cleanup + docs:**
+- Cleanup diário (>7 dias) registrado em `server/instrumentation.js` — chama `cleanupOldExports()` 5min após boot e a cada 24h.
+- README + CLAUDE.md atualizados com seção dedicada a Copy v2 e tracking dos novos `operation_type`.
+
+**Smoke test pós-deploy:**
+```sql
+-- Verificar tracking pós-geração + melhoria + export PDF
+SELECT operation_type, COUNT(*), SUM(tokens_total), SUM(estimated_cost_usd)
+FROM ai_token_usage
+WHERE created_at > now() - interval '5 minutes'
+GROUP BY operation_type;
+
+-- Verificar jobs de export ativos
+SELECT id, template, format, status, duration_ms, result_size_bytes
+FROM copy_export_jobs
+ORDER BY created_at DESC LIMIT 10;
+```
+
+### 2026-05-06 — Copy v2, Fase 1
+- Adicionados ao seletor de modelos do Copy: `claude-opus-4-7`, `claude-sonnet-4-6`, `claude-haiku-4-5`, `gpt-5.5`. Legados (`claude-opus-4-5`, `claude-sonnet-4-5`, `gpt-4o`, `gpt-4o-mini`) mantidos pra compatibilidade de histórico.
+- Tabela `PRICES` em `models/copy/tokenUsage.js` atualizada com os novos modelos.
+- Auditoria completa de tracking de tokens no módulo Copy. `logUsage` adicionado em: `pages/api/copy/transcribe.js`, `pages/api/copy/generate-structure.js`, `pages/api/agentes/format-output.js`, `pages/api/agentes/improve-text.js`, `models/copy/copyPrompt.js → formatCopyOutput()` e `infra/api/vision.js` (analyzeImage / analyzeMultipleImages — opcional via `options.tenantId`).
+- Novos `operation_type` no dashboard de tokens: `copy_structure_generate`, `copy_transcribe`, `copy_improve_text`, `copy_format_output`, `copy_vision`, `copy_export_planning`, `improve_text`.
+- Smoke test:
+  ```sql
+  SELECT operation_type, COUNT(*), SUM(tokens_total), SUM(estimated_cost_usd)
+  FROM ai_token_usage
+  WHERE created_at > now() - interval '5 minutes'
+  GROUP BY operation_type;
+  ```

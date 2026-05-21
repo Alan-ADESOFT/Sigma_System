@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const { title, description, client_id, assigned_to, priority, due_date, status, category_id, estimated_hours, subtasks, subtasks_required, dependsOn } = req.body;
+      const { title, description, client_id, assigned_to, priority, due_date, due_time, status, category_id, estimated_hours, subtasks, subtasks_required, dependsOn } = req.body;
       if (!title) {
         return res.status(400).json({ success: false, error: 'Título obrigatório' });
       }
@@ -50,6 +50,7 @@ export default async function handler(req, res) {
         assigned_to,
         priority: priority || 'normal',
         due_date,
+        due_time: due_time || null,
         status: status || 'pending',
         category_id,
         estimated_hours,

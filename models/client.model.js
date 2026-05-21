@@ -69,28 +69,37 @@ async function updateClient(id, tenantId, fields) {
     logo_url, observations,
     important_links, services,
     extra_data,
+    // Sprint Forms v2 — saudação personalizada por responsável
+    responsible_name, onboarding_greeting_with,
   } = fields;
+
+  // Valida enum do toggle. Qualquer valor diferente cai pro default 'company'.
+  const greetingNorm = onboarding_greeting_with === 'responsible'
+    ? 'responsible'
+    : (onboarding_greeting_with === 'company' ? 'company' : null);
 
   return queryOne(
     `UPDATE marketing_clients SET
-       company_name         = COALESCE($3,  company_name),
-       niche                = COALESCE($4,  niche),
-       main_product         = COALESCE($5,  main_product),
-       product_description  = COALESCE($6,  product_description),
-       transformation       = COALESCE($7,  transformation),
-       main_problem         = COALESCE($8,  main_problem),
-       avg_ticket           = COALESCE($9,  avg_ticket),
-       region               = COALESCE($10, region),
-       comm_objective       = COALESCE($11, comm_objective),
-       comm_objective_other = COALESCE($12, comm_objective_other),
-       email                = COALESCE($13, email),
-       phone                = COALESCE($14, phone),
-       status               = COALESCE($15, status),
-       logo_url             = COALESCE($16, logo_url),
-       observations         = COALESCE($17, observations),
-       important_links      = COALESCE($18::jsonb, important_links),
-       services             = COALESCE($19::jsonb, services),
-       extra_data           = COALESCE($20, extra_data)
+       company_name             = COALESCE($3,  company_name),
+       niche                    = COALESCE($4,  niche),
+       main_product             = COALESCE($5,  main_product),
+       product_description      = COALESCE($6,  product_description),
+       transformation           = COALESCE($7,  transformation),
+       main_problem             = COALESCE($8,  main_problem),
+       avg_ticket               = COALESCE($9,  avg_ticket),
+       region                   = COALESCE($10, region),
+       comm_objective           = COALESCE($11, comm_objective),
+       comm_objective_other     = COALESCE($12, comm_objective_other),
+       email                    = COALESCE($13, email),
+       phone                    = COALESCE($14, phone),
+       status                   = COALESCE($15, status),
+       logo_url                 = COALESCE($16, logo_url),
+       observations             = COALESCE($17, observations),
+       important_links          = COALESCE($18::jsonb, important_links),
+       services                 = COALESCE($19::jsonb, services),
+       extra_data               = COALESCE($20, extra_data),
+       responsible_name         = COALESCE($21, responsible_name),
+       onboarding_greeting_with = COALESCE($22, onboarding_greeting_with)
      WHERE id = $1 AND tenant_id = $2
      RETURNING *`,
     [
@@ -104,6 +113,8 @@ async function updateClient(id, tenantId, fields) {
       important_links !== undefined ? JSON.stringify(important_links) : null,
       services !== undefined ? JSON.stringify(services) : null,
       extra_data ? JSON.stringify(extra_data) : null,
+      responsible_name !== undefined ? (String(responsible_name).trim() || null) : null,
+      greetingNorm,
     ]
   );
 }

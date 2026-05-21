@@ -142,4 +142,66 @@ async function sendText(phone, message, options = {}) {
   return data;
 }
 
-module.exports = { sendText, normalizeZApiPhone };
+/**
+ * Envia um vídeo via Z-API com legenda opcional.
+ *
+ * Endpoint Z-API: /send-video — payload aceita `video` (URL pública) e `caption`.
+ * A URL precisa ser BAIXÁVEL pela Z-API (servidor externo). Em dev local sem
+ * tunnel, é capaz de falhar — em produção (Railway/Vercel + domínio público)
+ * funciona normal.
+ *
+ * @param {string} phone — telefone normalizado
+ * @param {string} videoUrl — URL pública do MP4
+ * @param {string} [caption] — legenda opcional
+ * @returns {Promise<object>}
+ */
+async function sendVideo(phone, videoUrl, caption = '') {
+  assertConfig();
+  if (!videoUrl) throw new Error('[ZApi] videoUrl vazio');
+
+  const cleanPhone = normalizeZApiPhone(phone);
+
+  console.log('[INFO][ZApi] Enviando vídeo', {
+    phone: maskPhone(cleanPhone),
+    videoUrl,
+    captionLength: caption?.length || 0,
+  });
+
+  const url = `https://api.z-api.io/instances/${ZAPI_INSTANCE}/token/${ZAPI_TOKEN}/send-video`;
+
+  const body = {
+    phone: cleanPhone,
+    video: videoUrl,
+    caption: caption || '',
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Client-Token': ZAPI_CLIENT_TOKEN,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text().catch(() => '');
+    console.error('[ERRO][ZApi] Falha no envio de vídeo', {
+      phone: maskPhone(cleanPhone),
+      status: response.status,
+      body: errBody,
+    });
+    throw new Error(`Z-API send-video retornou status ${response.status}: ${errBody}`);
+  }
+
+  const data = await response.json();
+  console.log('[SUCESSO][ZApi] Vídeo enviado', {
+    phone: maskPhone(cleanPhone),
+    zaapId: data.zaapId,
+    messageId: data.messageId,
+  });
+
+  return data;
+}
+
+module.exports = { sendText, sendVideo, normalizeZApiPhone };

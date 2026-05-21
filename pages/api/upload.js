@@ -24,8 +24,9 @@ export const config = {
   },
 };
 
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;  // 10 MB
-const MAX_VIDEO_BYTES = 100 * 1024 * 1024; // 100 MB
+const MAX_IMAGE_BYTES    = 10 * 1024 * 1024;   // 10 MB
+const MAX_VIDEO_BYTES    = 100 * 1024 * 1024;  // 100 MB
+const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;   // 25 MB (sprint Central de Suporte)
 
 const ALLOWED_IMAGE_MIMES = new Set([
   'image/jpeg',
@@ -40,6 +41,14 @@ const ALLOWED_VIDEO_MIMES = new Set([
   'video/webm',
 ]);
 
+// Sprint Central de Suporte — aceita PDF e DOCX/DOC pra anexos de aula.
+// Conservador: só formatos comuns de documento, sem .xlsx/.pptx etc por ora.
+const ALLOWED_DOCUMENT_MIMES = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+  'application/msword', // .doc (legado, raramente aparece)
+]);
+
 const MIME_EXTENSION = {
   'image/jpeg':       'jpg',
   'image/png':        'png',
@@ -48,6 +57,9 @@ const MIME_EXTENSION = {
   'video/mp4':        'mp4',
   'video/quicktime':  'mov',
   'video/webm':       'webm',
+  'application/pdf':                                                          'pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':  'docx',
+  'application/msword':                                                       'doc',
 };
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -78,6 +90,22 @@ function sniffMime(buf) {
 
   // WebM (Matroska): 1A 45 DF A3
   if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return 'video/webm';
+
+  // PDF: %PDF (25 50 44 46)
+  if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) return 'application/pdf';
+
+  // DOCX / DOC modernos (Office Open XML) começam como ZIP: PK\x03\x04
+  // .doc legado (CFB/OLE) tem assinatura D0 CF 11 E0 A1 B1 1A E1.
+  // Como o sniff genérico não diferencia DOCX de outros ZIPs (xlsx, pptx, jar),
+  // confiamos no MIME declarado para PK e validamos cruzado abaixo. O risco
+  // residual é baixo: o ZIP só é gravado em /uploads/documents/ se o MIME
+  // declarado pelo navegador for de DOCX (whitelist server-side).
+  if (buf[0] === 0x50 && buf[1] === 0x4b && (buf[2] === 0x03 || buf[2] === 0x05 || buf[2] === 0x07)) {
+    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  }
+  if (buf[0] === 0xd0 && buf[1] === 0xcf && buf[2] === 0x11 && buf[3] === 0xe0) {
+    return 'application/msword';
+  }
 
   return null;
 }
@@ -162,19 +190,22 @@ export default async function handler(req, res) {
 
     // ── VALIDAÇÃO 1: MIME declarado precisa estar na allowlist ──
     const declared = parsed.declaredMime.toLowerCase();
-    const isImage = ALLOWED_IMAGE_MIMES.has(declared);
-    const isVideo = ALLOWED_VIDEO_MIMES.has(declared);
-    if (!isImage && !isVideo) {
+    const isImage    = ALLOWED_IMAGE_MIMES.has(declared);
+    const isVideo    = ALLOWED_VIDEO_MIMES.has(declared);
+    const isDocument = ALLOWED_DOCUMENT_MIMES.has(declared);
+    if (!isImage && !isVideo && !isDocument) {
       return res.status(400).json({
         success: false,
-        error: `Tipo de arquivo não permitido. Aceitos: JPG, PNG, WebP, GIF, MP4, MOV, WebM`,
+        error: `Tipo de arquivo não permitido. Aceitos: JPG, PNG, WebP, GIF, MP4, MOV, WebM, PDF, DOC, DOCX`,
       });
     }
 
-    // ── VALIDAÇÃO 2: tamanho ──
-    const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+    // ── VALIDAÇÃO 2: tamanho (limite varia por categoria) ──
+    const maxBytes = isVideo ? MAX_VIDEO_BYTES
+                     : isDocument ? MAX_DOCUMENT_BYTES
+                     : MAX_IMAGE_BYTES;
     if (parsed.body.length > maxBytes) {
-      const limit = isVideo ? '100MB' : '10MB';
+      const limit = isVideo ? '100MB' : isDocument ? '25MB' : '10MB';
       return res.status(413).json({
         success: false,
         error: `Arquivo muito grande. Máximo: ${limit}`,
@@ -191,10 +222,13 @@ export default async function handler(req, res) {
     }
 
     // O MIME sniffado precisa ser do mesmo "tipo" do declarado
-    // (imagem com imagem, vídeo com vídeo)
-    const sniffedIsImage = ALLOWED_IMAGE_MIMES.has(sniffed);
-    const sniffedIsVideo = ALLOWED_VIDEO_MIMES.has(sniffed);
-    if ((isImage && !sniffedIsImage) || (isVideo && !sniffedIsVideo)) {
+    // (imagem com imagem, vídeo com vídeo, documento com documento).
+    const sniffedIsImage    = ALLOWED_IMAGE_MIMES.has(sniffed);
+    const sniffedIsVideo    = ALLOWED_VIDEO_MIMES.has(sniffed);
+    const sniffedIsDocument = ALLOWED_DOCUMENT_MIMES.has(sniffed);
+    if ((isImage    && !sniffedIsImage) ||
+        (isVideo    && !sniffedIsVideo) ||
+        (isDocument && !sniffedIsDocument)) {
       console.warn('[WARN][upload] MIME spoof detectado', { declared, sniffed });
       return res.status(400).json({
         success: false,
@@ -207,7 +241,9 @@ export default async function handler(req, res) {
     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     const newFilename = `${uniqueSuffix}.${ext}`;
 
-    const subfolder = sniffedIsVideo ? 'videos' : 'images';
+    const subfolder = sniffedIsVideo ? 'videos'
+                    : sniffedIsDocument ? 'documents'
+                    : 'images';
     const uploadDir = join(process.cwd(), 'public', 'uploads', subfolder);
     await mkdir(uploadDir, { recursive: true }).catch(() => {});
 
@@ -250,7 +286,9 @@ export default async function handler(req, res) {
       localPath,
       mimeType: sniffed,
       sizeBytes: parsed.body.length,
-      kind: sniffedIsVideo ? 'video' : 'image',
+      kind: sniffedIsVideo ? 'video'
+            : sniffedIsDocument ? 'document'
+            : 'image',
     });
   } catch (err) {
     console.error('[ERRO][API:/api/upload]', { error: err.message, stack: err.stack });

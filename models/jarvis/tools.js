@@ -210,7 +210,7 @@ SUBTASKS AUTOMÁTICAS: Para tarefas complexas com múltiplas etapas (ex: "montar
   {
     id: 'enviar_formulario',
     name: 'enviar_formulario',
-    description: 'Envia o link do formulário de briefing para um cliente específico via WhatsApp. Gera o token, monta a mensagem e envia. Requer confirmação. Use quando o usuário disser "envia o formulário para o cliente X", "manda o link do form pro X".',
+    description: 'Envia o link do onboarding (15 dias) para um cliente específico via WhatsApp. A contagem de dias da jornada começa no PRIMEIRO envio do formulário. Reenviar NÃO reseta a contagem — apenas cutuca o cliente com o mesmo link. Para resetar a jornada, usar a ferramenta admin de "Controle de Dias". Se o cliente já recebeu antes, a confirmação avisa explicitamente. Use quando o usuário disser "envia o formulário para o cliente X", "manda o link do form pro X", "reenvia o formulário do X".',
     parameters: {
       type: 'object',
       properties: {

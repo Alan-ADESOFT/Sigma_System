@@ -301,6 +301,136 @@ export default async function handler(req, res) {
       }
     }
 
+    /* ── SEND ONBOARDING (primeiro envio, sprint Forms v2) ───────
+       Substitui o legacy 'send_form' para o fluxo de onboarding 15 dias.
+       Idêntico ao botão WhatsApp do InfoCliente:
+         1. prepare           — cria progress (não ativa)
+         2. send-whatsapp     — envia o texto
+         3. send-welcome-video — envia o vídeo de boas-vindas (se houver)
+         4. activate-first    — marca started_at e libera a jornada
+       Falha no vídeo NÃO bloqueia. */
+    if (action === 'send_onboarding' || action === 'resend_onboarding') {
+      const isResend = action === 'resend_onboarding';
+      if (!data.client_id) return res.status(400).json({ success: false, error: 'client_id obrigatório' });
+      if (!data.phone) return res.status(400).json({ success: false, error: 'Cliente não tem telefone cadastrado.' });
+
+      // Normaliza telefone com DDI BR (Z-API)
+      let phone = String(data.phone).replace(/\D/g, '');
+      if (!phone.startsWith('55')) phone = '55' + phone;
+
+      const { sendText, sendVideo } = require('../../../infra/api/zapi');
+      const { getSetting } = require('../../../models/settings.model');
+      const {
+        getOrCreateProgress, startOnboarding, getClientGreetingName,
+        logNotificationSent,
+      } = require('../../../models/onboarding');
+
+      // Carrega o cliente completo (pra saudação)
+      const fullClient = await queryOne(
+        `SELECT id, company_name, phone, responsible_name, onboarding_greeting_with
+           FROM marketing_clients WHERE id = $1 AND tenant_id = $2`,
+        [data.client_id, tenantId]
+      );
+      if (!fullClient) {
+        return res.status(404).json({ success: false, error: 'Cliente não encontrado' });
+      }
+
+      // Garante que existe progress (não ativa ainda)
+      const progress = await getOrCreateProgress(data.client_id, tenantId);
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3002';
+      const link = `${baseUrl}/onboarding/${progress.token}`;
+      const greetingName = getClientGreetingName(fullClient);
+
+      // Monta a mensagem (mesma copy do modal InfoCliente — mantém UX consistente)
+      const message =
+        `⚠️ *SIGMA HACKER // ACESSO ${isResend ? 'REENVIADO' : 'ATIVADO'}*\n\n` +
+        `Olá, *${greetingName}*.\n\n` +
+        (isResend
+          ? `Reenviando o link da sua jornada de 15 dias. A contagem de dias *não* foi reiniciada — você continua de onde parou.\n\n`
+          : `Isso não é um formulário de briefing.\nÉ um *raio-X do seu negócio em 15 dias*.\n\n`) +
+        `👉 *ETAPA 1 — DIA 1* 🔓\n${link}`;
+
+      // 1. Envia texto
+      let sendResult = null;
+      try {
+        sendResult = await sendText(phone, message, { delayTyping: 3 });
+      } catch (err) {
+        console.error('[ERRO][Jarvis:Confirm:send_onboarding] Z-API texto', { error: err.message });
+        return res.status(500).json({
+          success: false,
+          error: `Não consegui enviar via WhatsApp. Verifique se o número ${phone} está correto e se a instância Z-API está conectada.`,
+        });
+      }
+
+      // 2. Envia vídeo de boas-vindas (se configurado) — falha não bloqueia
+      let videoSent = false;
+      try {
+        const videoUrl = await getSetting(tenantId, 'onboarding_welcome_video_url');
+        if (videoUrl && String(videoUrl).trim()) {
+          const rawCaption = (await getSetting(tenantId, 'onboarding_welcome_video_description')) || '';
+          const caption = String(rawCaption).replace(/\{NOME\}/gi, greetingName);
+          await sendVideo(phone, videoUrl, caption);
+          videoSent = true;
+        }
+      } catch (err) {
+        console.error('[ERRO][Jarvis:Confirm:send_onboarding] vídeo de boas-vindas falhou', err.message);
+      }
+
+      // 3. Ativa jornada APENAS no primeiro envio (resend NÃO mexe em started_at)
+      if (!isResend) {
+        try {
+          await startOnboarding(data.client_id, tenantId);
+          await logNotificationSent(
+            data.client_id, 1, 'stage_link',
+            'Enviado via Jarvis (primeiro envio)'
+          );
+        } catch (err) {
+          console.error('[ERRO][Jarvis:Confirm:send_onboarding] activate-first falhou', err.message);
+        }
+      } else {
+        // Reenvio: loga em manual_resend (auditoria) sem tocar em started_at
+        try {
+          await query(
+            `INSERT INTO onboarding_notifications_log (client_id, day_number, type, message)
+               VALUES ($1, $2, $3, $4)
+             ON CONFLICT DO NOTHING`,
+            [data.client_id, progress.current_day || 1, 'manual_resend', message.slice(0, 2000)]
+          );
+        } catch (err) {
+          console.warn('[WARN][Jarvis:Confirm:resend_onboarding] log falhou (não-bloqueante)', err.message);
+        }
+      }
+
+      await logJarvisUsage(
+        tenantId, user.id,
+        `confirm:${action}`,
+        JSON.stringify({ ...data, phone }),
+        `${isResend ? 'resend' : 'first send'} to ${phone}${videoSent ? ' (with video)' : ''}`,
+        0, true, null
+      );
+
+      try {
+        await createNotification(
+          tenantId, 'jarvis_action',
+          isResend ? 'Formulário reenviado via JARVIS' : 'Onboarding iniciado via JARVIS',
+          isResend
+            ? `Link reenviado para ${data.client_name || 'cliente'} (${phone}) sem resetar a contagem.`
+            : `Jornada de 15 dias iniciada para ${data.client_name || 'cliente'} (${phone}) via WhatsApp.`,
+          data.client_id,
+          { action, messageId: sendResult?.messageId, videoSent, createdBy: 'jarvis' }
+        );
+      } catch {}
+
+      return res.json({
+        success: true,
+        message: isResend
+          ? `Link reenviado para ${data.client_name || 'cliente'} via WhatsApp (contagem mantida).`
+          : `Jornada iniciada para ${data.client_name || 'cliente'} via WhatsApp.`,
+        link,
+        videoSent,
+      });
+    }
+
     return res.status(400).json({ success: false, error: 'Ação desconhecida' });
   } catch (err) {
     console.error('[ERRO][API:/api/jarvis/confirm] Falha', { error: err.message, stack: err.stack });

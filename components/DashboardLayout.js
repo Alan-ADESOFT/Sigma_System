@@ -131,6 +131,12 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    category: 'SUPORTE',
+    items: [
+      { href: '/dashboard/suporte',          label: 'Tutoriais',              tag: '21c', icon: 'book',      minRole: 'user' },
+    ],
+  },
+  {
     category: 'SISTEMA',
     items: [
       { href: '/dashboard/settings/users',           label: 'Gestão de Usuários',    tag: '22', icon: 'users',     minRole: 'god' },
@@ -139,6 +145,7 @@ const NAV_SECTIONS = [
       { href: '/dashboard/settings/copy',            label: 'Config. Copy',          tag: '25', icon: 'edit2',     minRole: 'god' },
       { href: '/dashboard/settings/jarvis',          label: 'Config. Jarvis',        tag: '26',  icon: 'bot',       minRole: 'god' },
       { href: '/dashboard/settings/image',           label: 'Config. Imagem',        tag: '26b', icon: 'image',     minRole: 'god' },
+      { href: '/dashboard/settings/image-templates', label: 'Templates de Imagem',   tag: '26c', icon: 'image',     minRole: 'god' },
       { href: '/dashboard/settings/tasks',           label: 'Config. Tarefas',       tag: '27', icon: 'settings',  minRole: 'god' },
       { href: '/dashboard/settings/financeiro',      label: 'Config. Financeiro',    tag: '28', icon: 'chart',     minRole: 'god' },
       { href: '/dashboard/settings/prompt-library',  label: 'Biblioteca de Prompts', tag: '29', icon: 'book',      minRole: 'god' },
@@ -152,7 +159,9 @@ const NAV_SECTIONS = [
 /* ─────────────────────────────────────────────────────────────────────────────
    Ícones SVG inline (evita dependência de biblioteca de ícones)
 ───────────────────────────────────────────────────────────────────────────── */
-const ICONS = {
+// `ICONS` é exportado pra ser reutilizado em outras telas (ex: Central de
+// Suporte mostra o ícone escolhido pelo admin no card do módulo).
+export const ICONS = {
   home: (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />

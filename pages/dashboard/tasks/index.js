@@ -13,6 +13,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import DashboardLayout from '../../../components/DashboardLayout';
 import TaskDetailModal from '../../../components/TaskDetailModal';
 import CreateTaskModal from '../../../components/CreateTaskModal';
+import ChecklistView from '../../../components/ChecklistView';
+import BulkImportModal from '../../../components/BulkImportModal';
 import styles from '../../../assets/style/tasks.module.css';
 import { useNotification } from '../../../context/NotificationContext';
 import { useAuth } from '../../../hooks/useAuth';
@@ -180,6 +182,23 @@ const IconList = () => (
     <line x1="3" y1="4" x2="14" y2="4" />
     <line x1="3" y1="8" x2="14" y2="8" />
     <line x1="3" y1="12" x2="14" y2="12" />
+  </svg>
+);
+
+const IconChecklist = () => (
+  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="2 5 4 7 7 4" />
+    <polyline points="2 10 4 12 7 9" />
+    <line x1="9" y1="5" x2="14" y2="5" />
+    <line x1="9" y1="10" x2="14" y2="10" />
+  </svg>
+);
+
+const IconImport = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
   </svg>
 );
 
@@ -472,7 +491,7 @@ function KanbanView({ tasks, weekStart, onTaskClick, onNewTask, onDelete, onComp
 /* ─────────────────────────────────────────────────────────
    Lista View — agrupada por dia
 ───────────────────────────────────────────────────────── */
-function ListaView({ tasks, weekStart, onTaskClick, onDelete, onComplete, notify }) {
+function ListaView({ tasks, weekStart, scope, onTaskClick, onDelete, onComplete, notify }) {
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
   const todayMillis = todayMs();
 
@@ -583,12 +602,35 @@ function ListaView({ tasks, weekStart, onTaskClick, onDelete, onComplete, notify
         </div>
       )}
 
-      {/* Secoes por dia */}
+      {/* Secoes por dia — em modo Time, subagrupa por cliente (com "Internas /
+         Sem cliente" no final). Em modo Eu, fica plano. */}
       {sections.map((s) => {
         if (s.tasks.length === 0) return null;
         const isToday = s.date.getTime() === todayMillis;
         const wd = WEEKDAY_FULL[s.date.getDay()];
         const dateLabel = `${MONTH_SHORT[s.date.getMonth()]} ${s.date.getDate()}`;
+
+        // Subgrupos por cliente (apenas em modo Time)
+        let clientGroups = null;
+        if (scope === 'team') {
+          const map = new Map();
+          const internal = [];
+          for (const t of s.tasks) {
+            if (t.client_id && t.client_name) {
+              if (!map.has(t.client_id)) map.set(t.client_id, { name: t.client_name, tasks: [] });
+              map.get(t.client_id).tasks.push(t);
+            } else {
+              internal.push(t);
+            }
+          }
+          clientGroups = Array.from(map.entries())
+            .map(([id, g]) => ({ id, name: g.name, tasks: g.tasks }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+          if (internal.length > 0) {
+            clientGroups.push({ id: '__internal', name: 'Internas / Sem cliente', tasks: internal });
+          }
+        }
+
         return (
           <div key={s.iso} className={styles.listSection}>
             <div className={styles.listSectionHeader}>
@@ -600,7 +642,27 @@ function ListaView({ tasks, weekStart, onTaskClick, onDelete, onComplete, notify
               <span className={styles.listSectionCount}>{s.tasks.length}</span>
             </div>
             <div className={styles.listSectionBody}>
-              {s.tasks.map(renderRow)}
+              {clientGroups ? (
+                clientGroups.map((g) => (
+                  <div key={g.id} style={{ marginBottom: 14 }}>
+                    <div style={{
+                      padding: '8px 4px',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.65rem',
+                      color: 'var(--text-secondary)',
+                      letterSpacing: '0.06em',
+                      textTransform: 'uppercase',
+                      borderBottom: '1px solid var(--border-default)',
+                      marginBottom: 4,
+                    }}>
+                      {g.name} <span style={{ color: 'var(--text-muted)' }}>· {g.tasks.length}</span>
+                    </div>
+                    {g.tasks.map(renderRow)}
+                  </div>
+                ))
+              ) : (
+                s.tasks.map(renderRow)
+              )}
             </div>
           </div>
         );
@@ -617,8 +679,9 @@ export default function TasksPage() {
   const { notify } = useNotification();
 
   /* ── State ── */
-  const [scope, setScope] = useState('me');           // me / team
-  const [viewMode, setViewMode] = useState('kanban'); // kanban / lista
+  const [scope, setScope] = useState('me');                 // me / team
+  const [viewMode, setViewMode] = useState('checklist');    // kanban / lista / checklist (default v2)
+  const [viewLoaded, setViewLoaded] = useState(false);      // só persiste depois do fetch inicial
   const [tasks, setTasks] = useState([]);
   const [categories, setCategories] = useState([]);
   const [clients, setClients] = useState([]);
@@ -629,6 +692,9 @@ export default function TasksPage() {
   // Modals
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  // Estado de pré-preenchimento do CreateTaskModal (vindo do Checklist)
+  const [createPrefill, setCreatePrefill] = useState(null);
 
   // Semana exibida
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
@@ -688,12 +754,50 @@ export default function TasksPage() {
     }
   }, []);
 
+  // Preferência de view default por usuário
+  const fetchPreferences = useCallback(async () => {
+    try {
+      const res = await fetch('/api/users/preferences');
+      const data = await res.json();
+      if (data.success && data.preferences?.default_view) {
+        setViewMode(data.preferences.default_view);
+        console.log('[INFO][Tasks] preferência carregada:', data.preferences.default_view);
+      }
+    } catch (err) {
+      console.error('[Tasks] preferences fetch error:', err);
+    } finally {
+      setViewLoaded(true);
+    }
+  }, []);
+
+  // Salva no banco quando o user troca de view (otimista; só após o load inicial)
+  const persistViewMode = useCallback(async (newView) => {
+    if (!viewLoaded) return;
+    try {
+      const res = await fetch('/api/users/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ default_view: newView }),
+      });
+      const data = await res.json();
+      if (!data.success) notify('Não foi possível salvar a preferência', 'warning');
+    } catch (err) {
+      console.error('[Tasks] persist view error:', err);
+    }
+  }, [viewLoaded, notify]);
+
+  function handleChangeViewMode(v) {
+    setViewMode(v);
+    persistViewMode(v); // background — não bloqueia UI
+  }
+
   /* ── Effects ── */
   useEffect(() => {
     fetchCategories();
     fetchClients();
     fetchUsers();
-  }, [fetchCategories, fetchClients, fetchUsers]);
+    fetchPreferences();
+  }, [fetchCategories, fetchClients, fetchUsers, fetchPreferences]);
 
   useEffect(() => {
     if (!authLoading) fetchTasks();
@@ -733,7 +837,16 @@ export default function TasksPage() {
     setSelectedTaskId(taskId);
   }
 
-  function handleNewTask() {
+  function handleNewTask(prefillOrIso) {
+    // Checklist passa { dueDate, isRecurring } como objeto.
+    // Kanban passa a string ISO do dia. Normaliza ambos.
+    if (prefillOrIso && typeof prefillOrIso === 'object') {
+      setCreatePrefill(prefillOrIso);
+    } else if (typeof prefillOrIso === 'string') {
+      setCreatePrefill({ dueDate: prefillOrIso });
+    } else {
+      setCreatePrefill(null);
+    }
     setShowCreateModal(true);
   }
 
@@ -743,6 +856,15 @@ export default function TasksPage() {
 
   function handleCloseCreate() {
     setShowCreateModal(false);
+    setCreatePrefill(null);
+  }
+
+  function handleOpenBulkImport() {
+    setShowBulkImport(true);
+  }
+
+  function handleCloseBulkImport() {
+    setShowBulkImport(false);
   }
 
   function handleRefresh() {
@@ -820,13 +942,22 @@ export default function TasksPage() {
             />
             <ToggleGroup
               options={[
-                { value: 'kanban', label: 'Kanban', icon: <IconKanban /> },
-                { value: 'lista',  label: 'Lista',  icon: <IconList /> },
+                { value: 'checklist', label: 'Checklist', icon: <IconChecklist /> },
+                { value: 'kanban',    label: 'Kanban',    icon: <IconKanban /> },
+                { value: 'lista',     label: 'Lista',     icon: <IconList /> },
               ]}
               value={viewMode}
-              onChange={setViewMode}
+              onChange={handleChangeViewMode}
             />
-            <button className="sigma-btn-primary" onClick={handleNewTask}>
+            <button
+              className="sigma-btn-primary"
+              onClick={handleOpenBulkImport}
+              style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}
+              title="Importar ata e distribuir entre o time via IA"
+            >
+              <IconImport /> Importar Ata
+            </button>
+            <button className="sigma-btn-primary" onClick={() => handleNewTask()}>
               <IconPlus /> Nova Tarefa
             </button>
           </div>
@@ -930,10 +1061,25 @@ export default function TasksPage() {
             onComplete={handleComplete}
             notify={notify}
           />
+        ) : viewMode === 'checklist' ? (
+          <ChecklistView
+            tasks={tasks}
+            weekStart={weekStart}
+            scope={scope}
+            isoDate={isoDate}
+            addDays={addDays}
+            isOverdue={isOverdue}
+            taskDueIso={taskDueIso}
+            onTaskClick={handleTaskClick}
+            onToggleDone={handleComplete}
+            onNewTask={handleNewTask}
+            notify={notify}
+          />
         ) : (
           <ListaView
             tasks={tasks}
             weekStart={weekStart}
+            scope={scope}
             onTaskClick={handleTaskClick}
             onDelete={handleDelete}
             onComplete={handleComplete}
@@ -962,6 +1108,19 @@ export default function TasksPage() {
           clients={clients}
           categories={categories}
           users={users}
+          currentUserId={user?.id}
+          initialDueDate={createPrefill?.dueDate}
+        />
+      )}
+
+      {/* Modal de Importação em massa via IA */}
+      {showBulkImport && (
+        <BulkImportModal
+          onClose={handleCloseBulkImport}
+          onCommitted={handleRefresh}
+          users={users}
+          clients={clients}
+          categories={categories}
           currentUserId={user?.id}
         />
       )}

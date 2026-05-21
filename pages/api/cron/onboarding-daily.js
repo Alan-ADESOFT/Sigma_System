@@ -50,6 +50,7 @@ import {
   wasNotificationSent,
   logNotificationSent,
   syncCurrentDay,
+  getClientGreetingName,
 } from '../../../models/onboarding';
 
 import {
@@ -116,12 +117,13 @@ export default async function handler(req, res) {
           if (already) { results.skipped++; continue; }
 
           const customCompMsg = await getSetting(ob.tenant_id, 'onboarding_msg_completion');
+          const greetingName = getClientGreetingName(ob);
           let message;
           if (customCompMsg) {
-            const firstName = (ob.company_name || '').split(' ')[0];
+            const firstName = (greetingName || '').split(' ')[0];
             message = customCompMsg.replace(/\{NOME\}/gi, firstName);
           } else {
-            message = buildCompletionMessage({ name: ob.company_name });
+            message = buildCompletionMessage({ name: greetingName });
           }
           await sendText(ob.phone, message, { delayTyping: 3 });
           await logNotificationSent(ob.client_id, TOTAL_DAYS, 'completion', message);
@@ -186,9 +188,10 @@ export default async function handler(req, res) {
 
         const link = `${baseUrl}/onboarding/${ob.token}`;
         const customStageMsg = await getSetting(ob.tenant_id, 'onboarding_msg_stage_link');
+        const greetingName = getClientGreetingName(ob);
         let message;
         if (customStageMsg) {
-          const firstName = (ob.company_name || '').split(' ')[0];
+          const firstName = (greetingName || '').split(' ')[0];
           message = customStageMsg
             .replace(/\{NOME\}/gi, firstName)
             .replace(/\{ETAPA\}/gi, String(stage.stage))
@@ -196,7 +199,7 @@ export default async function handler(req, res) {
             .replace(/\{LINK\}/gi, link);
         } else {
           message = buildStageLinkMessage({
-            name: ob.company_name,
+            name: greetingName,
             stageNumber: stage.stage,
             stageTitle: stage.title,
             link,
