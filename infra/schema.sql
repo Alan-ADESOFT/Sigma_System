@@ -416,6 +416,28 @@ CREATE INDEX IF NOT EXISTS idx_finance_charge_log_installment ON finance_charge_
 CREATE INDEX IF NOT EXISTS idx_finance_charge_log_date        ON finance_charge_log(sent_at);
 
 -- ============================================================
+-- 16c. RECURRING_COSTS (custos fixos recorrentes — auto-lançados em company_finances)
+-- ============================================================
+-- Cadastra-se uma vez; o sistema lança a despesa em company_finances a cada mês
+-- (via ensure-on-read no GET /api/financeiro/company e/ou cron recurring-costs).
+-- Idempotência por mês: last_generated_month guarda 'YYYY-MM' do último lançamento.
+CREATE TABLE IF NOT EXISTS recurring_costs (
+    id                   TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id            TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    description          TEXT NOT NULL,
+    value                NUMERIC(12,2) NOT NULL,
+    category_id          TEXT REFERENCES finance_categories(id) ON DELETE SET NULL,
+    day_of_month         INTEGER NOT NULL DEFAULT 1,
+    frequency            TEXT NOT NULL DEFAULT 'monthly',
+    is_active            BOOLEAN NOT NULL DEFAULT true,
+    last_generated_month TEXT,
+    notes                TEXT,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_recurring_costs_tenant ON recurring_costs(tenant_id, is_active);
+
+-- ============================================================
 -- 17. AI_SEARCH_HISTORY (pesquisas web dos agentes)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS ai_search_history (
@@ -738,6 +760,10 @@ CREATE TABLE IF NOT EXISTS onboarding_stages_config (
 );
 CREATE INDEX IF NOT EXISTS idx_onb_config_tenant ON onboarding_stages_config(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_onb_config_day    ON onboarding_stages_config(tenant_id, day_release);
+
+-- Mensagem WhatsApp própria por etapa (libera a etapa). NULL = usa o template
+-- genérico/global. Seedada a partir do documento de onboarding.
+ALTER TABLE onboarding_stages_config ADD COLUMN IF NOT EXISTS whatsapp_message TEXT;
 
 CREATE TABLE IF NOT EXISTS onboarding_rest_days_config (
     id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -1528,7 +1554,7 @@ BEGIN
         'task_comments','meetings','task_templates','task_bot_config',
         'task_recurrences','user_task_preferences',
         'support_modules','support_lessons',
-        'finance_categories',
+        'finance_categories','recurring_costs',
         'content_plan_statuses','content_plans','content_plan_creatives','content_plan_share_tokens',
         'referrals','referral_config',
         'comercial_lead_lists','comercial_pipeline_columns','comercial_pipeline_leads',

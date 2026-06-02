@@ -657,9 +657,9 @@ export const ONBOARDING_STAGES = [
    DIAS DE DESCANSO — sem perguntas, só mensagem WhatsApp
    ───────────────────────────────────────────────────────────────────────────── */
 export const REST_DAYS = {
-  4:  'Tá indo muito bem. Suas respostas já mostram muita coisa. Amanhã: campo de batalha — concorrentes. Descansa hoje.',
-  8:  'Metade. Você tá na frente de 99% dos empresários. Segunda metade: dados, números, vendas. Amanhã: história da sua marca. A etapa mais bonita. Prepara o coração.',
-  13: 'Último respiro. Já olhou tudo com lupa. Amanhã e depois: objetivos e fechamento. Vamos terminar com força.',
+  4:  'Tá indo muito bem.\nSuas respostas já mostram muita coisa.\n\nAmanhã a gente entra no campo de batalha: concorrentes.\nDescansa hoje.',
+  8:  'Metade do caminho.\nVocê já tá na frente de 99% dos empresários que tentam estratégia.\n\nSegunda metade: dados, números, vendas, e a parte mais bonita — a história da sua marca.\n\nAmanhã a gente entra na sua história. Prepara o coração.',
+  13: 'Último respiro.\nVocê já olhou pra dentro do seu negócio com lupa.\nPouca gente tem coragem de fazer isso.\n\nAmanhã e depois: objetivos e fechamento.\nVamo terminar com força.',
 };
 
 /* ─────────────────────────────────────────────────────────────────────────────

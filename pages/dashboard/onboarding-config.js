@@ -239,6 +239,7 @@ function StageEditModal({ stage, onClose, onSave }) {
   const [videoDuration, setVideoDuration] = useState(stage.videoDuration || '');
   const [timeEstimate, setTimeEstimate] = useState(stage.timeEstimate || '');
   const [insightText, setInsightText]   = useState(stage.insightText || '');
+  const [whatsappMessage, setWhatsappMessage] = useState(stage.whatsappMessage || '');
   const [questions, setQuestions]       = useState(stage.questions || []);
   const [saving, setSaving]             = useState(false);
 
@@ -268,6 +269,7 @@ function StageEditModal({ stage, onClose, onSave }) {
       video_duration: videoDuration ? parseInt(videoDuration, 10) : null,
       time_estimate: timeEstimate,
       insight_text: insightText,
+      whatsapp_message: whatsappMessage,
       questions_json: questions,
     });
     setSaving(false);
@@ -329,6 +331,20 @@ function StageEditModal({ stage, onClose, onSave }) {
             onUrlChange={setVideoUrl}
             onDurationChange={setVideoDuration}
           />
+        </div>
+
+        <div className={styles.modalSection}>
+          <div className={styles.modalSectionLabel}>MENSAGEM WHATSAPP (LIBERA A ETAPA)</div>
+          <textarea
+            className={styles.textarea}
+            value={whatsappMessage}
+            onChange={e => setWhatsappMessage(e.target.value)}
+            rows={6}
+            placeholder="Mensagem enviada no WhatsApp quando esta etapa é liberada. Use {LINK} para o link; {NOME}, {ETAPA}, {TITULO} são opcionais."
+          />
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-muted)', marginTop: 6 }}>
+            Tags: {'{NOME}'} · {'{ETAPA}'} · {'{TITULO}'} · {'{LINK}'} — se vazio, usa o template padrão.
+          </div>
         </div>
 
         <div className={styles.modalSection}>

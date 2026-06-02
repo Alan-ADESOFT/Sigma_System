@@ -9,6 +9,7 @@
 
 import { query, queryOne } from '../../../infra/db';
 import { resolveTenantId } from '../../../infra/get-tenant-id';
+const recurringModel = require('../../../models/recurringCost.model');
 
 export default async function handler(req, res) {
   console.log('[INFO][API:/api/financeiro/company] Requisição recebida', { method: req.method, query: req.query });
@@ -16,6 +17,15 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
+      // Ensure-on-read: garante que os custos recorrentes do mês corrente já
+      // estejam lançados em company_finances (idempotente, best-effort).
+      try {
+        const monthKey = new Date().toLocaleString('en-CA', { timeZone: 'America/Sao_Paulo' }).slice(0, 7);
+        await recurringModel.generateForMonth(tenantId, monthKey);
+      } catch (genErr) {
+        console.error('[WARN][API:/api/financeiro/company] Falha ao gerar custos recorrentes', { error: genErr.message });
+      }
+
       const { month, year, type, dateFrom, dateTo, period, categoryId } = req.query;
       let sql = `SELECT cf.*, fc.name AS category_name, fc.color AS category_color, fc.type AS category_type
                  FROM company_finances cf

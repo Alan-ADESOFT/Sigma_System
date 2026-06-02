@@ -24,6 +24,7 @@ const COLOR_PALETTE = [
 ];
 
 const MSG_TABS = [
+  { key: 'msgManualCharge', label: 'Cobrança manual' },
   { key: 'msgOneDayBefore', label: '1 dia antes' },
   { key: 'msgDueToday',     label: 'No dia' },
   { key: 'msgOverdueOne',   label: '1 dia atraso' },
@@ -32,6 +33,7 @@ const MSG_TABS = [
 ];
 
 const VARIABLES = {
+  msgManualCharge: ['{nome}', '{numero}', '{data}', '{valor}', '{dias_atraso}'],
   msgOneDayBefore: ['{nome}', '{numero}', '{data}', '{valor}'],
   msgDueToday:     ['{nome}', '{numero}', '{data}', '{valor}'],
   msgOverdueOne:   ['{nome}', '{numero}', '{data}', '{valor}'],
@@ -66,6 +68,10 @@ function previewMessage(template) {
     msg = msg.replace(new RegExp(k.replace(/[{}]/g, '\\$&'), 'g'), v);
   }
   return msg;
+}
+
+function fmtBRL(v) {
+  return (parseFloat(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 /* ── SVG icons inline ── */
@@ -149,7 +155,7 @@ export default function SettingsFinanceiro() {
   const [savingCat, setSavingCat] = useState(false);
 
   /* ── Messages state ── */
-  const [activeMsg, setActiveMsg] = useState('msgOneDayBefore');
+  const [activeMsg, setActiveMsg] = useState('msgManualCharge');
   const textareaRef = useRef(null);
 
   /* ── Bot config state ── */
@@ -158,6 +164,14 @@ export default function SettingsFinanceiro() {
   const [loadingBot, setLoadingBot] = useState(true);
   const [savingBot, setSavingBot] = useState(false);
   const [newNumber, setNewNumber] = useState('');
+
+  /* ── Recurring costs state ── */
+  const [recurring, setRecurring] = useState([]);
+  const [loadingRec, setLoadingRec] = useState(true);
+  const [showRecModal, setShowRecModal] = useState(false);
+  const [editingRec, setEditingRec] = useState(null);
+  const [recForm, setRecForm] = useState({ description: '', value: '', category_id: '', day_of_month: '1', notes: '' });
+  const [savingRec, setSavingRec] = useState(false);
 
   /* ── Load data ── */
   async function loadCategories() {
@@ -179,7 +193,15 @@ export default function SettingsFinanceiro() {
     finally { setLoadingBot(false); }
   }
 
-  useEffect(() => { loadCategories(); loadBotConfig(); }, []);
+  async function loadRecurring() {
+    try {
+      const j = await fetch('/api/financeiro/recurring').then(r => r.json());
+      if (j.success) setRecurring(j.items || []);
+    } catch (e) { notify('Erro ao carregar custos recorrentes', 'error'); }
+    finally { setLoadingRec(false); }
+  }
+
+  useEffect(() => { loadCategories(); loadBotConfig(); loadRecurring(); }, []);
 
   /* ── Category CRUD ── */
   function openCatModal(cat = null) {
@@ -233,6 +255,86 @@ export default function SettingsFinanceiro() {
       loadCategories();
     } catch (err) {
       notify(err.message || 'Erro ao excluir', 'error');
+    }
+  }
+
+  /* ── Recurring costs CRUD ── */
+  function recValueMask(e) {
+    const raw = e.target.value.replace(/\D/g, '');
+    if (!raw) { setRecForm((f) => ({ ...f, value: '' })); return; }
+    const cents = parseInt(raw, 10);
+    setRecForm((f) => ({ ...f, value: (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }));
+  }
+
+  function openRecModal(rec = null) {
+    if (rec) {
+      setEditingRec(rec.id);
+      setRecForm({
+        description: rec.description,
+        value: parseFloat(rec.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        category_id: rec.category_id || '',
+        day_of_month: String(rec.day_of_month || 1),
+        notes: rec.notes || '',
+      });
+    } else {
+      setEditingRec(null);
+      setRecForm({ description: '', value: '', category_id: '', day_of_month: '1', notes: '' });
+    }
+    setShowRecModal(true);
+  }
+
+  async function handleSaveRec() {
+    const rawVal = parseFloat((recForm.value || '0').replace(/\./g, '').replace(',', '.')) || 0;
+    if (!recForm.description.trim()) { notify('Informe a descrição', 'warning'); return; }
+    if (!rawVal) { notify('Informe um valor válido', 'warning'); return; }
+    setSavingRec(true);
+    try {
+      const payload = {
+        description: recForm.description.trim(),
+        value: rawVal,
+        category_id: recForm.category_id || null,
+        day_of_month: parseInt(recForm.day_of_month, 10) || 1,
+        notes: recForm.notes || null,
+      };
+      const url = editingRec ? `/api/financeiro/recurring/${editingRec}` : '/api/financeiro/recurring';
+      const method = editingRec ? 'PUT' : 'POST';
+      const j = await fetch(url, {
+        method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      }).then((r) => r.json());
+      if (!j.success) throw new Error(j.error);
+      notify(editingRec ? 'Custo recorrente atualizado' : 'Custo recorrente criado', 'success');
+      setShowRecModal(false);
+      setEditingRec(null);
+      loadRecurring();
+    } catch (err) {
+      notify(err.message || 'Erro ao salvar custo recorrente', 'error');
+    } finally {
+      setSavingRec(false);
+    }
+  }
+
+  async function handleDeleteRec(id) {
+    if (!confirm('Excluir este custo recorrente? Os lançamentos já feitos permanecem no Financeiro.')) return;
+    try {
+      const j = await fetch(`/api/financeiro/recurring/${id}`, { method: 'DELETE' }).then((r) => r.json());
+      if (!j.success) throw new Error(j.error);
+      notify('Custo recorrente excluído', 'success');
+      loadRecurring();
+    } catch (err) {
+      notify(err.message || 'Erro ao excluir', 'error');
+    }
+  }
+
+  async function toggleRecActive(rec) {
+    try {
+      const j = await fetch(`/api/financeiro/recurring/${rec.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !rec.is_active }),
+      }).then((r) => r.json());
+      if (!j.success) throw new Error(j.error);
+      loadRecurring();
+    } catch (err) {
+      notify(err.message || 'Erro ao atualizar', 'error');
     }
   }
 
@@ -387,6 +489,81 @@ export default function SettingsFinanceiro() {
         </div>
 
         {/* ════════════════════════════════════════════════
+            CUSTOS RECORRENTES
+        ════════════════════════════════════════════════ */}
+        <div className={styles.sectionCard}>
+          <div className={styles.sectionHeader}>
+            <div className={styles.sectionHeaderLeft}>
+              <div className={styles.sectionTitleRow}>
+                <span className={styles.sectionDot} />
+                <span className={styles.sectionTitleText}>Custos recorrentes</span>
+                <span className={styles.sectionLine} />
+              </div>
+              <div className={styles.sectionDescription}>
+                Cadastre os custos fixos uma vez. Todo mês o sistema lança a despesa automaticamente no Financeiro — sem precisar recadastrar.
+              </div>
+            </div>
+            <button className="sigma-btn-primary" onClick={() => openRecModal(null)}>
+              <IconPlus size={12} /> Novo Custo
+            </button>
+          </div>
+
+          {loadingRec ? (
+            <div className={styles.catEmpty}>carregando...</div>
+          ) : recurring.length === 0 ? (
+            <div className={styles.catEmpty}>nenhum custo recorrente cadastrado</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {recurring.map((rec) => (
+                <div key={rec.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+                  background: 'rgba(17,17,17,0.5)', border: '1px solid rgba(255,255,255,0.06)',
+                  borderRadius: 8, opacity: rec.is_active ? 1 : 0.5,
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-primary)', fontWeight: 600 }}>
+                      {rec.description}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.66rem', color: '#ff6680', fontWeight: 600 }}>
+                        {fmtBRL(rec.value)}
+                      </span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+                        · todo dia {rec.day_of_month}
+                      </span>
+                      {rec.category_name && (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 20,
+                          fontSize: '0.58rem', fontFamily: 'var(--font-mono)', fontWeight: 600,
+                          background: `${rec.category_color || '#6366f1'}20`,
+                          border: `1px solid ${rec.category_color || '#6366f1'}`, color: rec.category_color || '#6366f1',
+                        }}>
+                          {rec.category_name}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`${styles.toggleSwitch} ${rec.is_active ? styles.toggleSwitchActive : ''}`}
+                    onClick={() => toggleRecActive(rec)}
+                    title={rec.is_active ? 'Ativo' : 'Inativo'}
+                  >
+                    <div className={`${styles.toggleKnob} ${rec.is_active ? styles.toggleKnobActive : ''}`} />
+                  </button>
+                  <button className={styles.iconBtn} onClick={() => openRecModal(rec)} title="Editar">
+                    <IconEdit size={12} />
+                  </button>
+                  <button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => handleDeleteRec(rec.id)} title="Excluir">
+                    <IconTrash size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ════════════════════════════════════════════════
             MENSAGENS DE COBRANCA
         ════════════════════════════════════════════════ */}
         <div className={styles.sectionCard}>
@@ -398,7 +575,7 @@ export default function SettingsFinanceiro() {
                 <span className={styles.sectionLine} />
               </div>
               <div className={styles.sectionDescription}>
-                Personalize as mensagens enviadas em cada etapa da cobrança. Use as variáveis para inserir dados dinâmicos do cliente.
+                A aba "Cobrança manual" é a mensagem usada pelo botão COBRAR no Financeiro (pré-preenchida e editável antes do envio). As demais abas são da cobrança automática (desligada por padrão). Use as variáveis para inserir dados dinâmicos do cliente.
               </div>
             </div>
           </div>
@@ -485,7 +662,7 @@ export default function SettingsFinanceiro() {
                 <span className={styles.sectionLine} />
               </div>
               <div className={styles.sectionDescription}>
-                Defina números, dias e horário do bot de cobrança. As mensagens acima são disparadas automaticamente.
+                Cobrança automática diária (cron). Desligada por padrão — a cobrança hoje é manual pelo botão COBRAR no Financeiro. Os campos abaixo só têm efeito se a cobrança automática for reativada.
               </div>
             </div>
           </div>
@@ -765,6 +942,109 @@ export default function SettingsFinanceiro() {
                 disabled={savingCat}
               >
                 {savingCat ? 'Salvando...' : editingCat ? 'Salvar' : 'Criar Categoria'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════
+          MODAL — CUSTO RECORRENTE
+      ════════════════════════════════════════════════ */}
+      {showRecModal && (
+        <div className={styles.modalOverlay} onClick={() => setShowRecModal(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <div className={styles.modalHeaderTitleBox}>
+                <div className={styles.modalHeaderBadge}>
+                  <IconTag />
+                </div>
+                <div>
+                  <h2 className={styles.modalTitle}>
+                    {editingRec ? 'Editar Custo Recorrente' : 'Novo Custo Recorrente'}
+                  </h2>
+                  <div className={styles.modalSubtitle}>
+                    Lançado automaticamente todo mês como despesa no Financeiro.
+                  </div>
+                </div>
+              </div>
+              <button className={styles.modalCloseBtn} onClick={() => setShowRecModal(false)}>
+                <IconX />
+              </button>
+            </div>
+
+            <div className={styles.modalBody}>
+              <div>
+                <label className={styles.modalLabel}>
+                  Descrição <span className={styles.required}>*</span>
+                </label>
+                <input
+                  className={styles.modalInput}
+                  value={recForm.description}
+                  onChange={(e) => setRecForm((p) => ({ ...p, description: e.target.value }))}
+                  placeholder="Ex: Aluguel, Salários, Software, Contador..."
+                  autoFocus
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label className={styles.modalLabel}>
+                    Valor (R$) <span className={styles.required}>*</span>
+                  </label>
+                  <input
+                    className={styles.modalInput}
+                    value={recForm.value}
+                    onChange={recValueMask}
+                    placeholder="0,00"
+                  />
+                </div>
+                <div>
+                  <label className={styles.modalLabel}>
+                    Dia do mês <span className={styles.required}>*</span>
+                  </label>
+                  <input
+                    className={styles.modalInput}
+                    type="number"
+                    min="1"
+                    max="31"
+                    value={recForm.day_of_month}
+                    onChange={(e) => setRecForm((p) => ({ ...p, day_of_month: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className={styles.modalLabel}>Categoria</label>
+                <select
+                  className={styles.modalSelect}
+                  value={recForm.category_id}
+                  onChange={(e) => setRecForm((p) => ({ ...p, category_id: e.target.value }))}
+                >
+                  <option value="">Sem categoria</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className={styles.modalLabel}>Observações</label>
+                <input
+                  className={styles.modalInput}
+                  value={recForm.notes}
+                  onChange={(e) => setRecForm((p) => ({ ...p, notes: e.target.value }))}
+                  placeholder="Opcional..."
+                />
+              </div>
+            </div>
+
+            <div className={styles.modalFooter}>
+              <button className="btn btn-secondary" onClick={() => setShowRecModal(false)}>
+                Cancelar
+              </button>
+              <button className="sigma-btn-primary" onClick={handleSaveRec} disabled={savingRec}>
+                {savingRec ? 'Salvando...' : editingRec ? 'Salvar' : 'Criar Custo'}
               </button>
             </div>
           </div>

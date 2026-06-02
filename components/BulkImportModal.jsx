@@ -109,12 +109,14 @@ export default function BulkImportModal({
 
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Falha no parse');
-      if (!data.tasks || data.tasks.length === 0) {
-        notify('A IA não conseguiu extrair tarefas desse texto', 'warning');
+      const taskCount = data.tasks?.length || 0;
+      const meetingCount = data.meetings?.length || 0;
+      if (taskCount === 0 && meetingCount === 0) {
+        notify('A IA não conseguiu extrair tarefas ou reuniões desse texto', 'warning');
         return;
       }
-      console.log('[SUCESSO][bulkImport/modal] parse', { tasks: data.tasks.length });
-      setParsed({ tasks: data.tasks, warnings: data.warnings || [], meta: data.meta || {} });
+      console.log('[SUCESSO][bulkImport/modal] parse', { tasks: taskCount, meetings: meetingCount });
+      setParsed({ tasks: data.tasks || [], meetings: data.meetings || [], warnings: data.warnings || [], meta: data.meta || {} });
     } catch (err) {
       console.error('[ERRO][bulkImport/modal]', err.message);
       notify('Erro ao processar com IA: ' + err.message, 'error');
@@ -128,6 +130,7 @@ export default function BulkImportModal({
     return (
       <BulkImportPreview
         initialTasks={parsed.tasks}
+        initialMeetings={parsed.meetings}
         warnings={parsed.warnings}
         meta={parsed.meta}
         users={users}

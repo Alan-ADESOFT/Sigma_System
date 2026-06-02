@@ -15,6 +15,7 @@ import Link from 'next/link';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useNotification } from '../../context/NotificationContext';
 import { Skeleton, SkeletonCard, SkeletonTable } from '../../components/Skeleton';
+import ChargeModal from '../../components/financeiro/ChargeModal';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -147,12 +148,19 @@ export default function FinanceiroDashboard() {
 
   const [error, setError] = useState(null);
 
-  /* Filtros */
+  /* Filtros — default = mês/ano corrente (1.1) */
+  const CUR_YEAR = String(new Date().getFullYear());
+  const CUR_MM   = String(new Date().getMonth() + 1).padStart(2, '0');
+  const CUR_MONTHKEY = `${CUR_YEAR}-${CUR_MM}`;
   const [filterClient,    setFilterClient   ] = useState('');
-  const [filterMonth,     setFilterMonth    ] = useState('');
-  const [filterYear,      setFilterYear     ] = useState(String(new Date().getFullYear()));
-  const [filterDashMonth, setFilterDashMonth] = useState('');
+  const [filterMonth,     setFilterMonth    ] = useState(CUR_MONTHKEY);
+  const [filterYear,      setFilterYear     ] = useState(CUR_YEAR);
+  const [filterDashMonth, setFilterDashMonth] = useState(CUR_MM);
   const [filterStatus,    setFilterStatus   ] = useState('all');
+
+  /* Cobrança manual (1.2) */
+  const [chargeTemplate, setChargeTemplate] = useState('');
+  const [chargingInst,   setChargingInst  ] = useState(null);
 
   const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
@@ -226,7 +234,16 @@ export default function FinanceiroDashboard() {
     }
   }
 
-  useEffect(() => { loadInstallments(); loadCategories(); }, []);
+  async function loadChargeConfig() {
+    try {
+      const j = await fetch('/api/finance-bot-config').then(r => r.json());
+      if (j.success) setChargeTemplate(j.config?.msgManualCharge || '');
+    } catch (e) {
+      console.error('[ERRO][Frontend:Financeiro] Falha ao carregar template de cobrança', { error: e.message });
+    }
+  }
+
+  useEffect(() => { loadInstallments(); loadCategories(); loadChargeConfig(); }, []);
   useEffect(() => { loadCompany(); }, [compPeriod, compDateFrom, compDateTo, compTypeFilter, compCatFilter, filterYear]);
 
   /* Toggle installment */
@@ -410,8 +427,9 @@ export default function FinanceiroDashboard() {
 
   /* Filtros para tab parcelas */
   const months = useMemo(() => {
-    const keys = [...new Set(installments.map(i => monthKey(i.due_date)))].sort().reverse();
-    return keys;
+    const set = new Set(installments.map(i => monthKey(i.due_date)).filter(Boolean));
+    set.add(CUR_MONTHKEY); // mês corrente sempre selecionável (1.1)
+    return [...set].sort().reverse();
   }, [installments]);
 
   const clientNames = useMemo(() => {
@@ -765,13 +783,22 @@ export default function FinanceiroDashboard() {
                                   </td>
                                   <td style={{ padding: '10px 14px', textAlign: 'right' }}>
                                     {inst.status !== 'paid' ? (
-                                      <button onClick={() => toggleInst(inst)} style={{
-                                        padding: '4px 12px', borderRadius: 5, cursor: 'pointer', whiteSpace: 'nowrap',
-                                        border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)',
-                                        color: '#22c55e', fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
-                                      }}>
-                                        Marcar Pago
-                                      </button>
+                                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                                        <button onClick={() => setChargingInst(inst)} title="Enviar cobrança no WhatsApp" style={{
+                                          padding: '4px 12px', borderRadius: 5, cursor: 'pointer', whiteSpace: 'nowrap',
+                                          border: '1px solid rgba(255,0,51,0.35)', background: 'rgba(255,0,51,0.08)',
+                                          color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
+                                        }}>
+                                          Cobrar
+                                        </button>
+                                        <button onClick={() => toggleInst(inst)} style={{
+                                          padding: '4px 12px', borderRadius: 5, cursor: 'pointer', whiteSpace: 'nowrap',
+                                          border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)',
+                                          color: '#22c55e', fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600,
+                                        }}>
+                                          Marcar Pago
+                                        </button>
+                                      </div>
                                     ) : (
                                       <button onClick={() => toggleInst(inst)} style={{
                                         padding: '4px 12px', borderRadius: 5, cursor: 'pointer', whiteSpace: 'nowrap',
@@ -1071,6 +1098,19 @@ export default function FinanceiroDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Popup de cobrança manual */}
+      {chargingInst && (
+        <ChargeModal
+          installment={chargingInst}
+          template={chargeTemplate}
+          onClose={() => setChargingInst(null)}
+          onSent={() => {
+            setChargingInst(null);
+            notify('Cobrança enviada no WhatsApp', 'success');
+          }}
+        />
       )}
     </DashboardLayout>
   );

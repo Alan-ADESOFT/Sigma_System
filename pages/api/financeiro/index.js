@@ -26,6 +26,8 @@ export default async function handler(req, res) {
            mc.id          AS client_id,
            mc.company_name,
            mc.logo_url,
+           mc.phone,
+           mc.whatsapp_group_id,
            cc.frequency,
            cc.contract_value AS total_contract_value,
            cc.monthly_value,

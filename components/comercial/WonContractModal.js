@@ -51,7 +51,14 @@ export default function WonContractModal({ lead, onClose, onSuccess }) {
   function setField(k, v)  { setClient(s => ({ ...s, [k]: v })); }
   function setCField(k, v) { setContract(s => ({ ...s, [k]: v })); }
 
+  // Campos mínimos pra um cliente utilizável (financeiro/conteúdo dependem deles).
+  const canSubmit = client.mainProduct.trim() && client.avgTicket.trim();
+
   async function submit() {
+    if (!canSubmit) {
+      notify('Preencha o produto principal e o ticket médio antes de fechar', 'warning');
+      return;
+    }
     setSubmitting(true);
     try {
       const body = { ...client };
@@ -119,20 +126,25 @@ export default function WonContractModal({ lead, onClose, onSuccess }) {
       size="lg"
       primaryLabel={submitting ? 'Fechando...' : 'Confirmar fechamento'}
       onPrimary={submit}
+      primaryDisabled={!canSubmit}
       primaryLoading={submitting}
       secondaryLabel="Cancelar"
     >
       <SectionTitle>Dados do cliente</SectionTitle>
 
+      <InfoBox variant="info">
+        Produto principal e ticket médio são obrigatórios pra criar o cliente. Os demais campos podem ser completados depois na ficha.
+      </InfoBox>
+
       <Row2>
-        <Field label="Produto principal">
+        <Field label="Produto principal" required>
           <Input
             value={client.mainProduct}
             placeholder="Ex: Gestão de tráfego + criação"
             onChange={e => setField('mainProduct', e.target.value)}
           />
         </Field>
-        <Field label="Ticket médio">
+        <Field label="Ticket médio" required>
           <Input
             value={client.avgTicket}
             placeholder="Ex: R$ 5.000/mês"

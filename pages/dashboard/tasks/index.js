@@ -177,11 +177,10 @@ const IconKanban = () => (
   </svg>
 );
 
-const IconList = () => (
+const IconTag = () => (
   <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="3" y1="4" x2="14" y2="4" />
-    <line x1="3" y1="8" x2="14" y2="8" />
-    <line x1="3" y1="12" x2="14" y2="12" />
+    <path d="M2 2h5l7 7-5 5-7-7V2z" />
+    <circle cx="5" cy="5" r="1" />
   </svg>
 );
 
@@ -489,184 +488,137 @@ function KanbanView({ tasks, weekStart, onTaskClick, onNewTask, onDelete, onComp
 }
 
 /* ─────────────────────────────────────────────────────────
-   Lista View — agrupada por dia
+   Linha de tarefa reutilizável (usada pela visão Por Categoria)
 ───────────────────────────────────────────────────────── */
-function ListaView({ tasks, weekStart, scope, onTaskClick, onDelete, onComplete, notify }) {
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
-  const todayMillis = todayMs();
-
-  const overdue = useMemo(() => tasks.filter(isOverdue), [tasks]);
-
-  const sections = useMemo(() => {
-    const map = {};
-    days.forEach((d) => { map[isoDate(d)] = []; });
-
-    for (const t of tasks) {
-      if (isOverdue(t)) continue;
-      const iso = taskDueIso(t);
-      if (iso && map[iso] !== undefined) {
-        map[iso].push(t);
-      }
-    }
-
-    return days.map((d) => ({
-      iso: isoDate(d),
-      date: d,
-      tasks: map[isoDate(d)] || [],
-    }));
-  }, [tasks, days]);
-
-  function renderRow(t) {
-    const blocked = t.has_pending_deps;
-    const done = t.status === 'done';
-    const pri = PRIORITY_MAP[t.priority] || PRIORITY_MAP.normal;
-    return (
-      <div
-        key={t.id}
-        className={`${styles.listRow} ${blocked ? styles.listRowBlocked : ''}`}
-        onClick={() => {
-          if (blocked) {
-            notify('Tarefa bloqueada por dependencias pendentes', 'warning');
-            return;
-          }
-          onTaskClick(t.id);
-        }}
-      >
-        <div className={styles.listRowTitle}>
-          {blocked && <span className={styles.lockIcon}><IconLock /></span>}
-          <span className={styles.listRowTitleText}>{t.title}</span>
-        </div>
-        <div className={styles.listRowMeta}>
-          {t.category_name && (
-            <span
-              className={styles.categoryBadge}
-              style={{
-                background: `${t.category_color || '#525252'}18`,
-                border: `1px solid ${t.category_color || '#525252'}40`,
-                color: t.category_color || '#525252',
-              }}
-            >
-              {t.category_name}
-            </span>
-          )}
-          <span className={`${styles.taskBadge} ${styles[pri.cls]}`}>{pri.label}</span>
-          {t.client_name && <span className={styles.listRowClient}>{t.client_name}</span>}
-          {t.assigned_to_name && (
-            <div className={styles.taskAssignee} title={t.assigned_to_name}>
-              {getInitials(t.assigned_to_name)}
-            </div>
-          )}
-          {!done && (
-            <button
-              type="button"
-              className={`${styles.actionBtn} ${styles.actionBtnDone}`}
-              onClick={(e) => { e.stopPropagation(); onComplete && onComplete(t); }}
-              title="Concluir tarefa"
-              style={{ opacity: 1 }}
-            >
-              <IconCheck />
-            </button>
-          )}
+function renderTaskRow(t, { onTaskClick, onDelete, onComplete, notify }) {
+  const blocked = t.has_pending_deps;
+  const done = t.status === 'done';
+  const pri = PRIORITY_MAP[t.priority] || PRIORITY_MAP.normal;
+  return (
+    <div
+      key={t.id}
+      className={`${styles.listRow} ${blocked ? styles.listRowBlocked : ''}`}
+      onClick={() => {
+        if (blocked) {
+          notify('Tarefa bloqueada por dependencias pendentes', 'warning');
+          return;
+        }
+        onTaskClick(t.id);
+      }}
+    >
+      <div className={styles.listRowTitle}>
+        {blocked && <span className={styles.lockIcon}><IconLock /></span>}
+        <span className={styles.listRowTitleText}>{t.title}</span>
+      </div>
+      <div className={styles.listRowMeta}>
+        {t.category_name && (
+          <span
+            className={styles.categoryBadge}
+            style={{
+              background: `${t.category_color || '#525252'}18`,
+              border: `1px solid ${t.category_color || '#525252'}40`,
+              color: t.category_color || '#525252',
+            }}
+          >
+            {t.category_name}
+          </span>
+        )}
+        <span className={`${styles.taskBadge} ${styles[pri.cls]}`}>{pri.label}</span>
+        {t.client_name && <span className={styles.listRowClient}>{t.client_name}</span>}
+        {t.assigned_to_name && (
+          <div className={styles.taskAssignee} title={t.assigned_to_name}>
+            {getInitials(t.assigned_to_name)}
+          </div>
+        )}
+        {!done && (
           <button
             type="button"
-            className={`${styles.actionBtn} ${styles.actionBtnDelete}`}
-            onClick={(e) => { e.stopPropagation(); onDelete && onDelete(t); }}
-            title="Excluir tarefa"
+            className={`${styles.actionBtn} ${styles.actionBtnDone}`}
+            onClick={(e) => { e.stopPropagation(); onComplete && onComplete(t); }}
+            title="Concluir tarefa"
             style={{ opacity: 1 }}
           >
-            <IconTrash />
+            <IconCheck />
           </button>
-        </div>
+        )}
+        <button
+          type="button"
+          className={`${styles.actionBtn} ${styles.actionBtnDelete}`}
+          onClick={(e) => { e.stopPropagation(); onDelete && onDelete(t); }}
+          title="Excluir tarefa"
+          style={{ opacity: 1 }}
+        >
+          <IconTrash />
+        </button>
       </div>
-    );
-  }
+    </div>
+  );
+}
+
+/* Ordem fixa das categorias na visão Por Categoria. */
+const CATEGORY_ORDER = ['CLIENTES', 'OUTROS', 'COMERCIAL', 'SISTEMA', 'FINANCEIRO', 'CONTABILIDADE'];
+
+/* ─────────────────────────────────────────────────────────
+   Categoria View — agrupada por categoria (todas as tarefas)
+───────────────────────────────────────────────────────── */
+function CategoriaView({ tasks, categories, onTaskClick, onDelete, onComplete, notify }) {
+  const colorByName = useMemo(() => {
+    const m = {};
+    (categories || []).forEach((c) => { m[c.name] = c.color; });
+    return m;
+  }, [categories]);
+
+  const tasksByName = useMemo(() => {
+    const m = new Map();
+    for (const t of tasks) {
+      const key = t.category_name || '__none';
+      if (!m.has(key)) m.set(key, []);
+      m.get(key).push(t);
+    }
+    return m;
+  }, [tasks]);
+
+  const sections = useMemo(() => {
+    const used = new Set();
+    const out = [];
+    // As 6 categorias fixas sempre aparecem (mesmo vazias).
+    for (const name of CATEGORY_ORDER) {
+      out.push({ name, color: colorByName[name], tasks: tasksByName.get(name) || [] });
+      used.add(name);
+    }
+    // Categorias extras (criadas à mão) só aparecem se tiverem tarefas.
+    for (const [key, list] of tasksByName.entries()) {
+      if (key === '__none' || used.has(key)) continue;
+      out.push({ name: key, color: colorByName[key], tasks: list });
+    }
+    const none = tasksByName.get('__none');
+    if (none && none.length) out.push({ name: 'Sem categoria', color: '#525252', tasks: none });
+    return out;
+  }, [tasksByName, colorByName]);
 
   if (tasks.length === 0) {
-    return <div className={styles.emptyBlock}>Nenhuma tarefa nesta semana</div>;
+    return <div className={styles.emptyBlock}>Nenhuma tarefa</div>;
   }
 
   return (
     <div>
-      {/* Atrasadas no topo */}
-      {overdue.length > 0 && (
-        <div className={styles.listSection}>
-          <div className={`${styles.listSectionHeader} ${styles.listSectionHeaderOverdue}`}>
-            <span className={`${styles.listSectionLabel} ${styles.listSectionLabelOverdue}`}>
-              // ATRASADAS
+      {sections.map((g) => (
+        <div key={g.name} className={styles.listSection}>
+          <div className={styles.listSectionHeader}>
+            <span className={styles.listSectionLabel} style={g.color ? { color: g.color } : undefined}>
+              {g.name.toUpperCase()}
             </span>
-            <span className={styles.listSectionCount}>{overdue.length}</span>
+            <span className={styles.listSectionCount}>{g.tasks.length}</span>
           </div>
           <div className={styles.listSectionBody}>
-            {overdue.map(renderRow)}
+            {g.tasks.length === 0 ? (
+              <div className={styles.columnEmpty} style={{ padding: '10px 4px' }}>nenhuma tarefa</div>
+            ) : (
+              g.tasks.map((t) => renderTaskRow(t, { onTaskClick, onDelete, onComplete, notify }))
+            )}
           </div>
         </div>
-      )}
-
-      {/* Secoes por dia — em modo Time, subagrupa por cliente (com "Internas /
-         Sem cliente" no final). Em modo Eu, fica plano. */}
-      {sections.map((s) => {
-        if (s.tasks.length === 0) return null;
-        const isToday = s.date.getTime() === todayMillis;
-        const wd = WEEKDAY_FULL[s.date.getDay()];
-        const dateLabel = `${MONTH_SHORT[s.date.getMonth()]} ${s.date.getDate()}`;
-
-        // Subgrupos por cliente (apenas em modo Time)
-        let clientGroups = null;
-        if (scope === 'team') {
-          const map = new Map();
-          const internal = [];
-          for (const t of s.tasks) {
-            if (t.client_id && t.client_name) {
-              if (!map.has(t.client_id)) map.set(t.client_id, { name: t.client_name, tasks: [] });
-              map.get(t.client_id).tasks.push(t);
-            } else {
-              internal.push(t);
-            }
-          }
-          clientGroups = Array.from(map.entries())
-            .map(([id, g]) => ({ id, name: g.name, tasks: g.tasks }))
-            .sort((a, b) => a.name.localeCompare(b.name));
-          if (internal.length > 0) {
-            clientGroups.push({ id: '__internal', name: 'Internas / Sem cliente', tasks: internal });
-          }
-        }
-
-        return (
-          <div key={s.iso} className={styles.listSection}>
-            <div className={styles.listSectionHeader}>
-              <span className={styles.listSectionLabel} style={isToday ? { color: 'var(--brand-500)' } : undefined}>
-                {wd.toUpperCase()}
-              </span>
-              <span className={styles.listSectionDate}>{dateLabel}</span>
-              {isToday && <span className={styles.columnTodayBadge}>HOJE</span>}
-              <span className={styles.listSectionCount}>{s.tasks.length}</span>
-            </div>
-            <div className={styles.listSectionBody}>
-              {clientGroups ? (
-                clientGroups.map((g) => (
-                  <div key={g.id} style={{ marginBottom: 14 }}>
-                    <div style={{
-                      padding: '8px 4px',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: '0.65rem',
-                      color: 'var(--text-secondary)',
-                      letterSpacing: '0.06em',
-                      textTransform: 'uppercase',
-                      borderBottom: '1px solid var(--border-default)',
-                      marginBottom: 4,
-                    }}>
-                      {g.name} <span style={{ color: 'var(--text-muted)' }}>· {g.tasks.length}</span>
-                    </div>
-                    {g.tasks.map(renderRow)}
-                  </div>
-                ))
-              ) : (
-                s.tasks.map(renderRow)
-              )}
-            </div>
-          </div>
-        );
-      })}
+      ))}
     </div>
   );
 }
@@ -760,8 +712,12 @@ export default function TasksPage() {
       const res = await fetch('/api/users/preferences');
       const data = await res.json();
       if (data.success && data.preferences?.default_view) {
-        setViewMode(data.preferences.default_view);
-        console.log('[INFO][Tasks] preferência carregada:', data.preferences.default_view);
+        // 'lista' foi removida — normaliza preferências antigas/ inválidas.
+        const VALID_VIEWS = ['checklist', 'kanban', 'categoria'];
+        const saved = VALID_VIEWS.includes(data.preferences.default_view)
+          ? data.preferences.default_view : 'checklist';
+        setViewMode(saved);
+        console.log('[INFO][Tasks] preferência carregada:', saved);
       }
     } catch (err) {
       console.error('[Tasks] preferences fetch error:', err);
@@ -942,9 +898,9 @@ export default function TasksPage() {
             />
             <ToggleGroup
               options={[
-                { value: 'checklist', label: 'Checklist', icon: <IconChecklist /> },
-                { value: 'kanban',    label: 'Kanban',    icon: <IconKanban /> },
-                { value: 'lista',     label: 'Lista',     icon: <IconList /> },
+                { value: 'checklist', label: 'Checklist',     icon: <IconChecklist /> },
+                { value: 'kanban',    label: 'Kanban',        icon: <IconKanban /> },
+                { value: 'categoria', label: 'Por Categoria', icon: <IconTag /> },
               ]}
               value={viewMode}
               onChange={handleChangeViewMode}
@@ -1027,19 +983,21 @@ export default function TasksPage() {
           </div>
         </div>
 
-        {/* Navegacao da semana */}
-        <div className={styles.weekNav}>
-          <button className={styles.weekNavBtn} onClick={handlePrevWeek} title="Semana anterior">
-            <IconChevronL />
-          </button>
-          <span className={styles.weekNavLabel}>{weekLabel}</span>
-          <button className={styles.weekNavToday} onClick={handleTodayWeek}>
-            Hoje
-          </button>
-          <button className={styles.weekNavBtn} onClick={handleNextWeek} title="Proxima semana">
-            <IconChevronR />
-          </button>
-        </div>
+        {/* Navegacao da semana — oculta na visão Por Categoria (mostra tudo) */}
+        {viewMode !== 'categoria' && (
+          <div className={styles.weekNav}>
+            <button className={styles.weekNavBtn} onClick={handlePrevWeek} title="Semana anterior">
+              <IconChevronL />
+            </button>
+            <span className={styles.weekNavLabel}>{weekLabel}</span>
+            <button className={styles.weekNavToday} onClick={handleTodayWeek}>
+              Hoje
+            </button>
+            <button className={styles.weekNavBtn} onClick={handleNextWeek} title="Proxima semana">
+              <IconChevronR />
+            </button>
+          </div>
+        )}
 
         {/* Conteudo */}
         {loadingTasks ? (
@@ -1076,10 +1034,9 @@ export default function TasksPage() {
             notify={notify}
           />
         ) : (
-          <ListaView
+          <CategoriaView
             tasks={tasks}
-            weekStart={weekStart}
-            scope={scope}
+            categories={categories}
             onTaskClick={handleTaskClick}
             onDelete={handleDelete}
             onComplete={handleComplete}

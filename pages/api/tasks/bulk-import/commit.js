@@ -28,18 +28,19 @@ export default async function handler(req, res) {
     const user = await requireAuth(req);
     const tenantId = await resolveTenantId(req);
 
-    const { tasks } = req.body || {};
-    if (!Array.isArray(tasks) || tasks.length === 0) {
-      return res.status(400).json({ success: false, error: 'Nenhuma tarefa enviada.' });
+    const { tasks, meetings } = req.body || {};
+    const meetingList = Array.isArray(meetings) ? meetings : [];
+    if ((!Array.isArray(tasks) || tasks.length === 0) && meetingList.length === 0) {
+      return res.status(400).json({ success: false, error: 'Nenhuma tarefa ou reunião enviada.' });
     }
-    if (tasks.length > 200) {
+    if (Array.isArray(tasks) && tasks.length > 200) {
       return res.status(400).json({ success: false, error: 'Máximo de 200 tarefas por importação.' });
     }
 
     // Normaliza payload — created_by é sempre o usuário logado, jamais
     // confiado do client. A data não pode ser anterior a hoje.
     const todayStr = new Date().toISOString().slice(0, 10);
-    const items = tasks.map((t) => {
+    const items = (Array.isArray(tasks) ? tasks : []).map((t) => {
       const due_date = t?.due_date && String(t.due_date) >= todayStr ? t.due_date : null;
       return {
         title: t?.title,
@@ -57,12 +58,45 @@ export default async function handler(req, res) {
       };
     });
 
-    const { created, failed } = await taskModel.createMany(items, tenantId);
+    const { created, failed } = items.length > 0
+      ? await taskModel.createMany(items, tenantId)
+      : { created: [], failed: [] };
+
+    // Reuniões (best-effort, uma por uma — sem transação no codebase).
+    const meetingModel = require('../../../../models/meeting.model');
+    const createdMeetings = [];
+    const failedMeetings = [];
+    for (let i = 0; i < meetingList.length; i++) {
+      const m = meetingList[i];
+      try {
+        if (!m?.title?.trim() || !m?.meeting_date) {
+          failedMeetings.push({ index: i, error: 'título e data são obrigatórios' });
+          continue;
+        }
+        const row = await meetingModel.createMeeting({
+          title: m.title.trim(),
+          description: m.description || null,
+          meeting_date: m.meeting_date,
+          start_time: m.start_time || '09:00',
+          end_time: null,
+          client_id: m.client_id || null,
+          participants: Array.isArray(m.participants) ? m.participants : [],
+          status: 'scheduled',
+          meet_link: null,
+          obs: null,
+          created_by: user.id,
+        }, tenantId);
+        createdMeetings.push(row);
+      } catch (err) {
+        console.error('[ERRO][bulkImport/commit] reunião falhou', { index: i, error: err.message });
+        failedMeetings.push({ index: i, error: err.message });
+      }
+    }
 
     // Notificações pra responsáveis (best-effort, agrupado por user — uma
     // notificação por pessoa ao invés de N).
     try {
-      const { createUserNotification } = require('../../../../models/clientForm');
+      const { createUserNotification, createNotification } = require('../../../../models/clientForm');
       const byAssignee = {};
       for (const t of created) {
         if (t.assigned_to && t.assigned_to !== user.id) {
@@ -79,12 +113,23 @@ export default async function handler(req, res) {
           { source: 'bulk_import', count }
         );
       }
+      // Reuniões criadas → broadcast (todo time vê na agenda).
+      if (createdMeetings.length > 0) {
+        await createNotification(
+          tenantId, 'meeting_created',
+          'Reuniões criadas',
+          `${createdMeetings.length} reunião(ões) criada(s) via importação de ata`,
+          null,
+          { source: 'bulk_import', count: createdMeetings.length }
+        );
+      }
     } catch (err) {
       console.warn('[WARN][bulkImport/commit] notificações falharam', err.message);
     }
 
     console.log('[SUCESSO][bulkImport/commit]', {
       userId: user.id, created: created.length, failed: failed.length,
+      meetings: createdMeetings.length, failedMeetings: failedMeetings.length,
     });
 
     return res.json({
@@ -92,6 +137,9 @@ export default async function handler(req, res) {
       created: created.length,
       tasks: created,
       failed,
+      createdMeetings: createdMeetings.length,
+      meetings: createdMeetings,
+      failedMeetings,
     });
   } catch (err) {
     if (err.statusCode) {

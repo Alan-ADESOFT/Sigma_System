@@ -53,6 +53,7 @@ const IconTrash = () => (
 
 export default function BulkImportPreview({
   initialTasks,
+  initialMeetings,
   warnings,
   meta,
   users,
@@ -68,6 +69,10 @@ export default function BulkImportPreview({
   // tasks com id local pra controlar key e remoção
   const [items, setItems] = useState(() =>
     (initialTasks || []).map((t) => ({ _localId: uid(), ...t }))
+  );
+  // reuniões extraídas da mesma ata
+  const [meetingItems, setMeetingItems] = useState(() =>
+    (initialMeetings || []).map((m) => ({ _localId: uid(), ...m }))
   );
   const [saving, setSaving] = useState(false);
 
@@ -115,9 +120,33 @@ export default function BulkImportPreview({
     ]);
   }
 
+  /* ── Reuniões ── */
+  function updateMeeting(localId, patch) {
+    setMeetingItems((prev) => prev.map((m) => (m._localId === localId ? { ...m, ...patch } : m)));
+  }
+
+  function removeMeeting(localId) {
+    setMeetingItems((prev) => prev.filter((m) => m._localId !== localId));
+  }
+
+  function addMeeting() {
+    setMeetingItems((prev) => [
+      ...prev,
+      {
+        _localId: uid(),
+        title: '',
+        description: null,
+        meeting_date: new Date().toISOString().slice(0, 10),
+        start_time: '09:00',
+        participants: [],
+        client_id: null,
+      },
+    ]);
+  }
+
   async function handleCommit() {
-    if (items.length === 0) {
-      notify('Adicione ao menos uma tarefa para criar', 'warning');
+    if (items.length === 0 && meetingItems.length === 0) {
+      notify('Adicione ao menos uma tarefa ou reunião para criar', 'warning');
       return;
     }
     const invalid = items.filter((t) => !t.title?.trim() || !t.assigned_to || !t.due_date);
@@ -125,25 +154,35 @@ export default function BulkImportPreview({
       notify(`${invalid.length} tarefa(s) sem título, responsável ou data — corrija antes de salvar`, 'error');
       return;
     }
+    const invalidMeetings = meetingItems.filter((m) => !m.title?.trim() || !m.meeting_date);
+    if (invalidMeetings.length > 0) {
+      notify(`${invalidMeetings.length} reunião(ões) sem título ou data — corrija antes de salvar`, 'error');
+      return;
+    }
 
     setSaving(true);
     try {
       const payload = items.map(({ _localId, ...rest }) => rest);
+      const meetingPayload = meetingItems.map(({ _localId, ...rest }) => rest);
       const res = await fetch('/api/tasks/bulk-import/commit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tasks: payload }),
+        body: JSON.stringify({ tasks: payload, meetings: meetingPayload }),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Falha ao salvar');
 
-      const failedCount = data.failed?.length || 0;
+      const failedCount = (data.failed?.length || 0) + (data.failedMeetings?.length || 0);
+      const createdMeetings = data.createdMeetings || 0;
+      let msg = `${data.created} tarefa(s)`;
+      if (createdMeetings > 0) msg += ` · ${createdMeetings} reunião(ões)`;
+      msg += ' criada(s)';
       if (failedCount > 0) {
-        notify(`${data.created} criada(s), ${failedCount} falharam`, 'warning');
+        notify(`${msg} · ${failedCount} falharam`, 'warning');
       } else {
-        notify(`${data.created} tarefa(s) criada(s) com sucesso`, 'success');
+        notify(`${msg} com sucesso`, 'success');
       }
-      console.log('[SUCESSO][bulkImport/preview] commit', { created: data.created, failed: failedCount });
+      console.log('[SUCESSO][bulkImport/preview] commit', { created: data.created, meetings: createdMeetings, failed: failedCount });
       onCommitted && onCommitted(data);
       onClose && onClose();
     } catch (err) {
@@ -220,6 +259,15 @@ export default function BulkImportPreview({
                       <option key={u.id} value={u.id}>{u.name}</option>
                     ))}
                   </select>
+                  <select
+                    value={t.category_id || ''}
+                    onChange={(e) => updateItem(t._localId, { category_id: e.target.value || null })}
+                  >
+                    <option value="">Sem categoria</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
                   <input
                     type="date"
                     value={t.due_date || ''}
@@ -253,11 +301,77 @@ export default function BulkImportPreview({
               </button>
             </div>
           ))}
+
+          {/* ── Reuniões extraídas da ata ── */}
+          <div className={styles.sectionDivider}>
+            <span className={styles.sectionDividerLabel}>Reuniões</span>
+            <span className={styles.sectionDividerLine} />
+            <span className={styles.previewGroupCount}>
+              {meetingItems.length} {meetingItems.length === 1 ? 'reunião' : 'reuniões'}
+            </span>
+          </div>
+
+          {meetingItems.length === 0 ? (
+            <div className={styles.fileBoxHint} style={{ paddingBottom: 8 }}>
+              Nenhuma reunião detectada na ata — adicione manualmente se precisar.
+            </div>
+          ) : (
+            meetingItems.map((m) => (
+              <div key={m._localId} className={styles.meetingRow}>
+                <input
+                  type="text"
+                  value={m.title || ''}
+                  placeholder="Assunto da reunião"
+                  onChange={(e) => updateMeeting(m._localId, { title: e.target.value })}
+                />
+                <input
+                  type="date"
+                  value={m.meeting_date || ''}
+                  onChange={(e) => updateMeeting(m._localId, { meeting_date: e.target.value || null })}
+                />
+                <input
+                  type="time"
+                  value={(m.start_time || '').slice(0, 5)}
+                  onChange={(e) => updateMeeting(m._localId, { start_time: e.target.value || null })}
+                />
+                <select
+                  value={m.client_id || ''}
+                  onChange={(e) => updateMeeting(m._localId, { client_id: e.target.value || null })}
+                >
+                  <option value="">Sem cliente</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>{c.company_name || c.name}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={(m.participants || []).join(', ')}
+                  placeholder="Envolvidos (vírgula)"
+                  onChange={(e) => updateMeeting(m._localId, {
+                    participants: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+                  })}
+                />
+                <button
+                  type="button"
+                  className={styles.previewRemove}
+                  onClick={() => removeMeeting(m._localId)}
+                  title="Remover"
+                >
+                  <IconTrash />
+                </button>
+              </div>
+            ))
+          )}
+
+          <button type="button" className={styles.previewAddRow} onClick={addMeeting}>
+            + Adicionar reunião
+          </button>
         </div>
 
         <div className={styles.footer}>
           <span className={styles.footerCount}>
-            {items.length} tarefa{items.length !== 1 ? 's' : ''} {items.length === 1 ? 'será' : 'serão'} criada{items.length !== 1 ? 's' : ''}
+            {items.length} tarefa{items.length !== 1 ? 's' : ''}
+            {meetingItems.length > 0 ? ` · ${meetingItems.length} reuni${meetingItems.length !== 1 ? 'ões' : 'ão'}` : ''}
           </span>
           <button className={styles.btnSecondary} type="button" onClick={onBack} disabled={saving}>
             Voltar
@@ -266,7 +380,7 @@ export default function BulkImportPreview({
             className={styles.btnPrimary}
             type="button"
             onClick={handleCommit}
-            disabled={saving || items.length === 0}
+            disabled={saving || (items.length === 0 && meetingItems.length === 0)}
           >
             {saving ? 'Criando…' : 'Confirmar e criar'}
           </button>

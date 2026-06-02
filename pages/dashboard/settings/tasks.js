@@ -177,6 +177,13 @@ export default function SettingsTasksPage() {
   const [templateDefaults, setTemplateDefaults] = useState({ morning: DEFAULT_MORNING_MESSAGE, overdue: DEFAULT_OVERDUE_MESSAGE });
   const [savingTemplates, setSavingTemplates] = useState(false);
 
+  /* Comando /reuniao (WhatsApp) */
+  const [reuniaoCfg, setReuniaoCfg] = useState({ enabled: false, allowedGroups: [], allowedNumbers: [] });
+  const [waGroups, setWaGroups] = useState([]);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [newReuniaoNumber, setNewReuniaoNumber] = useState('');
+  const [savingReuniao, setSavingReuniao] = useState(false);
+
   /* Recorrencia modal */
   const [showRecForm, setShowRecForm] = useState(false);
   const [editRecId, setEditRecId] = useState(null);
@@ -196,18 +203,20 @@ export default function SettingsTasksPage() {
   /* ── Fetch data ── */
   const fetchData = useCallback(async () => {
     try {
-      const [catRes, recRes, botRes, usersRes, tplRes] = await Promise.all([
+      const [catRes, recRes, botRes, usersRes, tplRes, reuRes] = await Promise.all([
         fetch('/api/task-categories'),
         fetch('/api/task-recurrences'),
         fetch('/api/task-bot-config'),
         fetch('/api/tasks/users-search'),
         fetch('/api/settings/task-bot-templates'),
+        fetch('/api/whatsapp/reuniao-config'),
       ]);
       const catData = await catRes.json();
       const recData = await recRes.json();
       const botData = await botRes.json();
       const usersData = await usersRes.json();
       const tplData = await tplRes.json();
+      const reuData = await reuRes.json();
       if (catData.success) setCategories(catData.categories || []);
       if (recData.success) setRecurrences(recData.recurrences || []);
       if (botData.success) setBotConfigs(botData.configs || []);
@@ -216,6 +225,7 @@ export default function SettingsTasksPage() {
         setTemplates(tplData.templates || { morning: '', overdue: '' });
         if (tplData.defaults) setTemplateDefaults(tplData.defaults);
       }
+      if (reuData.success && reuData.config) setReuniaoCfg(reuData.config);
     } catch (err) {
       notify('Erro ao carregar dados', 'error');
     } finally {
@@ -254,6 +264,64 @@ export default function SettingsTasksPage() {
       ...prev,
       [field]: (prev[field] || '') + (prev[field] && !prev[field].endsWith(' ') ? ' ' : '') + tag,
     }));
+  }
+
+  /* ── Comando /reuniao (WhatsApp) ── */
+  const loadGroups = useCallback(async () => {
+    setLoadingGroups(true);
+    try {
+      const res = await fetch('/api/whatsapp/groups');
+      const data = await res.json();
+      if (data.success) setWaGroups(data.groups || []);
+      else notify(data.error || 'Falha ao carregar grupos', 'warning');
+    } catch {
+      notify('Falha ao carregar grupos do WhatsApp', 'warning');
+    } finally {
+      setLoadingGroups(false);
+    }
+  }, [notify]);
+
+  async function saveReuniaoCfg() {
+    setSavingReuniao(true);
+    try {
+      const res = await fetch('/api/whatsapp/reuniao-config', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reuniaoCfg),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.config) setReuniaoCfg(data.config);
+        notify('Configuração do /reuniao salva', 'success');
+      } else {
+        notify(data.error || 'Erro ao salvar', 'error');
+      }
+    } catch {
+      notify('Erro ao salvar configuração', 'error');
+    } finally {
+      setSavingReuniao(false);
+    }
+  }
+
+  function toggleReuniaoGroup(groupId) {
+    setReuniaoCfg((prev) => {
+      const has = prev.allowedGroups.includes(groupId);
+      return {
+        ...prev,
+        allowedGroups: has ? prev.allowedGroups.filter((g) => g !== groupId) : [...prev.allowedGroups, groupId],
+      };
+    });
+  }
+
+  function addReuniaoNumber() {
+    const clean = newReuniaoNumber.replace(/\D/g, '');
+    if (clean.length < 10) { notify('Número inválido. Use formato com DDD.', 'error'); return; }
+    if (reuniaoCfg.allowedNumbers.includes(clean)) { notify('Número já adicionado', 'warning'); return; }
+    setReuniaoCfg((prev) => ({ ...prev, allowedNumbers: [...prev.allowedNumbers, clean] }));
+    setNewReuniaoNumber('');
+  }
+
+  function removeReuniaoNumber(num) {
+    setReuniaoCfg((prev) => ({ ...prev, allowedNumbers: prev.allowedNumbers.filter((n) => n !== num) }));
   }
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -881,6 +949,157 @@ export default function SettingsTasksPage() {
               </button>
             </div>
           )}
+        </div>
+
+        {/* ════════════════════════════════════════════════
+            COMANDO /REUNIAO (WHATSAPP)
+        ════════════════════════════════════════════════ */}
+        <div className={styles.sectionCard}>
+          <div className={styles.sectionHeader}>
+            <div className={styles.sectionHeaderLeft}>
+              <div className={styles.sectionTitleRow}>
+                <span className={styles.sectionDot} />
+                <span className={styles.sectionTitleText}>Comando /reuniao (WhatsApp)</span>
+                <span className={styles.sectionLine} />
+              </div>
+              <div className={styles.sectionDescription}>
+                Cria reuniões mandando "/reuniao [assunto] [data] [hora] com [pessoas]" no WhatsApp. Por segurança, só funciona a partir dos grupos e números autorizados abaixo.
+              </div>
+            </div>
+            <button className="sigma-btn-primary" onClick={saveReuniaoCfg} disabled={savingReuniao}>
+              <IconCheck size={12} /> {savingReuniao ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+
+          {/* Toggle ativo */}
+          <div className={styles.botSection}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div className={styles.botSectionLabel}>
+                  <span className={styles.botSectionLabelDot} /> Comando ativo
+                </div>
+                <div className={styles.messageHint}>Quando desligado, o webhook ignora qualquer /reuniao.</div>
+              </div>
+              <button
+                type="button"
+                className={`${styles.toggleSwitch} ${reuniaoCfg.enabled ? styles.toggleSwitchActive : ''}`}
+                onClick={() => setReuniaoCfg((p) => ({ ...p, enabled: !p.enabled }))}
+              >
+                <div className={`${styles.toggleKnob} ${reuniaoCfg.enabled ? styles.toggleKnobActive : ''}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* URL do webhook */}
+          <div className={styles.botSection}>
+            <div className={styles.botSectionLabel}>
+              <span className={styles.botSectionLabelDot} /> URL do webhook (cole no painel da Z-API)
+            </div>
+            <input
+              className={styles.modalInput}
+              readOnly
+              value={typeof window !== 'undefined' ? `${window.location.origin}/api/whatsapp/webhook` : '/api/whatsapp/webhook'}
+              onFocus={(e) => e.target.select()}
+            />
+            <div className={styles.messageHint}>
+              Configure como "Ao receber mensagem" na Z-API. Em dev local exige um túnel público (a Z-API precisa alcançar a URL).
+            </div>
+          </div>
+
+          {/* Grupos permitidos */}
+          <div className={styles.botSection}>
+            <div className={styles.botSectionLabel}>
+              <span className={styles.botSectionLabelDot} /> Grupos autorizados
+              <button
+                type="button"
+                onClick={loadGroups}
+                style={{
+                  marginLeft: 'auto', padding: '3px 10px', background: 'transparent',
+                  border: '1px solid var(--border-default)', borderRadius: 4, color: 'var(--text-muted)',
+                  fontFamily: 'var(--font-mono)', fontSize: '0.5rem', fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer',
+                }}
+              >
+                {loadingGroups ? 'Carregando...' : 'Recarregar grupos'}
+              </button>
+            </div>
+            {waGroups.length === 0 ? (
+              <div className={styles.messageHint}>
+                Nenhum grupo carregado. Clique em "Recarregar grupos" (requer Z-API configurada).
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+                {waGroups.map((g) => {
+                  const checked = reuniaoCfg.allowedGroups.includes(g.id);
+                  return (
+                    <label
+                      key={g.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 6,
+                        border: '1px solid var(--border-default)',
+                        background: checked ? 'rgba(255,0,51,0.06)' : 'transparent', cursor: 'pointer',
+                      }}
+                    >
+                      <input type="checkbox" checked={checked} onChange={() => toggleReuniaoGroup(g.id)} style={{ accentColor: 'var(--brand-500)' }} />
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-primary)' }}>{g.name}</span>
+                      <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-muted)' }}>
+                        {g.participants} membros
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Números permitidos */}
+          <div className={styles.botSection}>
+            <div className={styles.botSectionLabel}>
+              <span className={styles.botSectionLabelDot} /> Números autorizados
+            </div>
+            {reuniaoCfg.allowedNumbers.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {reuniaoCfg.allowedNumbers.map((num) => (
+                  <div
+                    key={num}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 20,
+                      background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-default)',
+                      fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-primary)',
+                    }}
+                  >
+                    {num}
+                    <button
+                      onClick={() => removeReuniaoNumber(num)}
+                      style={{ border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.9rem', lineHeight: 1 }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                className={styles.modalInput}
+                value={newReuniaoNumber}
+                onChange={(e) => setNewReuniaoNumber(e.target.value)}
+                placeholder="5511999999999"
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addReuniaoNumber(); } }}
+              />
+              <button
+                type="button"
+                onClick={addReuniaoNumber}
+                style={{
+                  padding: '8px 16px', borderRadius: 6, cursor: 'pointer',
+                  border: '1px solid rgba(255,0,51,0.4)', background: 'rgba(255,0,51,0.1)',
+                  color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', fontWeight: 700, flexShrink: 0,
+                }}
+              >
+                <IconPlus size={12} />
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* ════════════════════════════════════════════════

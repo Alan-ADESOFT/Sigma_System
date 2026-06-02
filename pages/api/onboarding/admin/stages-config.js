@@ -56,6 +56,7 @@ export default async function handler(req, res) {
           dayRelease: s.day_release,
           timeEstimate: s.time_estimate,
           insightText: s.insight_text,
+          whatsappMessage: s.whatsapp_message,
           active: s.active,
           questionCount: (s.questions_json || []).filter(q => !q.id?.startsWith?.('_extra_')).length,
         })),

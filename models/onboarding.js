@@ -46,6 +46,8 @@ import {
   TOTAL_DAYS,
   countQuestions,
 } from '../assets/data/onboardingQuestions';
+import { STAGE_WHATSAPP_MESSAGES, WELCOME_CAPTION } from '../assets/data/onboardingMessages';
+const { getSetting, setSetting } = require('./settings.model');
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CONSTANTES
@@ -299,8 +301,8 @@ export async function seedDefaultConfig(tenantId) {
       await query(
         `INSERT INTO onboarding_stages_config
            (tenant_id, stage_number, title, description, video_url, video_duration,
-            questions_json, day_release, is_rest_day, time_estimate, insight_text, sort_order)
-         VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, false, $7, $8, $9)
+            questions_json, day_release, is_rest_day, time_estimate, insight_text, sort_order, whatsapp_message)
+         VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, false, $7, $8, $9, $10)
          ON CONFLICT (tenant_id, stage_number) DO NOTHING`,
         [
           tenantId,
@@ -312,6 +314,7 @@ export async function seedDefaultConfig(tenantId) {
           stage.timeEstimate,
           stage.insight || null,
           stage.stage,
+          STAGE_WHATSAPP_MESSAGES[stage.stage] || null,
         ]
       );
     }
@@ -325,6 +328,40 @@ export async function seedDefaultConfig(tenantId) {
        ON CONFLICT (tenant_id, day_number) DO NOTHING`,
       [tenantId, day, REST_DAYS[day]]
     );
+  }
+
+  // Aplica os textos do documento de onboarding UMA vez por tenant (flag),
+  // sem reescrever edições futuras do admin.
+  const docFlag = await getSetting(tenantId, 'onboarding_doc_msgs_v1');
+  if (docFlag !== 'true') {
+    // Mensagem WhatsApp por etapa (só preenche o que está vazio).
+    for (const stage of ONBOARDING_STAGES) {
+      const msg = STAGE_WHATSAPP_MESSAGES[stage.stage];
+      if (msg) {
+        await query(
+          `UPDATE onboarding_stages_config
+              SET whatsapp_message = $3
+            WHERE tenant_id = $1 AND stage_number = $2
+              AND (whatsapp_message IS NULL OR whatsapp_message = '')`,
+          [tenantId, stage.stage, msg]
+        );
+      }
+    }
+    // Dias de descanso → texto do documento.
+    for (const day of REST_DAY_NUMBERS) {
+      await query(
+        `UPDATE onboarding_rest_days_config SET message = $3
+          WHERE tenant_id = $1 AND day_number = $2`,
+        [tenantId, day, REST_DAYS[day]]
+      );
+    }
+    // Caption de boas-vindas (VÍDEO 0) — só se ainda não houver.
+    const welcomeDesc = await getSetting(tenantId, 'onboarding_welcome_video_description');
+    if (!welcomeDesc) {
+      await setSetting(tenantId, 'onboarding_welcome_video_description', WELCOME_CAPTION);
+    }
+    await setSetting(tenantId, 'onboarding_doc_msgs_v1', 'true');
+    console.log('[INFO][Onboarding:seedDefaultConfig] textos do documento aplicados', { tenantId });
   }
 
   console.log('[SUCESSO][Onboarding:seedDefaultConfig] done', { tenantId });
@@ -387,7 +424,8 @@ export async function upsertStageConfig(tenantId, stageNumber, data) {
          questions_json = COALESCE($7::jsonb, questions_json),
          time_estimate  = COALESCE($8, time_estimate),
          insight_text   = COALESCE($9, insight_text),
-         active         = COALESCE($10, active)
+         active         = COALESCE($10, active),
+         whatsapp_message = COALESCE($11, whatsapp_message)
      WHERE tenant_id = $1 AND stage_number = $2
      RETURNING *`,
     [
@@ -401,6 +439,7 @@ export async function upsertStageConfig(tenantId, stageNumber, data) {
       data.time_estimate ?? null,
       data.insight_text ?? null,
       typeof data.active === 'boolean' ? data.active : null,
+      data.whatsapp_message ?? null,
     ]
   );
 

@@ -1205,11 +1205,7 @@ export default function ClientsPage() {
   const stats = useMemo(() => {
     const active   = clients.filter(c => c.status !== 'inactive');
     const inactive = clients.filter(c => c.status === 'inactive');
-    const valorTotal = active.reduce((acc, c) => {
-      const cm = parseFloat(c.contract_monthly_total) || 0;
-      return acc + (cm > 0 ? cm : parseTicket(c.avg_ticket));
-    }, 0);
-    return { total: clients.length, active: active.length, inactive: inactive.length, valorTotal };
+    return { total: clients.length, active: active.length, inactive: inactive.length };
   }, [clients]);
 
   function handleSaved(updated) {
@@ -1277,10 +1273,9 @@ export default function ClientsPage() {
       {!loading && clients.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 20 }}>
           {[
-            { label: 'Total',       value: stats.total,                        color: 'var(--text-primary)' },
-            { label: 'Ativos',      value: stats.active,                       color: '#22c55e' },
-            { label: 'Inativos',    value: stats.inactive,                     color: '#525252' },
-            { label: 'Valor Total', value: formatBRL(stats.valorTotal),        color: '#f97316', small: true },
+            { label: 'Total',    value: stats.total,    color: 'var(--text-primary)' },
+            { label: 'Ativos',   value: stats.active,   color: '#22c55e' },
+            { label: 'Inativos', value: stats.inactive, color: '#525252' },
           ].map(s => (
             <div key={s.label} className="glass-card" style={{ padding: '12px 16px' }}>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: s.small ? '0.88rem' : '1.3rem', fontWeight: 700, color: s.color }}>

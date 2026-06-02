@@ -6,6 +6,7 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
+      await categoryModel.ensureDefaultCategories(tenantId);
       const categories = await categoryModel.getCategories(tenantId);
       return res.json({ success: true, categories });
     }

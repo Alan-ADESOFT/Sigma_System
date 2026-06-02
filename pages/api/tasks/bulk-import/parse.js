@@ -27,6 +27,7 @@ const { requireAuth } = require('../../../../lib/api-auth');
 const { query } = require('../../../../infra/db');
 const { extractFromPDF, extractFromDOCX } = require('../../../../infra/api/fileReader');
 const { parseBulkImport } = require('../../../../models/tasks/bulkImportAI');
+const { ensureDefaultCategories } = require('../../../../models/taskCategory.model');
 
 // Multipart precisa do body parser desligado (extraímos manualmente)
 export const config = {
@@ -179,6 +180,9 @@ export default async function handler(req, res) {
     if (!referenceWeek) {
       referenceWeek = startOfWeekIso(new Date());
     }
+
+    // Garante as 6 categorias fixas antes de montar o contexto da IA.
+    await ensureDefaultCategories(tenantId);
 
     // Contexto do workspace — usuários ativos, clientes ativos, categorias
     const [users, clients, categories] = await Promise.all([

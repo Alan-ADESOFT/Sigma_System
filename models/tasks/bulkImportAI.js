@@ -71,6 +71,8 @@ Se você não conseguir atribuir uma tarefa a um usuário específico, use o id 
 6. Use due_date sempre dentro ou depois da semana de referência (nunca no passado).
 7. Subtasks são opcionais — só inclua se a tarefa claramente quebra em sub-itens.
 8. Description é opcional — só preencha se houver contexto útil que não cabe no título.
+9. CATEGORIA: sempre escolha a categoria mais adequada entre as listadas (ex: CLIENTES para trabalho de cliente, COMERCIAL para vendas, SISTEMA para tarefas internas/técnicas, FINANCEIRO para cobrança/pagamentos, CONTABILIDADE para notas/impostos, OUTROS para o resto). Só deixe category_id nulo se realmente nenhuma se aplicar.
+10. REUNIÕES: se a ata marcar/agendar reuniões (com data, e às vezes hora e participantes), extraia em "meetings" separado das tarefas. Não duplique uma reunião como tarefa. participants é uma lista de NOMES (texto livre, não IDs). client_id da reunião só se um cliente da lista estiver claramente associado, senão null.
 
 # Saída
 
@@ -88,6 +90,16 @@ Responda APENAS com JSON válido (sem markdown, sem fences, sem texto antes ou d
       "due_date": "YYYY-MM-DD",
       "due_time": "HH:MM ou null",
       "subtasks": ["string", "..."]
+    }
+  ],
+  "meetings": [
+    {
+      "title": "string curta (assunto da reunião)",
+      "description": "string ou null",
+      "meeting_date": "YYYY-MM-DD",
+      "start_time": "HH:MM ou null",
+      "participants": ["Nome 1", "Nome 2"],
+      "client_id": "id da lista ou null"
     }
   ],
   "warnings": ["string explicando ambiguidades"]
@@ -199,6 +211,54 @@ function normalizeTasks(raw, { fallbackUserId, validUserIds, validClientIds, val
 }
 
 /**
+ * Normaliza reuniões extraídas. participants fica como texto livre (a coluna
+ * meetings.participants é TEXT[]). Itens sem título ou data viram warning.
+ */
+function normalizeMeetings(raw, { validClientIds, warnings }) {
+  const meetings = Array.isArray(raw?.meetings) ? raw.meetings : [];
+
+  return meetings.map((m, i) => {
+    const title = (m?.title || '').trim();
+    if (!title) {
+      warnings.push(`Reunião #${i + 1} sem título — ignorada.`);
+      return null;
+    }
+
+    let meeting_date = null;
+    if (m?.meeting_date && /^\d{4}-\d{2}-\d{2}$/.test(m.meeting_date)) {
+      meeting_date = m.meeting_date;
+    }
+    if (!meeting_date) {
+      warnings.push(`Reunião "${title}" sem data válida — ajuste antes de salvar.`);
+    }
+
+    let start_time = null;
+    if (m?.start_time && /^\d{2}:\d{2}(:\d{2})?$/.test(m.start_time)) {
+      start_time = m.start_time.length === 5 ? `${m.start_time}:00` : m.start_time;
+    }
+
+    let client_id = m?.client_id || null;
+    if (client_id && !validClientIds.has(client_id)) {
+      warnings.push(`Cliente "${client_id}" inválido na reunião "${title}" — removido.`);
+      client_id = null;
+    }
+
+    const participants = Array.isArray(m?.participants)
+      ? m.participants.filter((p) => typeof p === 'string' && p.trim()).map((p) => p.trim())
+      : [];
+
+    return {
+      title,
+      description: m?.description ? String(m.description).trim() : null,
+      meeting_date,
+      start_time,
+      participants,
+      client_id,
+    };
+  }).filter(Boolean);
+}
+
+/**
  * Entry point. Recebe o texto bruto + contexto, chama a IA e devolve a lista
  * normalizada + warnings.
  */
@@ -229,7 +289,7 @@ async function parseBulkImport({
     'medium',
     system,
     userMessage,
-    4000,
+    5000,
     {
       tenantId,
       operationType: 'tasks_bulk_import',
@@ -248,12 +308,16 @@ async function parseBulkImport({
     validCategoryIds,
   });
 
+  // Reuniões compartilham o mesmo array de warnings.
+  const meetings = normalizeMeetings(parsed, { validClientIds, warnings });
+
   console.log('[SUCESSO][bulkImport]', {
-    tasks: tasks.length, warnings: warnings.length, model: completion.modelUsed,
+    tasks: tasks.length, meetings: meetings.length, warnings: warnings.length, model: completion.modelUsed,
   });
 
   return {
     tasks,
+    meetings,
     warnings,
     meta: {
       model: completion.modelUsed,
@@ -268,4 +332,5 @@ module.exports = {
   buildSystemPrompt,
   extractJSON,
   normalizeTasks,
+  normalizeMeetings,
 };

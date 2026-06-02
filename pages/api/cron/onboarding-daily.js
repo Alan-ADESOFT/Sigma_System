@@ -188,7 +188,16 @@ export default async function handler(req, res) {
         if (already) { results.skipped++; continue; }
 
         const link = `${baseUrl}/onboarding/${ob.token}`;
-        const customStageMsg = await getSetting(ob.tenant_id, 'onboarding_msg_stage_link');
+        // Preferência: mensagem própria da etapa (do documento, salva por etapa)
+        // → template global custom → builder padrão.
+        const stageRow = await queryOne(
+          `SELECT whatsapp_message FROM onboarding_stages_config
+           WHERE tenant_id = $1 AND stage_number = $2`,
+          [ob.tenant_id, stage.stage]
+        );
+        const customStageMsg = (stageRow?.whatsapp_message && stageRow.whatsapp_message.trim())
+          ? stageRow.whatsapp_message
+          : await getSetting(ob.tenant_id, 'onboarding_msg_stage_link');
         const greetingName = getClientGreetingName(ob);
         let message;
         if (customStageMsg) {

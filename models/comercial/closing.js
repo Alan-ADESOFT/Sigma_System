@@ -12,7 +12,7 @@
 const { query, queryOne } = require('../../infra/db');
 const { createClient, getClientById } = require('../client.model');
 const { createActivity } = require('./activity.model');
-const { createNotification } = require('../clientForm');
+const { createNotification, createUserNotification } = require('../clientForm');
 const { getColumnByRole } = require('./pipeline.model');
 
 async function closeAsWon(tenantId, pipelineLeadId, payload = {}, createdBy = null) {
@@ -77,7 +77,7 @@ async function closeAsWon(tenantId, pipelineLeadId, payload = {}, createdBy = nu
     createdBy,
   });
 
-  // 4. Notification
+  // 4. Notification — broadcast (todo time vê) + pessoal pro dono do lead
   try {
     await createNotification(
       tenantId,
@@ -87,6 +87,17 @@ async function closeAsWon(tenantId, pipelineLeadId, payload = {}, createdBy = nu
       client.id,
       { pipelineLeadId, clientId: client.id }
     );
+    if (lead.assigned_to) {
+      await createUserNotification(
+        lead.assigned_to,
+        tenantId,
+        'lead_won',
+        'Seu lead virou cliente',
+        `${lead.company_name} foi fechado e já está na base de clientes.`,
+        client.id,
+        { pipelineLeadId, clientId: client.id }
+      );
+    }
   } catch (err) {
     console.warn('[WARN][closing] notificação falhou', { error: err.message });
   }
