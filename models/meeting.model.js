@@ -118,6 +118,36 @@ async function getMeetingsByParticipant(userId, tenantId) {
   );
 }
 
+/**
+ * Reuniões que começam em ~1h (janela 45-75 min no fuso BRT) e que ainda não
+ * tiveram lembrete enviado. Usado pelo cron meeting-reminder (a cada 15 min).
+ * `meeting_date + start_time` é um timestamp naive em horário local (BRT), e
+ * `now() AT TIME ZONE 'America/Sao_Paulo'` é o relógio de parede BRT atual.
+ */
+async function getMeetingsForReminder(tenantId) {
+  return db.query(
+    `SELECT m.id, m.title, m.description, m.meeting_date, m.start_time,
+            m.participants, m.client_id, mc.company_name AS client_name
+       FROM meetings m
+       LEFT JOIN marketing_clients mc ON mc.id = m.client_id
+      WHERE m.tenant_id = $1
+        AND m.status = 'scheduled'
+        AND m.reminder_sent_at IS NULL
+        AND (m.meeting_date + m.start_time)
+            BETWEEN ((now() AT TIME ZONE 'America/Sao_Paulo') + interval '45 minutes')
+                AND ((now() AT TIME ZONE 'America/Sao_Paulo') + interval '75 minutes')
+      ORDER BY m.meeting_date ASC, m.start_time ASC`,
+    [tenantId]
+  );
+}
+
+async function markReminderSent(id, tenantId) {
+  return db.query(
+    `UPDATE meetings SET reminder_sent_at = now() WHERE id = $1 AND tenant_id = $2`,
+    [id, tenantId]
+  );
+}
+
 module.exports = {
   createMeeting,
   getMeetings,
@@ -125,5 +155,7 @@ module.exports = {
   updateMeeting,
   deleteMeeting,
   getMeetingsToday,
-  getMeetingsByParticipant
+  getMeetingsByParticipant,
+  getMeetingsForReminder,
+  markReminderSent
 };

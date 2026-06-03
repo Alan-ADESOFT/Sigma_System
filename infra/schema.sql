@@ -1047,6 +1047,10 @@ CREATE INDEX IF NOT EXISTS idx_meetings_tenant ON meetings(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_date   ON meetings(meeting_date);
 CREATE INDEX IF NOT EXISTS idx_meetings_client ON meetings(client_id);
 
+-- Idempotência do lembrete "1h antes" (cron meeting-reminder): marca quando o
+-- lembrete daquela reunião já foi enviado, evitando reenvio a cada ciclo do cron.
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ;
+
 -- ============================================================
 -- 40. TASK_TEMPLATES (automação de tasks)
 -- ============================================================

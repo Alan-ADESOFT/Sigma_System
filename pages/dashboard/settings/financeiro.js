@@ -2,8 +2,7 @@
  * pages/dashboard/settings/financeiro.js
  * Configurações financeiras (admin only):
  *   1. Categorias de gastos (popup modal)
- *   2. Mensagens de cobrança (tabs com preview)
- *   3. Configuração do bot (numeros, dias, horario, cobranças)
+ *   2. Mensagem de cobrança manual (usada pelo botão COBRAR no Financeiro)
  *
  * Padronizado com settings/tasks (sectionCard + modal popup pattern).
  */
@@ -25,20 +24,10 @@ const COLOR_PALETTE = [
 
 const MSG_TABS = [
   { key: 'msgManualCharge', label: 'Cobrança manual' },
-  { key: 'msgOneDayBefore', label: '1 dia antes' },
-  { key: 'msgDueToday',     label: 'No dia' },
-  { key: 'msgOverdueOne',   label: '1 dia atraso' },
-  { key: 'msgOverdueN',     label: 'Atraso prolongado' },
-  { key: 'msgSummary',      label: 'Resumo admin' },
 ];
 
 const VARIABLES = {
   msgManualCharge: ['{nome}', '{numero}', '{data}', '{valor}', '{dias_atraso}'],
-  msgOneDayBefore: ['{nome}', '{numero}', '{data}', '{valor}'],
-  msgDueToday:     ['{nome}', '{numero}', '{data}', '{valor}'],
-  msgOverdueOne:   ['{nome}', '{numero}', '{data}', '{valor}'],
-  msgOverdueN:     ['{nome}', '{numero}', '{data}', '{valor}', '{dias_atraso}'],
-  msgSummary:      ['{data_hoje}', '{lista_clientes}', '{total}'],
 };
 
 const PREVIEW_VARS = {
@@ -51,16 +40,6 @@ const PREVIEW_VARS = {
   '{lista_clientes}': '• *Cliente A* — Parcela 3/12 — R$ 1.500,00 — 5 dias atraso',
   '{total}': '1.500,00',
 };
-
-const DAYS = [
-  { iso: 1, label: 'Seg' },
-  { iso: 2, label: 'Ter' },
-  { iso: 3, label: 'Qua' },
-  { iso: 4, label: 'Qui' },
-  { iso: 5, label: 'Sex' },
-  { iso: 6, label: 'Sáb' },
-  { iso: 7, label: 'Dom' },
-];
 
 function previewMessage(template) {
   let msg = template || '';
@@ -163,7 +142,6 @@ export default function SettingsFinanceiro() {
   const [defaults, setDefaults] = useState({});
   const [loadingBot, setLoadingBot] = useState(true);
   const [savingBot, setSavingBot] = useState(false);
-  const [newNumber, setNewNumber] = useState('');
 
   /* ── Recurring costs state ── */
   const [recurring, setRecurring] = useState([]);
@@ -372,33 +350,6 @@ export default function SettingsFinanceiro() {
     }
   }
 
-  function addNumber() {
-    const clean = newNumber.replace(/\D/g, '');
-    if (clean.length < 10) {
-      notify('Número inválido. Use formato com DDD.', 'error');
-      return;
-    }
-    if (botConfig.numbers.includes(clean)) {
-      notify('Número já adicionado', 'warning');
-      return;
-    }
-    setBotConfig((prev) => ({ ...prev, numbers: [...prev.numbers, clean] }));
-    setNewNumber('');
-  }
-
-  function removeNumber(num) {
-    setBotConfig((prev) => ({ ...prev, numbers: prev.numbers.filter((n) => n !== num) }));
-  }
-
-  function toggleDay(iso) {
-    setBotConfig((prev) => {
-      const days = prev.activeDays.includes(iso)
-        ? prev.activeDays.filter((d) => d !== iso)
-        : [...prev.activeDays, iso].sort();
-      return { ...prev, activeDays: days };
-    });
-  }
-
   function restoreDefault(key) {
     if (defaults[key]) {
       setBotConfig((prev) => ({ ...prev, [key]: defaults[key] }));
@@ -575,7 +526,7 @@ export default function SettingsFinanceiro() {
                 <span className={styles.sectionLine} />
               </div>
               <div className={styles.sectionDescription}>
-                A aba "Cobrança manual" é a mensagem usada pelo botão COBRAR no Financeiro (pré-preenchida e editável antes do envio). As demais abas são da cobrança automática (desligada por padrão). Use as variáveis para inserir dados dinâmicos do cliente.
+                Mensagem usada pelo botão COBRAR no Financeiro — pré-preenchida e editável antes do envio. Use as variáveis para inserir os dados do cliente.
               </div>
             </div>
           </div>
@@ -650,190 +601,6 @@ export default function SettingsFinanceiro() {
           )}
         </div>
 
-        {/* ════════════════════════════════════════════════
-            CONFIGURACAO DO BOT
-        ════════════════════════════════════════════════ */}
-        <div className={styles.sectionCard}>
-          <div className={styles.sectionHeader}>
-            <div className={styles.sectionHeaderLeft}>
-              <div className={styles.sectionTitleRow}>
-                <span className={styles.sectionDot} />
-                <span className={styles.sectionTitleText}>Configuração do bot</span>
-                <span className={styles.sectionLine} />
-              </div>
-              <div className={styles.sectionDescription}>
-                Cobrança automática diária (cron). Desligada por padrão — a cobrança hoje é manual pelo botão COBRAR no Financeiro. Os campos abaixo só têm efeito se a cobrança automática for reativada.
-              </div>
-            </div>
-          </div>
-
-          {loadingBot ? (
-            <div className={styles.catEmpty}>carregando configurações...</div>
-          ) : botConfig && (
-            <>
-              {/* Status row — controla o cron de cobrança automática (autoChargeEnabled).
-                  Desligado por padrão: a cobrança hoje é manual via botão COBRAR. */}
-              <div className={styles.botStatusRow}>
-                <div className={styles.botStatusLeft}>
-                  <div className={styles.botStatusIcon}>
-                    <IconBot size={18} />
-                  </div>
-                  <div className={styles.botStatusInfo}>
-                    <div className={styles.botStatusTitle}>Cobrança automática diária</div>
-                    <div className={`${styles.botStatusSub} ${botConfig.autoChargeEnabled ? styles.botStatusActive : ''}`}>
-                      {botConfig.autoChargeEnabled ? '● Ativa (cron envia sozinho)' : '○ Inativa (só botão COBRAR)'}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className={`${styles.toggleSwitch} ${botConfig.autoChargeEnabled ? styles.toggleSwitchActive : ''}`}
-                  onClick={() => setBotConfig((prev) => ({ ...prev, autoChargeEnabled: !prev.autoChargeEnabled }))}
-                >
-                  <div className={`${styles.toggleKnob} ${botConfig.autoChargeEnabled ? styles.toggleKnobActive : ''}`} />
-                </button>
-              </div>
-
-              {botConfig.autoChargeEnabled && (
-                <>
-                  {/* Numbers + Time + Days */}
-                  <div className={styles.botFieldsGrid}>
-                    {/* Numeros */}
-                    <div className={styles.botField}>
-                      <div className={styles.botFieldLabel}>
-                        Números do resumo de inadimplentes
-                      </div>
-                      {botConfig.numbers && botConfig.numbers.length > 0 && (
-                        <div className={styles.chipList}>
-                          {botConfig.numbers.map((num) => (
-                            <div key={num} className={styles.chip}>
-                              {num}
-                              <button className={styles.chipRemove} onClick={() => removeNumber(num)}>
-                                ×
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <div className={styles.addNumberRow}>
-                        <input
-                          className={styles.modalInput}
-                          value={newNumber}
-                          onChange={(e) => setNewNumber(e.target.value)}
-                          placeholder="5511999999999"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              addNumber();
-                            }
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={addNumber}
-                          style={{
-                            padding: '8px 16px',
-                            borderRadius: 6,
-                            cursor: 'pointer',
-                            border: '1px solid rgba(255,0,51,0.4)',
-                            background: 'rgba(255,0,51,0.1)',
-                            color: '#ff6680',
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '0.7rem',
-                            fontWeight: 700,
-                            flexShrink: 0,
-                          }}
-                        >
-                          <IconPlus size={12} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Horario */}
-                    <div className={styles.botField}>
-                      <div className={styles.botFieldLabel}>Horário de disparo</div>
-                      <input
-                        type="time"
-                        className={styles.modalInput}
-                        value={botConfig.dispatchTime || '09:00'}
-                        onChange={(e) => setBotConfig((prev) => ({ ...prev, dispatchTime: e.target.value }))}
-                      />
-                      <div style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: '0.55rem',
-                        color: 'var(--text-muted)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                      }}>
-                        Horário de Brasília (BRT)
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Dias ativos */}
-                  <div className={styles.botField} style={{ marginBottom: 18 }}>
-                    <div className={styles.botFieldLabel}>Dias ativos</div>
-                    <div className={styles.daysRow}>
-                      {DAYS.map((d) => (
-                        <button
-                          key={d.iso}
-                          type="button"
-                          className={`${styles.dayChip} ${(botConfig.activeDays || []).includes(d.iso) ? styles.dayChipActive : ''}`}
-                          onClick={() => toggleDay(d.iso)}
-                        >
-                          {d.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Cobrança no cliente */}
-                  <div className={styles.botField}>
-                    <div className={styles.botFieldLabel}>Canais de cobrança</div>
-                    <div className={styles.toggleRow}>
-                      <div className={styles.toggleRowLeft}>
-                        <div className={styles.toggleRowTitle}>Número pessoal do cliente</div>
-                        <div className={styles.toggleRowNote}>
-                          Envia mensagem no WhatsApp pessoal cadastrado na ficha do cliente
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className={`${styles.toggleSwitch} ${botConfig.chargePersonal ? styles.toggleSwitchActive : ''}`}
-                        onClick={() => setBotConfig((prev) => ({ ...prev, chargePersonal: !prev.chargePersonal }))}
-                      >
-                        <div className={`${styles.toggleKnob} ${botConfig.chargePersonal ? styles.toggleKnobActive : ''}`} />
-                      </button>
-                    </div>
-                    <div className={styles.toggleRow}>
-                      <div className={styles.toggleRowLeft}>
-                        <div className={styles.toggleRowTitle}>Grupo WhatsApp do cliente</div>
-                        <div className={styles.toggleRowNote}>
-                          Requer grupo vinculado na ficha do cliente
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className={`${styles.toggleSwitch} ${botConfig.chargeGroup ? styles.toggleSwitchActive : ''}`}
-                        onClick={() => setBotConfig((prev) => ({ ...prev, chargeGroup: !prev.chargeGroup }))}
-                      >
-                        <div className={`${styles.toggleKnob} ${botConfig.chargeGroup ? styles.toggleKnobActive : ''}`} />
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <button
-                className={`sigma-btn-primary ${styles.botSaveBtn}`}
-                onClick={handleSaveBot}
-                disabled={savingBot}
-              >
-                <IconCheck size={12} /> {savingBot ? 'Salvando...' : 'Salvar Configurações'}
-              </button>
-            </>
-          )}
-        </div>
       </div>
 
       {/* ════════════════════════════════════════════════

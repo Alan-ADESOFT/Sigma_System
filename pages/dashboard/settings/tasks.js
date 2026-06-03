@@ -44,14 +44,6 @@ Aqui está o seu dia organizado:
 
 Vamos com tudo! 💪`;
 
-const DEFAULT_OVERDUE_MESSAGE = `⚠️ *Atenção, {nome}*
-
-Você tem *{count} tarefa(s) atrasada(s)* aguardando ação:
-
-{tarefas}
-
-Resolva ainda hoje para manter o ritmo. 🎯`;
-
 /* ── SVG icons inline ── */
 
 function IconEdit({ size = 12 }) {
@@ -173,12 +165,12 @@ export default function SettingsTasksPage() {
   const [catForm, setCatForm] = useState({ name: '', color: COLOR_PALETTE[0] });
 
   /* Templates de mensagens (globais por tenant) */
-  const [templates, setTemplates] = useState({ morning: '', overdue: '' });
-  const [templateDefaults, setTemplateDefaults] = useState({ morning: DEFAULT_MORNING_MESSAGE, overdue: DEFAULT_OVERDUE_MESSAGE });
+  const [templates, setTemplates] = useState({ morning: '' });
+  const [templateDefaults, setTemplateDefaults] = useState({ morning: DEFAULT_MORNING_MESSAGE });
   const [savingTemplates, setSavingTemplates] = useState(false);
 
   /* Comando /reuniao (WhatsApp) */
-  const [reuniaoCfg, setReuniaoCfg] = useState({ enabled: false, allowedGroups: [], allowedNumbers: [] });
+  const [reuniaoCfg, setReuniaoCfg] = useState({ enabled: false, allowedGroups: [], allowedNumbers: [], reminderEnabled: false });
   const [waGroups, setWaGroups] = useState([]);
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [newReuniaoNumber, setNewReuniaoNumber] = useState('');
@@ -222,7 +214,7 @@ export default function SettingsTasksPage() {
       if (botData.success) setBotConfigs(botData.configs || []);
       if (usersData.success) setUsers(usersData.users || []);
       if (tplData.success) {
-        setTemplates(tplData.templates || { morning: '', overdue: '' });
+        setTemplates(tplData.templates || { morning: '' });
         if (tplData.defaults) setTemplateDefaults(tplData.defaults);
       }
       if (reuData.success && reuData.config) setReuniaoCfg(reuData.config);
@@ -560,10 +552,9 @@ export default function SettingsTasksPage() {
         user_id: userId,
         user_name: u?.name || 'Usuário',
         phone: '',
-        dispatch_time: '08:00',
+        dispatch_time: '09:00',
         active_days: [1, 2, 3, 4, 5],
         message_morning: templates.morning || DEFAULT_MORNING_MESSAGE,
-        message_overdue: templates.overdue || DEFAULT_OVERDUE_MESSAGE,
         is_active: false,
       },
     ]);
@@ -873,42 +864,6 @@ export default function SettingsTasksPage() {
                     </div>
                   </div>
 
-                  {/* Mensagem da tarde — sprint Tasks v2 (mai/2026)
-                      O cron tasks-overdue parou de enviar WhatsApp; o
-                      segundo lembrete do dia agora é o tasks-afternoon (16h),
-                      que reaproveita o template `message_overdue` por baixo.
-                      Mantemos a chave do banco igual pra evitar migração de
-                      coluna; visualmente expomos como "Mensagem da tarde". */}
-                  <div className={styles.botSection}>
-                    <div className={styles.botSectionLabel}>
-                      <span className={styles.botSectionLabelDot} />
-                      Mensagem da tarde
-                    </div>
-                    <div className={styles.messageBox}>
-                      <textarea
-                        className={styles.messageTextarea}
-                        value={cfg.message_overdue || ''}
-                        onChange={(e) => updateBotField(cfg.user_id, 'message_overdue', e.target.value)}
-                        placeholder="Mensagem enviada todas as tardes às 16h..."
-                      />
-                      <div className={styles.messageTagsRow}>
-                        {['{nome}', '{tarefas}', '{count}'].map((tag) => (
-                          <button
-                            key={tag}
-                            type="button"
-                            className={styles.messageTag}
-                            onClick={() => insertTagInMessage(cfg.user_id, 'message_overdue', tag)}
-                          >
-                            {tag}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className={styles.messageHint}>
-                      Lembrete vespertino — listagem das tarefas ainda pendentes do dia.
-                    </div>
-                  </div>
-
                   {/* Save */}
                   <button
                     className={`sigma-btn-primary ${styles.botSaveBtn}`}
@@ -986,6 +941,27 @@ export default function SettingsTasksPage() {
                 onClick={() => setReuniaoCfg((p) => ({ ...p, enabled: !p.enabled }))}
               >
                 <div className={`${styles.toggleKnob} ${reuniaoCfg.enabled ? styles.toggleKnobActive : ''}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Toggle lembrete 1h antes */}
+          <div className={styles.botSection}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div className={styles.botSectionLabel}>
+                  <span className={styles.botSectionLabelDot} /> Lembrar reuniões 1h antes
+                </div>
+                <div className={styles.messageHint}>
+                  Manda um lembrete no WhatsApp ~1h antes de cada reunião (interna ou com cliente) para os números/grupos autorizados acima. Requer o cron meeting-reminder rodando a cada ~15 min.
+                </div>
+              </div>
+              <button
+                type="button"
+                className={`${styles.toggleSwitch} ${reuniaoCfg.reminderEnabled ? styles.toggleSwitchActive : ''}`}
+                onClick={() => setReuniaoCfg((p) => ({ ...p, reminderEnabled: !p.reminderEnabled }))}
+              >
+                <div className={`${styles.toggleKnob} ${reuniaoCfg.reminderEnabled ? styles.toggleKnobActive : ''}`} />
               </button>
             </div>
           </div>
@@ -1179,58 +1155,8 @@ export default function SettingsTasksPage() {
               </div>
             </div>
 
-            {/* Template global "Mensagem da tarde" — mapeado para
-                templates.overdue por baixo (mesmo motivo descrito na seção
-                por usuário). Usado como ponto de partida ao adicionar um
-                novo usuário ao bot. */}
-            <div className={styles.botSection}>
-              <div className={styles.botSectionLabel}>
-                <span className={styles.botSectionLabelDot} />
-                Template — mensagem da tarde
-                <button
-                  type="button"
-                  onClick={() => restoreDefault('overdue')}
-                  style={{
-                    marginLeft: 'auto',
-                    padding: '3px 10px',
-                    background: 'transparent',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: 4,
-                    color: 'var(--text-muted)',
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '0.5rem',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Restaurar padrão
-                </button>
-              </div>
-              <div className={styles.messageBox}>
-                <textarea
-                  className={styles.messageTextarea}
-                  value={templates.overdue}
-                  onChange={(e) => setTemplates((p) => ({ ...p, overdue: e.target.value }))}
-                  placeholder="Mensagem padrão da tarde..."
-                />
-                <div className={styles.messageTagsRow}>
-                  {['{nome}', '{tarefas}', '{count}'].map((tag) => (
-                    <button
-                      key={tag}
-                      type="button"
-                      className={styles.messageTag}
-                      onClick={() => insertTagInTemplate('overdue', tag)}
-                    >
-                      {tag}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className={styles.messageHint}>
-                Estes templates são o ponto de partida ao adicionar um novo usuário ao bot. Cada usuário ainda pode personalizar individualmente.
-              </div>
+            <div className={styles.messageHint}>
+              Este template é o ponto de partida ao adicionar um novo usuário ao bot. Cada usuário ainda pode personalizar individualmente.
             </div>
           </div>
         </div>
