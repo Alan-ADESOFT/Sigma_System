@@ -76,7 +76,7 @@ Se você não conseguir atribuir uma tarefa a um usuário específico, use o id 
 
 # Saída
 
-Responda APENAS com JSON válido (sem markdown, sem fences, sem texto antes ou depois). Estrutura:
+Responda APENAS com JSON válido e COMPACTO (sem indentação nem espaços extras; títulos curtos), sem markdown, sem fences, sem texto antes ou depois. Estrutura:
 
 {
   "tasks": [
@@ -122,19 +122,64 @@ function extractJSON(rawText) {
     txt = txt.replace(/^```(?:json)?\s*\n?/i, '').replace(/```\s*$/i, '').trim();
   }
 
-  // Acha o primeiro { e o último } — defensivo contra prefixos tipo "Aqui está:"
+  // Acha o primeiro { — defensivo contra prefixos tipo "Aqui está:"
   const first = txt.indexOf('{');
-  const last = txt.lastIndexOf('}');
-  if (first === -1 || last === -1 || last < first) {
+  if (first === -1) {
     throw new Error('Resposta da IA não contém JSON válido');
   }
-  const sliced = txt.slice(first, last + 1);
+  txt = txt.slice(first);
 
+  // 1) tentativa direta (até o último '}')
+  const last = txt.lastIndexOf('}');
+  const direct = last !== -1 ? txt.slice(0, last + 1) : txt;
   try {
-    return JSON.parse(sliced);
+    return JSON.parse(direct);
   } catch (err) {
+    // 2) JSON truncado (output estourou o limite de tokens)? Tenta reparar:
+    //    corta no último objeto completo e fecha os arrays/objetos abertos,
+    //    salvando o prefixo válido (ex.: as primeiras N tarefas da lista cortada).
+    const repaired = repairTruncatedJson(txt);
+    if (repaired) {
+      try {
+        const obj = JSON.parse(repaired);
+        if (obj && typeof obj === 'object') {
+          obj._repaired = true;
+          console.warn('[WARN][bulkImport] JSON truncado reparado — alguns itens podem ter ficado de fora');
+          return obj;
+        }
+      } catch { /* cai no throw abaixo */ }
+    }
     throw new Error(`JSON malformado da IA: ${err.message}`);
   }
+}
+
+/**
+ * Repara JSON truncado: encontra o último objeto completo (último '}' fora de
+ * string), descarta o item parcial e fecha os arrays/objetos que ficaram abertos.
+ */
+function repairTruncatedJson(s) {
+  let inStr = false, esc = false, lastObjEnd = -1;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue; }
+    if (ch === '"') inStr = true;
+    else if (ch === '}') lastObjEnd = i;
+  }
+  if (lastObjEnd === -1) return null;
+  let head = s.slice(0, lastObjEnd + 1);
+
+  inStr = false; esc = false;
+  const stack = [];
+  for (let i = 0; i < head.length; i++) {
+    const ch = head[i];
+    if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue; }
+    if (ch === '"') inStr = true;
+    else if (ch === '{' || ch === '[') stack.push(ch);
+    else if (ch === '}' || ch === ']') stack.pop();
+  }
+  head = head.replace(/,\s*$/, '');
+  for (let i = stack.length - 1; i >= 0; i--) head += stack[i] === '{' ? '}' : ']';
+  return head;
 }
 
 /**
@@ -289,7 +334,7 @@ async function parseBulkImport({
     'medium',
     system,
     userMessage,
-    5000,
+    16000, // teto do gpt-4o (16384) — ata grande gera muito JSON; evita truncar
     {
       tenantId,
       operationType: 'tasks_bulk_import',
@@ -310,6 +355,11 @@ async function parseBulkImport({
 
   // Reuniões compartilham o mesmo array de warnings.
   const meetings = normalizeMeetings(parsed, { validClientIds, warnings });
+
+  // Se o JSON foi reparado (output truncado), avisa que pode ter faltado item.
+  if (parsed && parsed._repaired) {
+    warnings.unshift('A ata era grande e a resposta da IA foi cortada — alguns afazeres podem ter ficado de fora. Confira a lista; se faltou algo, rode de novo (ou em duas levas).');
+  }
 
   console.log('[SUCESSO][bulkImport]', {
     tasks: tasks.length, meetings: meetings.length, warnings: warnings.length, model: completion.modelUsed,
