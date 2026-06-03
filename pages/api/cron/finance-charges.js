@@ -85,14 +85,11 @@ export default async function handler(req, res) {
 
       // 1. Ler config do bot
       const bot = await getBotConfig(tenantId);
-      // Cobrança automática desligada por padrão — agora é manual via botão COBRAR.
-      // O cron só dispara se autoChargeEnabled === true nas settings do tenant.
+      // Cobrança automática controlada pelo toggle "Cobrança automática diária"
+      // (autoChargeEnabled) em Config. Financeiro. Desligada por padrão — a
+      // cobrança hoje é manual via botão COBRAR no Financeiro.
       if (!bot.autoChargeEnabled) {
         console.log('[INFO][Cron:FinanceCharges] Cobrança automática desligada para tenant', { tenantId });
-        continue;
-      }
-      if (!bot.active) {
-        console.log('[INFO][Cron:FinanceCharges] Bot inativo para tenant', { tenantId });
         continue;
       }
 

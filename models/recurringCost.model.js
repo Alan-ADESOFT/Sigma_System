@@ -49,15 +49,19 @@ async function createRecurringCost(tenantId, { description, value, category_id, 
 }
 
 async function updateRecurringCost(id, tenantId, p) {
+  // category_id é "limpável": se a chave veio no payload (mesmo null), aplica;
+  // se não veio (ex.: toggle de is_active), preserva. Sem isso, COALESCE
+  // impediria voltar pra "Sem categoria".
+  const catProvided = p.category_id !== undefined;
   return queryOne(
     `UPDATE recurring_costs SET
        description  = COALESCE($3, description),
        value        = COALESCE($4, value),
-       category_id  = COALESCE($5, category_id),
-       day_of_month = COALESCE($6, day_of_month),
-       frequency    = COALESCE($7, frequency),
-       is_active    = COALESCE($8, is_active),
-       notes        = COALESCE($9, notes),
+       category_id  = CASE WHEN $5::boolean THEN $6 ELSE category_id END,
+       day_of_month = COALESCE($7, day_of_month),
+       frequency    = COALESCE($8, frequency),
+       is_active    = COALESCE($9, is_active),
+       notes        = COALESCE($10, notes),
        updated_at   = now()
      WHERE id = $1 AND tenant_id = $2
      RETURNING *`,
@@ -65,7 +69,8 @@ async function updateRecurringCost(id, tenantId, p) {
       id, tenantId,
       p.description ?? null,
       p.value != null ? Number(p.value) : null,
-      p.category_id ?? null,
+      catProvided,
+      catProvided ? (p.category_id || null) : null,
       p.day_of_month != null ? Number(p.day_of_month) : null,
       p.frequency ?? null,
       p.is_active != null ? Boolean(p.is_active) : null,
@@ -126,6 +131,18 @@ async function generateForMonth(tenantId, monthKey) {
     // No mês corrente, só lança quando o dia já chegou. Meses passados lançam já.
     if (monthKey === curMonth && curDay < dom) continue;
 
+    // Claim atômico do mês: o UPDATE só "ganha" uma vez (last_generated_month
+    // IS DISTINCT FROM monthKey). Evita lançamento duplicado quando dois GETs
+    // (duas abas / effect duplo do React) disparam o ensure-on-read juntos.
+    const claimed = await queryOne(
+      `UPDATE recurring_costs
+          SET last_generated_month = $3, updated_at = now()
+        WHERE id = $1 AND tenant_id = $2 AND (last_generated_month IS DISTINCT FROM $3)
+        RETURNING id`,
+      [rc.id, tenantId, monthKey]
+    );
+    if (!claimed) continue; // outra execução já lançou este mês
+
     const dateStr = `${monthKey}-${String(dom).padStart(2, '0')}`;
 
     let catName = null;
@@ -142,7 +159,6 @@ async function generateForMonth(tenantId, monthKey) {
        VALUES ($1, 'expense', $2, $3, $4, $5, $6, $7)`,
       [tenantId, catName, rc.category_id || null, rc.description, rc.value, dateStr, rc.notes || 'Custo recorrente (automático)']
     );
-    await markGenerated(rc.id, tenantId, monthKey);
     created++;
   }
   return created;

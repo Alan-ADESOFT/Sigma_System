@@ -3,7 +3,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Preferências por usuário do módulo de Tasks.
  *
- * Hoje guarda apenas a view default do dashboard de tasks (kanban/lista/checklist),
+ * Hoje guarda apenas a view default do dashboard de tasks (kanban/checklist/categoria),
  * mas a tabela é genérica o suficiente pra crescer (ex: ordenação preferida,
  * agrupamento default, etc.) sem migration adicional.
  *
@@ -15,7 +15,9 @@
 
 const { queryOne } = require('../infra/db');
 
-const ALLOWED_VIEWS = ['kanban', 'lista', 'checklist'];
+// 'lista' foi removida da UI; mantida aqui e na CHECK do banco só p/ aceitar
+// linhas legadas. A view nova é 'categoria'. O read-path normaliza 'lista'→'checklist'.
+const ALLOWED_VIEWS = ['kanban', 'checklist', 'categoria', 'lista'];
 const DEFAULT_VIEW = 'checklist';
 
 function isValidView(v) {

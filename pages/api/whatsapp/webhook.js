@@ -22,7 +22,7 @@
  */
 
 import { queryOne } from '../../../infra/db';
-const { sendText, normalizeZApiPhone } = require('../../../infra/api/zapi');
+const { sendText } = require('../../../infra/api/zapi');
 const { getReuniaoConfig } = require('../../../models/reuniaoBotConfig.model');
 const meetingModel = require('../../../models/meeting.model');
 const { runCompletion } = require('../../../models/ia/completion');

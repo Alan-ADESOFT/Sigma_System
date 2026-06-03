@@ -1,7 +1,7 @@
 /**
  * pages/dashboard/tasks/index.js
  * ─────────────────────────────────────────────────────────────────────────────
- * Tarefas — Kanban por dia da semana + Lista agrupada por dia.
+ * Tarefas — Checklist (default) + Kanban por dia da semana + Por Categoria.
  *
  * Coluna ATRASADAS (vermelha) fixa a esquerda + 7 colunas SEG-DOM com data.
  * Navegacao semanal com setas. Coluna do dia atual destacada.
@@ -632,7 +632,7 @@ export default function TasksPage() {
 
   /* ── State ── */
   const [scope, setScope] = useState('me');                 // me / team
-  const [viewMode, setViewMode] = useState('checklist');    // kanban / lista / checklist (default v2)
+  const [viewMode, setViewMode] = useState('checklist');    // kanban / checklist / categoria (default v2)
   const [viewLoaded, setViewLoaded] = useState(false);      // só persiste depois do fetch inicial
   const [tasks, setTasks] = useState([]);
   const [categories, setCategories] = useState([]);

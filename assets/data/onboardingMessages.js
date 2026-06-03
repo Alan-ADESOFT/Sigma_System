@@ -80,7 +80,7 @@ E vai descobrir coisas que você já faz e nunca contou pra ninguém.
 Responde como se tivesse explicando pra um amigo. Sem ensaiar.
 
 {LINK}`,
-  6: `Hoje a gente faz inventário.
+  6: `Dia 7. Hoje a gente faz inventário.
 
 Você tem mais prova social do que imagina.
 A maioria dos empresários tem munição parada na gaveta.
@@ -88,7 +88,7 @@ A maioria dos empresários tem munição parada na gaveta.
 Lista tudo. Mesmo o que parece pequeno. Eu organizo depois.
 
 {LINK}`,
-  7: `A etapa mais importante do processo inteiro.
+  7: `Etapa 8. A mais importante do processo inteiro.
 
 Aqui você não responde formulário. Você me entrega a alma da sua marca.
 Sem essa camada, todo o resto vira técnica vazia.
@@ -96,7 +96,7 @@ Sem essa camada, todo o resto vira técnica vazia.
 Senta com calma. Responde como se estivesse contando pra alguém que vai cuidar da história. Porque vou.
 
 {LINK}`,
-  8: `Etapa liberada.
+  8: `Etapa 9 liberada.
 
 Hoje você não vai me impressionar.
 Você vai me mostrar onde tá hoje, na crueza.
@@ -105,7 +105,7 @@ Você vai me mostrar onde tá hoje, na crueza.
 Sem maquiar. 5 minutos.
 
 {LINK}`,
-  9: `A etapa mais desconfortável.
+  9: `Etapa 10. A mais desconfortável.
 
 E a mais importante pra eu te entregar resultado.
 Não tem vergonha em "não sei". Tem vergonha em fingir que sabe.
@@ -113,7 +113,9 @@ Não tem vergonha em "não sei". Tem vergonha em fingir que sabe.
 Responde com verdade. Eu cuido do resto.
 
 {LINK}`,
-  10: `Hoje a gente expõe os pontos de vazamento.
+  10: `Etapa 11 e 12.
+
+Hoje a gente expõe os pontos de vazamento.
 
 Vazamento de cliente. Vazamento de venda. Vazamento de dinheiro.
 A maioria não enxerga porque ninguém parou pra perguntar.
@@ -121,7 +123,9 @@ A maioria não enxerga porque ninguém parou pra perguntar.
 Eu paro. Responde.
 
 {LINK}`,
-  11: `Você passou treze dias olhando pra trás e pra dentro.
+  11: `Etapa 13 e 14.
+
+Você passou treze dias olhando pra trás e pra dentro.
 
 Hoje você olha pra frente.
 E define o tamanho do que a gente vai construir.

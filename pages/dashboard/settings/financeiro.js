@@ -671,29 +671,30 @@ export default function SettingsFinanceiro() {
             <div className={styles.catEmpty}>carregando configurações...</div>
           ) : botConfig && (
             <>
-              {/* Status row */}
+              {/* Status row — controla o cron de cobrança automática (autoChargeEnabled).
+                  Desligado por padrão: a cobrança hoje é manual via botão COBRAR. */}
               <div className={styles.botStatusRow}>
                 <div className={styles.botStatusLeft}>
                   <div className={styles.botStatusIcon}>
                     <IconBot size={18} />
                   </div>
                   <div className={styles.botStatusInfo}>
-                    <div className={styles.botStatusTitle}>Bot de cobrança</div>
-                    <div className={`${styles.botStatusSub} ${botConfig.active ? styles.botStatusActive : ''}`}>
-                      {botConfig.active ? '● Ativo' : '○ Inativo'}
+                    <div className={styles.botStatusTitle}>Cobrança automática diária</div>
+                    <div className={`${styles.botStatusSub} ${botConfig.autoChargeEnabled ? styles.botStatusActive : ''}`}>
+                      {botConfig.autoChargeEnabled ? '● Ativa (cron envia sozinho)' : '○ Inativa (só botão COBRAR)'}
                     </div>
                   </div>
                 </div>
                 <button
                   type="button"
-                  className={`${styles.toggleSwitch} ${botConfig.active ? styles.toggleSwitchActive : ''}`}
-                  onClick={() => setBotConfig((prev) => ({ ...prev, active: !prev.active }))}
+                  className={`${styles.toggleSwitch} ${botConfig.autoChargeEnabled ? styles.toggleSwitchActive : ''}`}
+                  onClick={() => setBotConfig((prev) => ({ ...prev, autoChargeEnabled: !prev.autoChargeEnabled }))}
                 >
-                  <div className={`${styles.toggleKnob} ${botConfig.active ? styles.toggleKnobActive : ''}`} />
+                  <div className={`${styles.toggleKnob} ${botConfig.autoChargeEnabled ? styles.toggleKnobActive : ''}`} />
                 </button>
               </div>
 
-              {botConfig.active && (
+              {botConfig.autoChargeEnabled && (
                 <>
                   {/* Numbers + Time + Days */}
                   <div className={styles.botFieldsGrid}>

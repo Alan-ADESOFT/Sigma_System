@@ -1128,9 +1128,26 @@ CREATE TABLE IF NOT EXISTS user_task_preferences (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(tenant_id, user_id),
-    CHECK (default_view IN ('kanban', 'lista', 'checklist'))
+    CHECK (default_view IN ('kanban', 'checklist', 'categoria', 'lista'))
 );
 CREATE INDEX IF NOT EXISTS idx_user_task_prefs_tenant ON user_task_preferences(tenant_id, user_id);
+
+-- A view 'categoria' foi adicionada depois; a CHECK acima só vale pra tabela nova.
+-- Pra bancos já existentes, recria a CHECK incluindo 'categoria' (idempotente).
+DO $$
+DECLARE cname text;
+BEGIN
+  SELECT conname INTO cname FROM pg_constraint
+   WHERE conrelid = 'user_task_preferences'::regclass AND contype = 'c'
+     AND pg_get_constraintdef(oid) LIKE '%default_view%';
+  IF cname IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE user_task_preferences DROP CONSTRAINT %I', cname);
+  END IF;
+  ALTER TABLE user_task_preferences
+    ADD CONSTRAINT user_task_preferences_default_view_check
+    CHECK (default_view IN ('kanban', 'checklist', 'categoria', 'lista'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================
 -- 43. CONTENT PLANNING (planejamento mensal de conteúdo)

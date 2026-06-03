@@ -741,10 +741,14 @@ function NotificationBell() {
     if (type === 'user_deactivated')             return '⊘';
     // Financeiro
     if (type === 'contract_created')             return '□';
+    if (type === 'finance_charge_sent')          return '$';
     // Cliente
     if (type === 'client_deleted')               return '✕';
     // Pipeline
     if (type === 'pipeline_started')             return '▶';
+    if (type === 'lead_won')                     return '★';
+    // Reuniões
+    if (type === 'meeting_created')              return '◷';
     // Jarvis
     if (type === 'jarvis_action')                return '⚡';
     // Sistema
