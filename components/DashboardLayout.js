@@ -85,6 +85,7 @@ const NAV_SECTIONS = [
       { href: '/dashboard/productivity',         label: 'Produtividade',         tag: '03', icon: 'barChart',  minRole: 'user' },
       { href: '/dashboard/tasks',                label: 'Tarefas',               tag: '04', icon: 'clipboard', minRole: 'user' },
       { href: '/dashboard/meetings',             label: 'Calendário',            tag: '05', icon: 'calendar',  minRole: 'user' },
+      { href: '/dashboard/atas',                 label: 'Atas Semanais',         tag: '05b', icon: 'fileText', minRole: 'user' },
       { href: '/dashboard/task-automation',      label: 'Automação',             tag: '06', icon: 'zap',       minRole: 'admin' },
     ],
   },

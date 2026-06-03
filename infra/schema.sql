@@ -1052,6 +1052,50 @@ CREATE INDEX IF NOT EXISTS idx_meetings_client ON meetings(client_id);
 ALTER TABLE meetings ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ;
 
 -- ============================================================
+-- 39b. ATAS SEMANAIS (documento vivo — afazeres viram tasks reais)
+-- ============================================================
+-- A ata guarda os afazeres em JSONB (rascunho). Ao "distribuir", cada afazer
+-- vira uma client_tasks real (linkada via client_tasks.ata_id), então a ata
+-- mostra o status ao vivo puxando dessas tasks. Pastas organizam as atas.
+CREATE TABLE IF NOT EXISTS ata_folders (
+    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    color       TEXT NOT NULL DEFAULT '#6366F1',
+    created_by  TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(tenant_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_ata_folders_tenant ON ata_folders(tenant_id);
+
+CREATE TABLE IF NOT EXISTS atas (
+    id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    folder_id       TEXT REFERENCES ata_folders(id) ON DELETE SET NULL,
+    title           TEXT NOT NULL,
+    reference_week  DATE,                              -- segunda-feira da semana
+    week_number     INTEGER,
+    meeting_date    DATE,
+    meeting_time    TEXT,
+    responsible     TEXT,
+    participants    JSONB NOT NULL DEFAULT '[]',
+    afazeres        JSONB NOT NULL DEFAULT '[]',       -- [{id,client_id,category_id,description,assigned_to,due_date,next_week,task_id}]
+    notes           TEXT,
+    status          TEXT NOT NULL DEFAULT 'draft',     -- draft | distributed
+    distributed_at  TIMESTAMPTZ,
+    created_by      TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_atas_tenant ON atas(tenant_id, reference_week DESC);
+CREATE INDEX IF NOT EXISTS idx_atas_folder ON atas(folder_id);
+
+-- Liga uma tarefa à ata que a originou (status ao vivo na ata).
+ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS ata_id TEXT REFERENCES atas(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_client_tasks_ata ON client_tasks(ata_id);
+
+-- ============================================================
 -- 40. TASK_TEMPLATES (automação de tasks)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS task_templates (
@@ -1576,6 +1620,7 @@ BEGIN
         'task_recurrences','user_task_preferences',
         'support_modules','support_lessons',
         'finance_categories','recurring_costs',
+        'atas','ata_folders',
         'content_plan_statuses','content_plans','content_plan_creatives','content_plan_share_tokens',
         'referrals','referral_config',
         'comercial_lead_lists','comercial_pipeline_columns','comercial_pipeline_leads',

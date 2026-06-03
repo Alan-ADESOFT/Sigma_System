@@ -405,8 +405,8 @@ async function createMany(items, tenantId) {
 
   if (valid.length === 0) return { created: [], failed };
 
-  // Monta VALUES dinâmico com 15 colunas por linha
-  const COLS = 15;
+  // Monta VALUES dinâmico com 16 colunas por linha
+  const COLS = 16;
   const placeholders = [];
   const params = [];
   let p = 1;
@@ -429,6 +429,7 @@ async function createMany(items, tenantId) {
       subtasksJson,
       Boolean(item.subtasks_required),
       item.recurrence_id || null,
+      item.ata_id || null,
     ];
     if (row.length !== COLS) {
       throw new Error(`[createMany] linha com ${row.length} colunas, esperado ${COLS}`);
@@ -443,7 +444,7 @@ async function createMany(items, tenantId) {
     `INSERT INTO client_tasks
        (tenant_id, title, description, client_id, assigned_to,
         priority, due_date, due_time, status, category_id,
-        estimated_hours, created_by, subtasks, subtasks_required, recurrence_id)
+        estimated_hours, created_by, subtasks, subtasks_required, recurrence_id, ata_id)
      VALUES ${placeholders.join(', ')}
      RETURNING *`,
     params
