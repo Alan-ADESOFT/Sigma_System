@@ -13,8 +13,8 @@ async function createMeeting(data, tenantId) {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      RETURNING *`,
     [
-      tenantId, title, description, meeting_date, start_time, end_time,
-      client_id, participants, status, meet_link, obs, created_by
+      tenantId, title, description || null, meeting_date, start_time, end_time || null,
+      client_id || null, participants || [], status || 'scheduled', meet_link || null, obs || null, created_by
     ]
   );
 }
