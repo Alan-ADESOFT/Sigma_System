@@ -8,6 +8,7 @@
 import { resolveTenantId } from '../../../../../../infra/get-tenant-id';
 const { runCompletion } = require('../../../../../../models/ia/completion');
 const { getSetting } = require('../../../../../../models/settings.model');
+const { checkRateLimit, logRateLimitEvent } = require('../../../../../../infra/rateLimit');
 const { DEFAULT_CALL_SCRIPT_SYSTEM } = require('../../../../../../models/comercial/prompts/callScript');
 const pipeline = require('../../../../../../models/comercial/pipeline.model');
 const { getLatestAnalysis } = require('../../../../../../models/comercial/leadAnalysis.model');
@@ -40,6 +41,17 @@ export default async function handler(req, res) {
     const lead = await pipeline.getLeadById(id, tenantId);
     if (!lead) return res.status(404).json({ success: false, error: 'Lead não encontrado' });
 
+    // Rate limit — chamada de IA paga ('strong'). Evita disparo em loop.
+    const maxPerDay = Number(process.env.COMERCIAL_RATE_LIMIT_CALL_SCRIPT_PER_DAY) || 30;
+    const rl = await checkRateLimit(tenantId, 'comercial_call_script', maxPerDay, 24 * 60);
+    if (!rl.ok) {
+      return res.status(429).json({
+        success: false,
+        error: `Limite diário (${maxPerDay} scripts/dia) atingido. Tente em ${Math.ceil(rl.resetIn / 60)} min.`,
+        retryAfter: rl.resetIn,
+      });
+    }
+
     let { variant } = req.body || {};
     if (!VALID_VARIANTS.includes(variant)) variant = 'consultive';
 
@@ -56,6 +68,8 @@ export default async function handler(req, res) {
       tenantId,
       operationType: 'comercial_call_script',
     });
+
+    await logRateLimitEvent(tenantId, 'comercial_call_script', { leadId: id, variant });
 
     return res.json({
       success: true,

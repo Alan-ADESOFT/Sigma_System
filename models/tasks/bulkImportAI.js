@@ -63,16 +63,21 @@ Se você não conseguir atribuir uma tarefa a um usuário específico, use o id 
 
 # Regras
 
-1. NUNCA invente usuários, clientes ou categorias. Só use os IDs listados acima.
-2. Se a ata mencionar uma pessoa que não está na lista de usuários → use o fallback e gere warning.
-3. Se mencionar um cliente que não existe → deixe client_id como null e gere warning.
-4. Datas DEVEM estar no formato YYYY-MM-DD. Horários no formato HH:MM (24h) ou null.
-5. Prioridade: um de "baixa" | "normal" | "alta" | "urgente". Default = "normal".
-6. Use due_date sempre dentro ou depois da semana de referência (nunca no passado).
-7. Subtasks são opcionais — só inclua se a tarefa claramente quebra em sub-itens.
-8. Description é opcional — só preencha se houver contexto útil que não cabe no título.
-9. CATEGORIA: sempre escolha a categoria mais adequada entre as listadas (ex: CLIENTES para trabalho de cliente, COMERCIAL para vendas, SISTEMA para tarefas internas/técnicas, FINANCEIRO para cobrança/pagamentos, CONTABILIDADE para notas/impostos, OUTROS para o resto). Só deixe category_id nulo se realmente nenhuma se aplicar.
-10. REUNIÕES: se a ata marcar/agendar reuniões (com data, e às vezes hora e participantes), extraia em "meetings" separado das tarefas. Não duplique uma reunião como tarefa. participants é uma lista de NOMES (texto livre, não IDs). client_id da reunião só se um cliente da lista estiver claramente associado, senão null.
+0. COMPLETUDE (a regra mais importante): extraia TODOS os afazeres do texto, sem exceção. NÃO resuma, NÃO agrupe, NÃO omita nenhum item. Prefira gerar tarefas demais a deixar faltar. Ao terminar, confira mentalmente se cada linha de afazer do texto virou pelo menos uma tarefa.
+1. UMA LINHA = UMA TAREFA: cada item/linha de afazer vira UMA tarefa separada. NUNCA funda dois afazeres numa só — "gravar os vídeos" e "editar os vídeos" são DUAS tarefas distintas, mesmo que sequenciais. Se uma linha tiver dois verbos de ação independentes (ex.: "organizar e passar para o X montar"), pode manter junto se for uma ação só; mas se forem etapas claramente separadas com responsáveis ou momentos diferentes, separe.
+2. ESTRUTURA POR CLIENTE: os afazeres costumam estar agrupados sob CABEÇALHOS de cliente (nome em MAIÚSCULAS numa linha isolada, ex.: "BENTIVI", "TRENATEC", "STYLLUS ÓPTICA", "SERTEC.CON"). Todo afazer abaixo de um cabeçalho pertence àquele cliente, até aparecer o próximo cabeçalho. Resolva client_id casando o cabeçalho com a lista de clientes (case-insensitive; ignore acentos e sufixos como ".CON"/".com"). Se o cabeçalho não casar com nenhum cliente da lista, deixe client_id null (NÃO invente) — mas ainda assim crie a tarefa.
+3. FORMATO DA LINHA: o padrão comum é "Descrição - Responsável - Dia" (a ordem de Responsável e Dia pode variar). Use o nome do Responsável para assigned_to (casando com a lista de usuários) e o Dia da semana para due_date.
+4. PRÓXIMA SEMANA: blocos marcados "(PRÓXIMA SEMANA)" ou "(SEMANA QUE VEM)" contêm afazeres da semana SEGUINTE à de referência — inclua-os também (NÃO omita), com due_date caindo na semana seguinte à de referência.
+5. NUNCA invente usuários, clientes ou categorias. Só use os IDs listados acima.
+6. Se a ata mencionar uma pessoa que não está na lista de usuários → use o fallback "${fallbackUserId}" e gere warning. Se o afazer não tiver responsável explícito → use o fallback.
+7. Datas DEVEM estar no formato YYYY-MM-DD. Horários no formato HH:MM (24h) ou null. due_date sempre dentro ou depois da semana de referência (nunca no passado).
+8. Prioridade: um de "baixa" | "normal" | "alta" | "urgente". Default = "normal".
+9. SUBTAREFAS: se um afazer se desdobrar em sub-itens (lista aninhada, pauta de reunião, ou "fazer X: a, b, c"), quebre esses sub-itens em "subtasks". Ex.: "Executar alterações: alterar biografia, alterar outdoor" → 1 tarefa "Executar alterações" com 2 subtasks. Não invente subtasks que não estão no texto.
+10. Description é opcional — só preencha se houver contexto útil que não cabe no título.
+11. CATEGORIA: sempre escolha a categoria mais adequada entre as listadas (ex: CLIENTES para trabalho de cliente, COMERCIAL para vendas/prospecção, SISTEMA para tarefas internas/técnicas, FINANCEIRO para cobrança/pagamentos, CONTABILIDADE para notas/impostos, OUTROS para o resto). Só deixe category_id nulo se realmente nenhuma se aplicar.
+12. REUNIÕES: se a ata marcar/agendar reuniões (com data, e às vezes hora e participantes), extraia em "meetings" separado das tarefas. Não duplique uma reunião como tarefa. Inclua também reuniões citadas dentro dos afazeres (ex.: "marcar reunião com X"). client_id da reunião só se um cliente da lista estiver claramente associado, senão null.
+13. PARTICIPANTES da reunião: lista de NOMES (texto livre). Quando o nome corresponder a um usuário da lista acima, use EXATAMENTE o nome como está cadastrado (pra casar no sistema); nomes externos (não-usuários) podem entrar como vieram. Preencha todos os mencionados.
+14. OBSERVAÇÕES da reunião ("description"): quando o texto trouxer pauta, tópicos ou contexto da reunião, resuma em 1-2 frases (ex.: "Apresentar criativo; pedir acesso ao Spotify; alinhar valores"). Se não houver contexto além do título, deixe null. NÃO invente.
 
 # Saída
 
@@ -324,7 +329,7 @@ async function parseBulkImport({
   }
 
   const system = buildSystemPrompt({ users, clients, categories, referenceWeek, fallbackUserId });
-  const userMessage = `Texto bruto da reunião / ata:\n\n${String(text).slice(0, 12000)}`;
+  const userMessage = `Texto bruto da reunião / ata:\n\n${String(text).slice(0, 24000)}`;
 
   console.log('[INFO][bulkImport] chamando IA', {
     chars: text.length, users: users.length, clients: clients.length,

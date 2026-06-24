@@ -115,10 +115,17 @@ async function webSearch(query, instructions = '') {
     }
   }
 
-  console.log('[SUCESSO][OpenAI:WebSearch] Pesquisa concluída', { citationsCount: citations.length, resultLength: text.length });
+  const rawUsage = data.usage || {};
+  const usage = {
+    input:  rawUsage.input_tokens  || 0,
+    output: rawUsage.output_tokens || 0,
+    total:  rawUsage.total_tokens  || ((rawUsage.input_tokens || 0) + (rawUsage.output_tokens || 0)),
+  };
+
+  console.log('[SUCESSO][OpenAI:WebSearch] Pesquisa concluída', { citationsCount: citations.length, resultLength: text.length, usage });
   console.log('[DEBUG][OpenAI:WebSearch] Citations recebidas', { citations });
 
-  return { text, citations };
+  return { text, citations, usage, modelUsed: model };
 }
 
 module.exports = { generateCompletion, webSearch };

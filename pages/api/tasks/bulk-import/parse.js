@@ -23,7 +23,7 @@
  */
 
 const { resolveTenantId } = require('../../../../infra/get-tenant-id');
-const { requireAuth } = require('../../../../lib/api-auth');
+const { requireAdmin } = require('../../../../lib/api-auth');
 const { query } = require('../../../../infra/db');
 const { extractFromPDF, extractFromDOCX } = require('../../../../infra/api/fileReader');
 const { parseBulkImport } = require('../../../../models/tasks/bulkImportAI');
@@ -143,7 +143,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const user = await requireAuth(req);
+    // Importação em massa é restrita a admin/god.
+    const user = await requireAdmin(req);
     const tenantId = await resolveTenantId(req);
 
     let text = '';

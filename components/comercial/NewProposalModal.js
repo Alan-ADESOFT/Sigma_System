@@ -1,8 +1,8 @@
 /**
  * components/comercial/NewProposalModal.js
  * ─────────────────────────────────────────────────────────────────────────────
- * Modal "Nova Proposta" — escolhe prospect (existente | criar manual |
- * importar de pipeline_lead) e opcionalmente dispara IA de imediato.
+ * Modal "Nova Proposta" — escolhe prospect (existente | criar manual)
+ * e opcionalmente dispara IA de imediato.
  * Padrão SIGMA com SystemModal.
  * ─────────────────────────────────────────────────────────────────────────────
  */
@@ -35,10 +35,7 @@ export default function NewProposalModal({ onClose }) {
   const [tab, setTab] = useState('existing');
   const [prospects, setProspects] = useState([]);
   const [search, setSearch] = useState('');
-  const [pipelineLeads, setPipelineLeads] = useState([]);
-  const [pipelineSearch, setPipelineSearch] = useState('');
   const [selectedProspect, setSelectedProspect] = useState(null);
-  const [selectedLead, setSelectedLead] = useState(null);
   const [manualForm, setManualForm] = useState({
     companyName: '', contactName: '', phone: '', email: '',
     website: '', niche: '', city: '', state: '',
@@ -54,13 +51,7 @@ export default function NewProposalModal({ onClose }) {
         .then(j => { if (j.success) setProspects(j.prospects); })
         .catch(() => {});
     }
-    if (tab === 'pipeline') {
-      fetch(`/api/comercial/pipeline/leads${pipelineSearch ? `?search=${encodeURIComponent(pipelineSearch)}` : ''}`)
-        .then(r => r.json())
-        .then(j => { if (j.success) setPipelineLeads(j.leads); })
-        .catch(() => {});
-    }
-  }, [tab, search, pipelineSearch]);
+  }, [tab, search]);
 
   function setManualField(k, v) {
     setManualForm(f => ({ ...f, [k]: v }));
@@ -107,13 +98,6 @@ export default function NewProposalModal({ onClose }) {
       if (!res.ok || !j.success) throw new Error(j.error || 'Falha ao criar prospect');
       return j.prospect.id;
     }
-    if (tab === 'pipeline') {
-      if (!selectedLead) throw new Error('Selecione um lead');
-      const res = await fetch(`/api/comercial/prospects/from-lead/${selectedLead.id}`, { method: 'POST' });
-      const j = await res.json();
-      if (!res.ok || !j.success) throw new Error(j.error || 'Falha');
-      return j.prospect.id;
-    }
     throw new Error('Aba inválida');
   }
 
@@ -147,7 +131,7 @@ export default function NewProposalModal({ onClose }) {
       icon={PROPOSAL_ICON}
       iconVariant="create"
       title="Nova proposta"
-      description="Escolha um prospect existente, crie um novo manualmente, ou importe direto do pipeline. Você pode disparar a geração de conteúdo IA imediatamente."
+      description="Escolha um prospect existente ou crie um novo manualmente. Você pode disparar a geração de conteúdo IA imediatamente."
       size="md"
       primaryLabel={submitting ? 'Criando...' : 'Criar proposta'}
       onPrimary={handleSubmit}
@@ -167,7 +151,6 @@ export default function NewProposalModal({ onClose }) {
         {[
           { k: 'existing', l: 'Prospect existente' },
           { k: 'manual',   l: 'Criar manual' },
-          { k: 'pipeline', l: 'Do pipeline' },
         ].map(t => (
           <button
             key={t.k}
@@ -298,34 +281,6 @@ export default function NewProposalModal({ onClose }) {
               </Select>
             </Field>
           </Row3>
-        </>
-      )}
-
-      {tab === 'pipeline' && (
-        <>
-          <Field label="Buscar lead no pipeline">
-            <Input
-              placeholder="Digite o nome..."
-              value={pipelineSearch}
-              onChange={e => setPipelineSearch(e.target.value)}
-            />
-          </Field>
-          <div className={listStyles.prospectList}>
-            {pipelineLeads.length === 0
-              ? <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>Nenhum lead no pipeline</div>
-              : pipelineLeads.map(l => (
-                <div key={l.id}
-                     className={`${listStyles.prospectItem} ${selectedLead?.id === l.id ? listStyles.active : ''}`}
-                     onClick={() => setSelectedLead(l)}>
-                  <div>
-                    <div className={listStyles.prospectName}>{l.company_name}</div>
-                    <div className={listStyles.prospectMeta}>
-                      {l.column_name} · score {l.sigma_score || 0}
-                    </div>
-                  </div>
-                </div>
-              ))}
-          </div>
         </>
       )}
 

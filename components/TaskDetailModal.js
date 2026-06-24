@@ -348,7 +348,6 @@ export default function TaskDetailModal({
   const [dueDate, setDueDate] = useState('');
   const [priority, setPriority] = useState('normal');
   const [categoryId, setCategoryId] = useState('');
-  const [estimatedHours, setEstimatedHours] = useState('');
   const [description, setDescription] = useState('');
 
   // Nested data (edit mode)
@@ -407,7 +406,6 @@ export default function TaskDetailModal({
       setDueDate(formatDateInput(t.due_date));
       setPriority(t.priority || 'normal');
       setCategoryId(t.category_id || '');
-      setEstimatedHours(t.estimated_hours != null ? String(t.estimated_hours) : '');
       setDescription(t.description || '');
       setComments(t.comments || []);
       setActivity(t.activity || []);
@@ -547,7 +545,6 @@ export default function TaskDetailModal({
         due_date: dueDate || null,
         status,
         category_id: categoryId || null,
-        estimated_hours: estimatedHours ? Number(estimatedHours) : null,
         dependsOn: dependencies.map((d) => d.depends_on_id),
       };
 
@@ -1013,46 +1010,24 @@ export default function TaskDetailModal({
                     </div>
                   </div>
 
-                  {/* Row 3: Categoria + Horas Estimadas */}
-                  <div style={S.grid2}>
-                    <div style={S.fieldCol}>
-                      <label style={S.label}>Categoria</label>
-                      <select
-                        style={S.select}
-                        value={categoryId}
-                        onChange={(e) => {
-                          setCategoryId(e.target.value);
-                          if (isEditMode) saveField({ category_id: e.target.value || null });
-                        }}
-                        onFocus={(e) => { e.target.style.borderColor = 'rgba(255,0,51,0.5)'; }}
-                        onBlur={(e) => { e.target.style.borderColor = 'var(--border-default)'; }}
-                      >
-                        <option value="">Nenhuma</option>
-                        {tenantCategories.map((cat) => (
-                          <option key={cat.id} value={cat.id}>{cat.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div style={S.fieldCol}>
-                      <label style={S.label}>Horas Estimadas</label>
-                      <input
-                        type="number"
-                        style={S.input}
-                        value={estimatedHours}
-                        min="0"
-                        step="0.5"
-                        onChange={(e) => setEstimatedHours(e.target.value)}
-                        onFocus={(e) => { e.target.style.borderColor = 'rgba(255,0,51,0.5)'; }}
-                        onBlur={(e) => {
-                          e.target.style.borderColor = 'var(--border-default)';
-                          if (isEditMode) {
-                            saveField({ estimated_hours: estimatedHours ? Number(estimatedHours) : null });
-                          }
-                        }}
-                        placeholder="0"
-                      />
-                    </div>
+                  {/* Row 3: Categoria */}
+                  <div style={S.fieldCol}>
+                    <label style={S.label}>Categoria</label>
+                    <select
+                      style={S.select}
+                      value={categoryId}
+                      onChange={(e) => {
+                        setCategoryId(e.target.value);
+                        if (isEditMode) saveField({ category_id: e.target.value || null });
+                      }}
+                      onFocus={(e) => { e.target.style.borderColor = 'rgba(255,0,51,0.5)'; }}
+                      onBlur={(e) => { e.target.style.borderColor = 'var(--border-default)'; }}
+                    >
+                      <option value="">Nenhuma</option>
+                      {tenantCategories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
                   </div>
 
                   {/* Descricao */}

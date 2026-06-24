@@ -159,24 +159,25 @@
 .row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.025);
+  gap: 11px;
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   cursor: pointer;
+  border-radius: 6px;
   transition: background 0.15s ease;
 }
 
 .row:hover {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.045);
 }
 
 .checkbox {
   flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  border: 1.5px solid var(--border-subtle);
-  border-radius: 4px;
-  background: transparent;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -187,23 +188,31 @@
 }
 
 .checkbox:hover {
-  border-color: var(--brand-300);
+  border-color: #ff3355;
+  background: rgba(255, 0, 51, 0.1);
 }
 
 .checkboxDone {
-  background: var(--brand-500);
-  border-color: var(--brand-500);
+  background: #22c55e;
+  border-color: #22c55e;
   color: #fff;
+}
+
+.checkboxDone:hover {
+  background: #16a34a;
+  border-color: #16a34a;
 }
 
 .checkboxBlocked {
   cursor: not-allowed;
-  opacity: 0.4;
+  opacity: 0.45;
   border-color: var(--border-default);
+  background: transparent;
 }
 
 .checkboxBlocked:hover {
   border-color: var(--border-default);
+  background: transparent;
 }
 
 .rowTime {

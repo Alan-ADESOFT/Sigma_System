@@ -16,7 +16,7 @@
  */
 
 const { resolveTenantId } = require('../../../../infra/get-tenant-id');
-const { requireAuth } = require('../../../../lib/api-auth');
+const { requireAdmin } = require('../../../../lib/api-auth');
 const taskModel = require('../../../../models/task.model');
 
 export default async function handler(req, res) {
@@ -25,7 +25,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const user = await requireAuth(req);
+    // Importação em massa é restrita a admin/god.
+    const user = await requireAdmin(req);
     const tenantId = await resolveTenantId(req);
 
     const { tasks, meetings } = req.body || {};
@@ -62,17 +63,13 @@ export default async function handler(req, res) {
       ? await taskModel.createMany(items, tenantId)
       : { created: [], failed: [] };
 
-    // Reuniões (best-effort, uma por uma — sem transação no codebase).
+    // Reuniões (best-effort, em paralelo — sem transação no codebase).
     const meetingModel = require('../../../../models/meeting.model');
-    const createdMeetings = [];
-    const failedMeetings = [];
-    for (let i = 0; i < meetingList.length; i++) {
-      const m = meetingList[i];
+    const meetingResults = await Promise.all(meetingList.map(async (m, i) => {
+      if (!m?.title?.trim() || !m?.meeting_date) {
+        return { ok: false, index: i, error: 'título e data são obrigatórios' };
+      }
       try {
-        if (!m?.title?.trim() || !m?.meeting_date) {
-          failedMeetings.push({ index: i, error: 'título e data são obrigatórios' });
-          continue;
-        }
         const row = await meetingModel.createMeeting({
           title: m.title.trim(),
           description: m.description || null,
@@ -86,12 +83,14 @@ export default async function handler(req, res) {
           obs: null,
           created_by: user.id,
         }, tenantId);
-        createdMeetings.push(row);
+        return { ok: true, row };
       } catch (err) {
         console.error('[ERRO][bulkImport/commit] reunião falhou', { index: i, error: err.message });
-        failedMeetings.push({ index: i, error: err.message });
+        return { ok: false, index: i, error: err.message };
       }
-    }
+    }));
+    const createdMeetings = meetingResults.filter((r) => r.ok).map((r) => r.row);
+    const failedMeetings = meetingResults.filter((r) => !r.ok).map((r) => ({ index: r.index, error: r.error }));
 
     // Notificações pra responsáveis (best-effort, agrupado por user — uma
     // notificação por pessoa ao invés de N).
@@ -103,26 +102,28 @@ export default async function handler(req, res) {
           byAssignee[t.assigned_to] = (byAssignee[t.assigned_to] || 0) + 1;
         }
       }
-      for (const [uid, count] of Object.entries(byAssignee)) {
-        // Pessoal — cada assignee só vê o próprio bloco de tarefas dele.
-        await createUserNotification(
-          uid, tenantId, 'task_assigned',
-          'Tarefas atribuídas',
-          `${count} tarefa(s) foram atribuídas a você via importação em massa`,
-          null,
-          { source: 'bulk_import', count }
-        );
-      }
-      // Reuniões criadas → broadcast (todo time vê na agenda).
-      if (createdMeetings.length > 0) {
-        await createNotification(
-          tenantId, 'meeting_created',
-          'Reuniões criadas',
-          `${createdMeetings.length} reunião(ões) criada(s) via importação de ata`,
-          null,
-          { source: 'bulk_import', count: createdMeetings.length }
-        );
-      }
+      // Notificações em paralelo. Pessoal — cada assignee só vê o próprio bloco;
+      // reuniões → broadcast (todo time vê na agenda).
+      await Promise.all([
+        ...Object.entries(byAssignee).map(([uid, count]) =>
+          createUserNotification(
+            uid, tenantId, 'task_assigned',
+            'Tarefas atribuídas',
+            `${count} tarefa(s) foram atribuídas a você via importação em massa`,
+            null,
+            { source: 'bulk_import', count }
+          )
+        ),
+        createdMeetings.length > 0
+          ? createNotification(
+              tenantId, 'meeting_created',
+              'Reuniões criadas',
+              `${createdMeetings.length} reunião(ões) criada(s) via importação de ata`,
+              null,
+              { source: 'bulk_import', count: createdMeetings.length }
+            )
+          : null,
+      ].filter(Boolean));
     } catch (err) {
       console.warn('[WARN][bulkImport/commit] notificações falharam', err.message);
     }

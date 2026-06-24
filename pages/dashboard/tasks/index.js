@@ -18,6 +18,7 @@ import BulkImportModal from '../../../components/BulkImportModal';
 import styles from '../../../assets/style/tasks.module.css';
 import { useNotification } from '../../../context/NotificationContext';
 import { useAuth } from '../../../hooks/useAuth';
+import ConfirmModal from '../../../components/comercial/ConfirmModal';
 
 /* ─────────────────────────────────────────────────────────
    Constantes
@@ -177,12 +178,6 @@ const IconKanban = () => (
   </svg>
 );
 
-const IconTag = () => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M2 2h5l7 7-5 5-7-7V2z" />
-    <circle cx="5" cy="5" r="1" />
-  </svg>
-);
 
 const IconChecklist = () => (
   <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -251,11 +246,26 @@ function KpiCard({ label, value, color }) {
   );
 }
 
+/* Subtasks: JSONB pode vir como array ou string JSON. Conta progresso. */
+function parseSubtasks(raw) {
+  let arr = raw;
+  if (typeof arr === 'string') { try { arr = JSON.parse(arr || '[]'); } catch { arr = []; } }
+  return Array.isArray(arr) ? arr.filter(Boolean) : [];
+}
+function subtaskStats(task) {
+  const subs = parseSubtasks(task?.subtasks);
+  const done = subs.filter((s) => s.done).length;
+  return { subs, total: subs.length, done, allDone: subs.length === 0 || done === subs.length };
+}
+
 function TaskCard({ task, onClick, onDelete, onComplete, notify }) {
   const pri = PRIORITY_MAP[task.priority] || PRIORITY_MAP.normal;
   const blocked = task.has_pending_deps;
   const overdue = isOverdue(task);
   const done = task.status === 'done';
+  const sub = subtaskStats(task);
+  const subBlocked = task.subtasks_required && !sub.allDone;
+  const depCount = task.dep_count || 0;
 
   function handleClick() {
     if (blocked) {
@@ -269,6 +279,10 @@ function TaskCard({ task, onClick, onDelete, onComplete, notify }) {
     e.stopPropagation();
     if (blocked) {
       notify('Tarefa bloqueada por dependencias pendentes', 'warning');
+      return;
+    }
+    if (subBlocked) {
+      notify(`Conclua as ${sub.total - sub.done} subtarefa(s) obrigatória(s) antes de finalizar`, 'warning');
       return;
     }
     onComplete && onComplete(task);
@@ -338,8 +352,27 @@ function TaskCard({ task, onClick, onDelete, onComplete, notify }) {
             <IconCalendar /> {dueLabel}
           </span>
         )}
-        {blocked && (
-          <span className={styles.lockIcon}><IconLock /></span>
+        {sub.total > 0 && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            padding: '1px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: '0.56rem', fontWeight: 600,
+            background: sub.allDone ? 'rgba(34,197,94,0.1)' : (subBlocked ? 'rgba(249,115,22,0.1)' : 'rgba(255,255,255,0.05)'),
+            border: `1px solid ${sub.allDone ? 'rgba(34,197,94,0.3)' : (subBlocked ? 'rgba(249,115,22,0.35)' : 'rgba(255,255,255,0.1)')}`,
+            color: sub.allDone ? '#22c55e' : (subBlocked ? '#f97316' : 'var(--text-muted)'),
+          }} title={task.subtasks_required ? 'Subtarefas obrigatórias (todas precisam estar concluídas)' : 'Subtarefas'}>
+            ☑ {sub.done}/{sub.total}{task.subtasks_required ? '*' : ''}
+          </span>
+        )}
+        {depCount > 0 && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            padding: '1px 6px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: '0.56rem', fontWeight: 600,
+            background: blocked ? 'rgba(249,115,22,0.1)' : 'rgba(255,255,255,0.05)',
+            border: `1px solid ${blocked ? 'rgba(249,115,22,0.35)' : 'rgba(255,255,255,0.1)'}`,
+            color: blocked ? '#f97316' : 'var(--text-muted)',
+          }} title={blocked ? 'Bloqueada por dependências pendentes' : 'Depende de outras tarefas'}>
+            <IconLock /> {depCount}
+          </span>
         )}
         {task.comment_count > 0 && (
           <span className={styles.commentCount}>
@@ -488,151 +521,16 @@ function KanbanView({ tasks, weekStart, onTaskClick, onNewTask, onDelete, onComp
 }
 
 /* ─────────────────────────────────────────────────────────
-   Linha de tarefa reutilizável (usada pela visão Por Categoria)
-───────────────────────────────────────────────────────── */
-function renderTaskRow(t, { onTaskClick, onDelete, onComplete, notify }) {
-  const blocked = t.has_pending_deps;
-  const done = t.status === 'done';
-  const pri = PRIORITY_MAP[t.priority] || PRIORITY_MAP.normal;
-  return (
-    <div
-      key={t.id}
-      className={`${styles.listRow} ${blocked ? styles.listRowBlocked : ''}`}
-      onClick={() => {
-        if (blocked) {
-          notify('Tarefa bloqueada por dependencias pendentes', 'warning');
-          return;
-        }
-        onTaskClick(t.id);
-      }}
-    >
-      <div className={styles.listRowTitle}>
-        {blocked && <span className={styles.lockIcon}><IconLock /></span>}
-        <span className={styles.listRowTitleText}>{t.title}</span>
-      </div>
-      <div className={styles.listRowMeta}>
-        {t.category_name && (
-          <span
-            className={styles.categoryBadge}
-            style={{
-              background: `${t.category_color || '#525252'}18`,
-              border: `1px solid ${t.category_color || '#525252'}40`,
-              color: t.category_color || '#525252',
-            }}
-          >
-            {t.category_name}
-          </span>
-        )}
-        <span className={`${styles.taskBadge} ${styles[pri.cls]}`}>{pri.label}</span>
-        {t.client_name && <span className={styles.listRowClient}>{t.client_name}</span>}
-        {t.assigned_to_name && (
-          <div className={styles.taskAssignee} title={t.assigned_to_name}>
-            {getInitials(t.assigned_to_name)}
-          </div>
-        )}
-        {!done && (
-          <button
-            type="button"
-            className={`${styles.actionBtn} ${styles.actionBtnDone}`}
-            onClick={(e) => { e.stopPropagation(); onComplete && onComplete(t); }}
-            title="Concluir tarefa"
-            style={{ opacity: 1 }}
-          >
-            <IconCheck />
-          </button>
-        )}
-        <button
-          type="button"
-          className={`${styles.actionBtn} ${styles.actionBtnDelete}`}
-          onClick={(e) => { e.stopPropagation(); onDelete && onDelete(t); }}
-          title="Excluir tarefa"
-          style={{ opacity: 1 }}
-        >
-          <IconTrash />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* Ordem fixa das categorias na visão Por Categoria. */
-const CATEGORY_ORDER = ['CLIENTES', 'OUTROS', 'COMERCIAL', 'SISTEMA', 'FINANCEIRO', 'CONTABILIDADE'];
-
-/* ─────────────────────────────────────────────────────────
-   Categoria View — agrupada por categoria (todas as tarefas)
-───────────────────────────────────────────────────────── */
-function CategoriaView({ tasks, categories, onTaskClick, onDelete, onComplete, notify }) {
-  const colorByName = useMemo(() => {
-    const m = {};
-    (categories || []).forEach((c) => { m[c.name] = c.color; });
-    return m;
-  }, [categories]);
-
-  const tasksByName = useMemo(() => {
-    const m = new Map();
-    for (const t of tasks) {
-      const key = t.category_name || '__none';
-      if (!m.has(key)) m.set(key, []);
-      m.get(key).push(t);
-    }
-    return m;
-  }, [tasks]);
-
-  const sections = useMemo(() => {
-    const used = new Set();
-    const out = [];
-    // As 6 categorias fixas sempre aparecem (mesmo vazias).
-    for (const name of CATEGORY_ORDER) {
-      out.push({ name, color: colorByName[name], tasks: tasksByName.get(name) || [] });
-      used.add(name);
-    }
-    // Categorias extras (criadas à mão) só aparecem se tiverem tarefas.
-    for (const [key, list] of tasksByName.entries()) {
-      if (key === '__none' || used.has(key)) continue;
-      out.push({ name: key, color: colorByName[key], tasks: list });
-    }
-    const none = tasksByName.get('__none');
-    if (none && none.length) out.push({ name: 'Sem categoria', color: '#525252', tasks: none });
-    return out;
-  }, [tasksByName, colorByName]);
-
-  if (tasks.length === 0) {
-    return <div className={styles.emptyBlock}>Nenhuma tarefa</div>;
-  }
-
-  return (
-    <div>
-      {sections.map((g) => (
-        <div key={g.name} className={styles.listSection}>
-          <div className={styles.listSectionHeader}>
-            <span className={styles.listSectionLabel} style={g.color ? { color: g.color } : undefined}>
-              {g.name.toUpperCase()}
-            </span>
-            <span className={styles.listSectionCount}>{g.tasks.length}</span>
-          </div>
-          <div className={styles.listSectionBody}>
-            {g.tasks.length === 0 ? (
-              <div className={styles.columnEmpty} style={{ padding: '10px 4px' }}>nenhuma tarefa</div>
-            ) : (
-              g.tasks.map((t) => renderTaskRow(t, { onTaskClick, onDelete, onComplete, notify }))
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────
    Page component
 ───────────────────────────────────────────────────────── */
 export default function TasksPage() {
   const { user, loading: authLoading } = useAuth();
+  const isAdmin = !!user && (user.role === 'admin' || user.role === 'god');
   const { notify } = useNotification();
 
   /* ── State ── */
   const [scope, setScope] = useState('me');                 // me / team
-  const [viewMode, setViewMode] = useState('checklist');    // kanban / checklist / categoria (default v2)
+  const [viewMode, setViewMode] = useState('checklist');    // checklist | kanban
   const [viewLoaded, setViewLoaded] = useState(false);      // só persiste depois do fetch inicial
   const [tasks, setTasks] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -643,6 +541,7 @@ export default function TasksPage() {
 
   // Modals
   const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [deletingTask, setDeletingTask] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   // Estado de pré-preenchimento do CreateTaskModal (vindo do Checklist)
@@ -712,8 +611,8 @@ export default function TasksPage() {
       const res = await fetch('/api/users/preferences');
       const data = await res.json();
       if (data.success && data.preferences?.default_view) {
-        // 'lista' foi removida — normaliza preferências antigas/ inválidas.
-        const VALID_VIEWS = ['checklist', 'kanban', 'categoria'];
+        // 'lista' e 'categoria' foram removidas — normaliza preferências antigas/inválidas.
+        const VALID_VIEWS = ['checklist', 'kanban'];
         const saved = VALID_VIEWS.includes(data.preferences.default_view)
           ? data.preferences.default_view : 'checklist';
         setViewMode(saved);
@@ -839,13 +738,17 @@ export default function TasksPage() {
     setWeekStart(startOfWeek(new Date()));
   }
 
-  async function handleDelete(task) {
-    if (!confirm(`Excluir a tarefa "${task.title}"? Esta ação não pode ser desfeita.`)) return;
+  function handleDelete(task) { setDeletingTask(task); }
+
+  async function confirmDeleteTask() {
+    const task = deletingTask;
+    if (!task) return;
     try {
       const res = await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
         notify('Tarefa excluída', 'success');
+        setDeletingTask(null);
         fetchTasks();
       } else {
         notify(data.error || 'Erro ao excluir', 'error');
@@ -856,21 +759,22 @@ export default function TasksPage() {
   }
 
   async function handleComplete(task) {
+    const newStatus = task.status === 'done' ? 'pending' : 'done';
     try {
       const res = await fetch(`/api/tasks/${task.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'done' }),
+        body: JSON.stringify({ status: newStatus }),
       });
       const data = await res.json();
       if (data.success) {
-        notify('Tarefa concluída', 'success');
+        notify(newStatus === 'done' ? 'Tarefa concluída' : 'Tarefa reaberta', 'success');
         fetchTasks();
       } else {
-        notify(data.error || 'Não foi possível concluir', 'error');
+        notify(data.error || 'Não foi possível atualizar a tarefa', 'error');
       }
     } catch {
-      notify('Erro ao concluir tarefa', 'error');
+      notify('Erro ao atualizar tarefa', 'error');
     }
   }
 
@@ -898,21 +802,22 @@ export default function TasksPage() {
             />
             <ToggleGroup
               options={[
-                { value: 'checklist', label: 'Checklist',     icon: <IconChecklist /> },
-                { value: 'kanban',    label: 'Kanban',        icon: <IconKanban /> },
-                { value: 'categoria', label: 'Por Categoria', icon: <IconTag /> },
+                { value: 'checklist', label: 'Checklist', icon: <IconChecklist /> },
+                { value: 'kanban',    label: 'Kanban',    icon: <IconKanban /> },
               ]}
               value={viewMode}
               onChange={handleChangeViewMode}
             />
-            <button
-              className="sigma-btn-primary"
-              onClick={handleOpenBulkImport}
-              style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}
-              title="Importar ata e distribuir entre o time via IA"
-            >
-              <IconImport /> Importar Ata
-            </button>
+            {isAdmin && (
+              <button
+                className="sigma-btn-primary"
+                onClick={handleOpenBulkImport}
+                style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-default)' }}
+                title="Importar ata e distribuir entre o time via IA"
+              >
+                <IconImport /> Importar Ata
+              </button>
+            )}
             <button className="sigma-btn-primary" onClick={() => handleNewTask()}>
               <IconPlus /> Nova Tarefa
             </button>
@@ -983,9 +888,8 @@ export default function TasksPage() {
           </div>
         </div>
 
-        {/* Navegacao da semana — oculta na visão Por Categoria (mostra tudo) */}
-        {viewMode !== 'categoria' && (
-          <div className={styles.weekNav}>
+        {/* Navegação da semana */}
+        <div className={styles.weekNav}>
             <button className={styles.weekNavBtn} onClick={handlePrevWeek} title="Semana anterior">
               <IconChevronL />
             </button>
@@ -996,8 +900,7 @@ export default function TasksPage() {
             <button className={styles.weekNavBtn} onClick={handleNextWeek} title="Proxima semana">
               <IconChevronR />
             </button>
-          </div>
-        )}
+        </div>
 
         {/* Conteudo */}
         {loadingTasks ? (
@@ -1019,7 +922,7 @@ export default function TasksPage() {
             onComplete={handleComplete}
             notify={notify}
           />
-        ) : viewMode === 'checklist' ? (
+        ) : (
           <ChecklistView
             tasks={tasks}
             weekStart={weekStart}
@@ -1031,15 +934,6 @@ export default function TasksPage() {
             onTaskClick={handleTaskClick}
             onToggleDone={handleComplete}
             onNewTask={handleNewTask}
-            notify={notify}
-          />
-        ) : (
-          <CategoriaView
-            tasks={tasks}
-            categories={categories}
-            onTaskClick={handleTaskClick}
-            onDelete={handleDelete}
-            onComplete={handleComplete}
             notify={notify}
           />
         )}
@@ -1081,6 +975,20 @@ export default function TasksPage() {
           currentUserId={user?.id}
         />
       )}
+
+      {/* Excluir tarefa — modal padrão do sistema */}
+      <ConfirmModal
+        open={!!deletingTask}
+        onClose={() => setDeletingTask(null)}
+        onConfirm={confirmDeleteTask}
+        variant="danger"
+        title="Excluir tarefa"
+        warningTitle="Tem certeza que deseja excluir"
+        warningHighlight={deletingTask?.title || 'esta tarefa'}
+        warningText="Esta ação não pode ser desfeita."
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+      />
     </DashboardLayout>
   );
 }

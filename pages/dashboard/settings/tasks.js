@@ -13,6 +13,7 @@ import DashboardLayout from '../../../components/DashboardLayout';
 import styles from '../../../assets/style/settingsTasks.module.css';
 import { useNotification } from '../../../context/NotificationContext';
 import { useAuth } from '../../../hooks/useAuth';
+import ConfirmModal from '../../../components/comercial/ConfirmModal';
 
 const DAYS = [
   { value: 1, label: 'Seg' },
@@ -154,6 +155,7 @@ export default function SettingsTasksPage() {
 
   /* ── State ── */
   const [categories, setCategories] = useState([]);
+  const [confirmState, setConfirmState] = useState(null); // { title, highlight, text, onConfirm }
   const [recurrences, setRecurrences] = useState([]);
   const [botConfigs, setBotConfigs] = useState([]);
   const [users, setUsers] = useState([]);
@@ -358,18 +360,21 @@ export default function SettingsTasksPage() {
     }
   }
 
-  async function deleteCategory(id) {
-    if (!confirm('Excluir esta categoria?')) return;
-    try {
-      const res = await fetch(`/api/task-categories/${id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        notify('Categoria excluída', 'success');
-        fetchData();
-      }
-    } catch {
-      notify('Erro ao excluir', 'error');
-    }
+  function deleteCategory(id) {
+    setConfirmState({
+      title: 'Excluir categoria',
+      highlight: 'esta categoria',
+      text: 'A categoria será removida; as tarefas dela ficam sem categoria.',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/task-categories/${id}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) { notify('Categoria excluída', 'success'); fetchData(); }
+          else notify(data.error || 'Erro ao excluir', 'error');
+        } catch { notify('Erro ao excluir', 'error'); }
+        setConfirmState(null);
+      },
+    });
   }
 
   /* ───────────────────────────────────────────────────────
@@ -440,18 +445,21 @@ export default function SettingsTasksPage() {
     }
   }
 
-  async function deleteRecurrence(id) {
-    if (!confirm('Excluir esta tarefa recorrente?')) return;
-    try {
-      const res = await fetch(`/api/task-recurrences/${id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        notify('Recorrência excluída', 'success');
-        fetchData();
-      }
-    } catch {
-      notify('Erro ao excluir', 'error');
-    }
+  function deleteRecurrence(id) {
+    setConfirmState({
+      title: 'Excluir recorrência',
+      highlight: 'esta tarefa recorrente',
+      text: 'A regra de recorrência será removida; tarefas já geradas permanecem.',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/task-recurrences/${id}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) { notify('Recorrência excluída', 'success'); fetchData(); }
+          else notify(data.error || 'Erro ao excluir', 'error');
+        } catch { notify('Erro ao excluir', 'error'); }
+        setConfirmState(null);
+      },
+    });
   }
 
   async function toggleRecurrence(rec) {
@@ -1194,9 +1202,10 @@ export default function SettingsTasksPage() {
                 </label>
                 <input
                   className={styles.modalInput}
+                  style={{ textTransform: 'uppercase' }}
                   value={catForm.name}
-                  onChange={(e) => setCatForm((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="Ex: Social Media"
+                  onChange={(e) => setCatForm((p) => ({ ...p, name: e.target.value.toUpperCase() }))}
+                  placeholder="EX: SOCIAL MEDIA"
                   autoFocus
                   onKeyDown={(e) => e.key === 'Enter' && saveCategory()}
                 />
@@ -1464,6 +1473,19 @@ export default function SettingsTasksPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={!!confirmState}
+        onClose={() => setConfirmState(null)}
+        onConfirm={confirmState?.onConfirm}
+        variant="danger"
+        title={confirmState?.title || 'Excluir'}
+        warningTitle="Tem certeza que deseja excluir"
+        warningHighlight={confirmState?.highlight}
+        warningText={confirmState?.text}
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+      />
     </DashboardLayout>
   );
 }

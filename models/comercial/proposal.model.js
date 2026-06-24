@@ -216,12 +216,19 @@ async function duplicateProposal(id, tenantId, createdBy = null) {
   if (!orig) throw new Error('Proposta não encontrada');
 
   const slug = await generateUniqueSlug(orig.prospect_name || 'proposta');
+  // A cópia nasce "não gerada por IA" — senão o flag ai_generated_at herdado
+  // travaria a regeração de conteúdo na nova proposta. issued_at também reinicia.
+  const copiedData = {
+    ...(orig.data || {}),
+    ai_generated_at: null,
+    issued_at: new Date().toISOString(),
+  };
   const row = await queryOne(
     `INSERT INTO comercial_proposals
        (tenant_id, prospect_id, slug, data, status, created_by)
      VALUES ($1, $2, $3, $4::jsonb, 'draft', $5)
      RETURNING *`,
-    [tenantId, orig.prospect_id, slug, JSON.stringify(orig.data || {}), createdBy]
+    [tenantId, orig.prospect_id, slug, JSON.stringify(copiedData), createdBy]
   );
   console.log('[SUCESSO][model:proposal:duplicateProposal]', { from: id, to: row.id });
   return row;

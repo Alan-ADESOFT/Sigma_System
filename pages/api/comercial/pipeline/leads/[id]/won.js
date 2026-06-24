@@ -10,8 +10,8 @@
 
 import { resolveTenantId } from '../../../../../../infra/get-tenant-id';
 const { verifyToken } = require('../../../../../../lib/auth');
-const { query } = require('../../../../../../infra/db');
 const { closeAsWon } = require('../../../../../../models/comercial/closing');
+const { createContractWithInstallments } = require('../../../../../../models/contract.model');
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -38,24 +38,24 @@ export default async function handler(req, res) {
 
     const result = await closeAsWon(tenantId, id, body, userId);
 
-    // Cria contrato se informado (best-effort, não bloqueia o fluxo)
-    if (body.contract && body.contract.contractValue && result.client) {
+    // Cria contrato se informado (best-effort, não bloqueia o fluxo).
+    // result.isNew === false = lead já estava fechado → não recria contrato (evita duplicata).
+    if (body.contract && body.contract.contractValue && result.client && result.isNew !== false) {
       try {
-        await query(
-          `INSERT INTO client_contracts
-             (tenant_id, client_id, contract_value, monthly_value, num_installments, due_day, start_date, services, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'active')`,
-          [
-            tenantId,
-            result.client.id,
-            Number(body.contract.contractValue),
-            body.contract.monthlyValue ? Number(body.contract.monthlyValue) : null,
-            body.contract.numInstallments ? Number(body.contract.numInstallments) : null,
-            body.contract.dueDay ? Number(body.contract.dueDay) : null,
-            body.contract.startDate || null,
-            JSON.stringify(body.contract.services || []),
-          ]
-        );
+        // client_contracts NÃO tem tenant_id (isolamento via client_id). Cria o
+        // contrato JÁ com as parcelas — sem parcelas ele não apareceria no
+        // financeiro global (que lista client_installments).
+        const ni = body.contract.numInstallments ? Number(body.contract.numInstallments) : 12;
+        const monthly = body.contract.monthlyValue
+          ? Number(body.contract.monthlyValue)
+          : (Number(body.contract.contractValue) / (ni || 1));
+        await createContractWithInstallments(result.client.id, {
+          monthly_value:    monthly,
+          num_installments: ni,
+          due_day:          body.contract.dueDay ? Number(body.contract.dueDay) : null,
+          start_date:       body.contract.startDate || null,
+          services:         body.contract.services || [],
+        });
       } catch (err) {
         console.warn('[WARN][API:won] Falha ao criar contract — cliente foi criado mesmo assim', { error: err.message });
       }

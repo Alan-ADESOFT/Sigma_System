@@ -22,6 +22,35 @@ export function useNotification() {
   return ctx;
 }
 
+/* ── Sanitizador de erro: o cliente NUNCA vê mensagem técnica ──────────────
+   Erros crus (SQL, stack trace, fetch, JSON, nomes de coluna/constraint, etc.)
+   viram uma mensagem amigável; o texto técnico original vai pro console
+   (depuração no devtools/terminal). Mensagens que já são amigáveis passam
+   intactas — os padrões abaixo são termos técnicos em inglês que não aparecem
+   nas mensagens em pt-BR do produto. */
+const TECH_PATTERNS = /violat|constraint|null value|relation\s|\bcolumn\b|syntax error|duplicate key|invalid input|out of range|deadlock|ECONN|ETIMEDOUT|ENOTFOUND|getaddrinfo|fetch failed|failed to fetch|networkerror|load failed|unexpected token|unexpected end|not valid json|json malformado|at position \d|typeerror|referenceerror|is not a function|cannot read propert|undefined is not|does not exist|permission denied for|::|\$\d|\[object |\bpg_|psql|\bsql\b|stack:|\n\s+at\s/i;
+
+const FRIENDLY_FALLBACK = 'Algo não saiu como esperado. Tente de novo — se continuar, fale com o suporte.';
+
+function looksTechnical(msg) {
+  if (typeof msg !== 'string' || !msg.trim()) return true;
+  if (msg.length > 180) return true;          // stack/erro cru costuma ser longo
+  return TECH_PATTERNS.test(msg);
+}
+
+/** Converte um erro técnico em mensagem amigável (e loga o original). */
+export function friendlyError(raw) {
+  const msg = typeof raw === 'string' ? raw : String(raw ?? '');
+  if (!looksTechnical(msg)) return msg;
+  try { console.error('[Notificação] erro técnico (oculto do cliente):', msg); } catch {}
+  // Preserva um prefixo amigável antes de ":" — ex.: "Erro ao salvar: <técnico>".
+  const m = msg.match(/^([^:{}[\]\n]{3,60}?):\s*\S/);
+  if (m && !looksTechnical(m[1])) {
+    return m[1].trim().replace(/[\s:]+$/, '') + '. Tente de novo; se continuar, avise o suporte.';
+  }
+  return FRIENDLY_FALLBACK;
+}
+
 /* ── Configuração visual por tipo ── */
 const TYPE_CFG = {
   success: {
@@ -250,8 +279,10 @@ export function NotificationProvider({ children }) {
       action = opts.action;
     }
     duration = duration || DEFAULT_DURATIONS[type] || 4500;
+    // Cliente nunca vê erro técnico — converte e manda o original pro console.
+    const safeMessage = type === 'error' ? friendlyError(message) : message;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    setNotifications(prev => [...prev, { id, message, type, duration, onClick, action }]);
+    setNotifications(prev => [...prev, { id, message: safeMessage, type, duration, onClick, action }]);
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
     }, duration + 300); /* pequeno buffer para animação de saída */

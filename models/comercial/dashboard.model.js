@@ -84,8 +84,10 @@ async function getKPIs(tenantId, { period = 'month' } = {}) {
   ]);
 
   const totalPipeline = pipelineTotals?.total || 0;
-  const wonCount      = won?.c || 0;
-  const conversionRate = totalPipeline > 0 ? (wonCount / totalPipeline) * 100 : 0;
+  const wonCount      = won?.c || 0;                 // ganhos NO PERÍODO (ticket/fechamentos)
+  // Conversão geral = ganhos ÷ total do pipeline, ambos all-time (não oscila com o período).
+  const wonAllTime    = pipelineTotals?.won_count || 0;
+  const conversionRate = totalPipeline > 0 ? (wonAllTime / totalPipeline) * 100 : 0;
   const proposalsPubCount    = proposalsPub?.c || 0;
   const proposalsViewedCount = proposalsViewed?.c || 0;
   const proposalViewRate = proposalsPubCount > 0
@@ -139,17 +141,42 @@ async function getFunnel(tenantId) {
 async function getStageConversion(tenantId, { period = 'month' } = {}) {
   const { from, to } = periodBoundaries(period);
 
-  // Conta status_change activities entrando em cada coluna no período
+  // Conta leads que ENTRARAM em cada coluna no período. Duas fontes:
+  //  1. activities 'status_change' (movimentação manual no kanban → metadata.toColumnId)
+  //  2. fechamentos won/lost (closeAsWon/closeAsLost fazem UPDATE direto, sem status_change;
+  //     emitem 'contract_won'/'contract_lost' — mapeamos pra coluna system_role correspondente).
+  // O GROUP BY externo garante 1 linha por coluna (soma as duas fontes).
   const rows = await query(
-    `SELECT
-       a.metadata->>'toColumnId' AS to_column_id,
-       a.metadata->>'toColumnName' AS to_column_name,
-       COUNT(DISTINCT a.pipeline_lead_id)::int AS leads_passed
-     FROM comercial_lead_activities a
-    WHERE a.tenant_id = $1
-      AND a.type = 'status_change'
-      AND a.created_at >= $2 AND a.created_at < $3
-    GROUP BY a.metadata->>'toColumnId', a.metadata->>'toColumnName'`,
+    `SELECT to_column_id,
+            MAX(to_column_name) AS to_column_name,
+            SUM(leads_passed)::int AS leads_passed
+       FROM (
+         SELECT a.metadata->>'toColumnId'   AS to_column_id,
+                a.metadata->>'toColumnName' AS to_column_name,
+                COUNT(DISTINCT a.pipeline_lead_id)::int AS leads_passed
+           FROM comercial_lead_activities a
+          WHERE a.tenant_id = $1
+            AND a.type = 'status_change'
+            AND a.created_at >= $2 AND a.created_at < $3
+          GROUP BY a.metadata->>'toColumnId', a.metadata->>'toColumnName'
+         UNION ALL
+         SELECT c.id AS to_column_id,
+                c.name AS to_column_name,
+                COUNT(DISTINCT a.pipeline_lead_id)::int AS leads_passed
+           FROM comercial_lead_activities a
+           JOIN comercial_pipeline_columns c
+             ON c.tenant_id = a.tenant_id
+            AND c.system_role = CASE a.type
+                                  WHEN 'contract_won'  THEN 'won'
+                                  WHEN 'contract_lost' THEN 'lost'
+                                END
+          WHERE a.tenant_id = $1
+            AND a.type IN ('contract_won', 'contract_lost')
+            AND a.created_at >= $2 AND a.created_at < $3
+          GROUP BY c.id, c.name
+       ) u
+      WHERE to_column_id IS NOT NULL
+      GROUP BY to_column_id`,
     [tenantId, from.toISOString(), to.toISOString()]
   );
 
@@ -163,40 +190,47 @@ async function getLeaderboard(tenantId, { period = 'month', limit = 10 } = {}) {
   const fromIso = from.toISOString();
   const toIso   = to.toISOString();
 
+  // Envelopa numa subquery pra ordenar/cortar pelo MESMO score exibido na UI
+  // (won*100 + propostas*5 + atividades). Antes o LIMIT cortava por leads_won,
+  // podendo eliminar do top-N quem tinha score maior por atividades.
   return query(
-    `SELECT
-       t.id   AS user_id,
-       t.name AS user_name,
-       t.avatar_url,
-       (SELECT COUNT(*)::int FROM comercial_pipeline_leads pl
-          WHERE pl.tenant_id = $1 AND pl.assigned_to = t.id) AS leads_assigned,
-       (SELECT COUNT(*)::int FROM comercial_pipeline_leads pl
-          WHERE pl.tenant_id = $1 AND pl.assigned_to = t.id
-            AND pl.won_at IS NOT NULL
-            AND pl.won_at >= $2 AND pl.won_at < $3) AS leads_won,
-       (SELECT COALESCE(SUM(pl.estimated_value), 0)::numeric FROM comercial_pipeline_leads pl
-          WHERE pl.tenant_id = $1 AND pl.assigned_to = t.id
-            AND pl.won_at IS NOT NULL
-            AND pl.won_at >= $2 AND pl.won_at < $3) AS leads_won_value,
-       (SELECT COUNT(*)::int FROM comercial_proposals pp
-          WHERE pp.tenant_id = $1 AND pp.created_by = t.id
-            AND pp.published_at IS NOT NULL
-            AND pp.published_at >= $2 AND pp.published_at < $3) AS proposals_sent,
-       (SELECT COUNT(*)::int FROM comercial_lead_activities a
-          WHERE a.tenant_id = $1 AND a.created_by = t.id
-            AND a.created_at >= $2 AND a.created_at < $3) AS activities_count
-     FROM tenants t
-     WHERE t.id = $1
-        OR t.id IN (
-          SELECT DISTINCT created_by FROM comercial_lead_activities
-           WHERE tenant_id = $1 AND created_by IS NOT NULL
-             AND created_at >= $2 AND created_at < $3
-          UNION
-          SELECT DISTINCT assigned_to FROM comercial_pipeline_leads
-           WHERE tenant_id = $1 AND assigned_to IS NOT NULL
-        )
-     ORDER BY leads_won DESC, proposals_sent DESC, activities_count DESC
-     LIMIT $4`,
+    `SELECT *,
+            (leads_won * 100 + proposals_sent * 5 + activities_count) AS score
+       FROM (
+         SELECT
+           t.id   AS user_id,
+           t.name AS user_name,
+           t.avatar_url,
+           (SELECT COUNT(*)::int FROM comercial_pipeline_leads pl
+              WHERE pl.tenant_id = $1 AND pl.assigned_to = t.id) AS leads_assigned,
+           (SELECT COUNT(*)::int FROM comercial_pipeline_leads pl
+              WHERE pl.tenant_id = $1 AND pl.assigned_to = t.id
+                AND pl.won_at IS NOT NULL
+                AND pl.won_at >= $2 AND pl.won_at < $3) AS leads_won,
+           (SELECT COALESCE(SUM(pl.estimated_value), 0)::numeric FROM comercial_pipeline_leads pl
+              WHERE pl.tenant_id = $1 AND pl.assigned_to = t.id
+                AND pl.won_at IS NOT NULL
+                AND pl.won_at >= $2 AND pl.won_at < $3) AS leads_won_value,
+           (SELECT COUNT(*)::int FROM comercial_proposals pp
+              WHERE pp.tenant_id = $1 AND pp.created_by = t.id
+                AND pp.published_at IS NOT NULL
+                AND pp.published_at >= $2 AND pp.published_at < $3) AS proposals_sent,
+           (SELECT COUNT(*)::int FROM comercial_lead_activities a
+              WHERE a.tenant_id = $1 AND a.created_by = t.id
+                AND a.created_at >= $2 AND a.created_at < $3) AS activities_count
+         FROM tenants t
+         WHERE t.id = $1
+            OR t.id IN (
+              SELECT DISTINCT created_by FROM comercial_lead_activities
+               WHERE tenant_id = $1 AND created_by IS NOT NULL
+                 AND created_at >= $2 AND created_at < $3
+              UNION
+              SELECT DISTINCT assigned_to FROM comercial_pipeline_leads
+               WHERE tenant_id = $1 AND assigned_to IS NOT NULL
+            )
+       ) sub
+      ORDER BY score DESC, leads_won_value DESC
+      LIMIT $4`,
     [tenantId, fromIso, toIso, limit]
   );
 }

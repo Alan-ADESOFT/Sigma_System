@@ -27,7 +27,6 @@ const ALL_PAGES = [
   { href: '/dashboard/productivity',         label: 'Produtividade',          category: 'ORGANIZAÇÃO' },
   { href: '/dashboard/tasks',                label: 'Tarefas',                category: 'ORGANIZAÇÃO' },
   { href: '/dashboard/meetings',             label: 'Calendário',             category: 'ORGANIZAÇÃO' },
-  { href: '/dashboard/task-automation',      label: 'Automação',              category: 'ORGANIZAÇÃO' },
   { href: '/dashboard/comercial/dashboard',  label: 'Dashboard Comercial',    category: 'COMERCIAL' },
   { href: '/dashboard/comercial/captacao',   label: 'Lista de Captação',      category: 'COMERCIAL' },
   { href: '/dashboard/comercial/pipeline',   label: 'Status da Captação',     category: 'COMERCIAL' },

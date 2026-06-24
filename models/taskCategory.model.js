@@ -2,6 +2,12 @@ const { query, queryOne } = require('../infra/db');
 
 // ─── Task Categories ───────────────────────────────────────────────────────
 
+/* Categorias são sempre armazenadas em MAIÚSCULO (padrão do workspace),
+   independentemente de como o usuário digitou. */
+function normalizeName(name) {
+  return name == null ? name : String(name).trim().toUpperCase();
+}
+
 // Categorias fixas do workspace. Garantidas (idempotente) na leitura — não
 // dá pra seedar no schema.sql porque o tenant_id é resolvido em runtime.
 const DEFAULT_CATEGORIES = [
@@ -51,7 +57,7 @@ async function createCategory(data, tenantId) {
     `INSERT INTO task_categories (tenant_id, name, color)
      VALUES ($1, $2, $3)
      RETURNING *`,
-    [tenantId, name, color]
+    [tenantId, normalizeName(name), color]
   );
 }
 
@@ -63,7 +69,7 @@ async function updateCategory(id, data, tenantId) {
          color = COALESCE($4, color)
      WHERE id = $1 AND tenant_id = $2
      RETURNING *`,
-    [id, tenantId, name ?? null, color ?? null]
+    [id, tenantId, name != null ? normalizeName(name) : null, color ?? null]
   );
 }
 

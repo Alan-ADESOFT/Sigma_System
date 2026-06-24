@@ -55,10 +55,17 @@ async function perplexitySearch(query, instructions = '') {
     title: url,
   }));
 
-  console.log('[SUCESSO][Perplexity] Pesquisa concluida', { citationsCount: citations.length, resultLength: text.length });
+  const rawUsage = data.usage || {};
+  const usage = {
+    input:  rawUsage.prompt_tokens     || 0,
+    output: rawUsage.completion_tokens || 0,
+    total:  rawUsage.total_tokens      || ((rawUsage.prompt_tokens || 0) + (rawUsage.completion_tokens || 0)),
+  };
+
+  console.log('[SUCESSO][Perplexity] Pesquisa concluida', { citationsCount: citations.length, resultLength: text.length, usage });
   console.log('[DEBUG][Perplexity] Citations recebidas', { citations });
 
-  return { text, citations };
+  return { text, citations, usage, modelUsed: model };
 }
 
 module.exports = { perplexitySearch };

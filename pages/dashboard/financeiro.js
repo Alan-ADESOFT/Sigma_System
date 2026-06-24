@@ -10,12 +10,14 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '../../components/DashboardLayout';
 import { useNotification } from '../../context/NotificationContext';
 import { Skeleton, SkeletonCard, SkeletonTable } from '../../components/Skeleton';
 import ChargeModal from '../../components/financeiro/ChargeModal';
+import ConfirmModal from '../../components/comercial/ConfirmModal';
+import SystemModal, { Field, Row2 } from '../../components/comercial/SystemModal';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -44,8 +46,24 @@ function monthLabel(key) {
 function effectiveStatus(inst) {
   if (inst.status === 'paid') return 'paid';
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  if (new Date(inst.due_date) < today) return 'overdue';
+  // Âncora meio-dia: due_date é DATE (string). new Date('YYYY-MM-DD') seria UTC
+  // e marcaria atrasada 1 dia cedo em fuso negativo (Brasil).
+  if (new Date(String(inst.due_date).split('T')[0] + 'T12:00:00') < today) return 'overdue';
   return 'pending';
+}
+/* Normaliza services do contrato (JSONB pode vir como array de strings,
+   de objetos {id,name}, string JSON, ou conter nulls) → array de nomes únicos. */
+function serviceNames(raw) {
+  let arr = raw;
+  if (typeof arr === 'string') {
+    try { arr = JSON.parse(arr || '[]'); } catch { arr = []; }
+  }
+  if (!Array.isArray(arr)) return [];
+  const names = arr
+    .map(s => (typeof s === 'string' ? s : (s && typeof s === 'object' ? s.name : null)))
+    .filter(s => typeof s === 'string' && s.trim())
+    .map(s => s.trim());
+  return [...new Set(names)];
 }
 
 const STATUS_CFG = {
@@ -99,6 +117,22 @@ function SectionLabel({ children }) {
     }}>
       {children}
     </div>
+  );
+}
+
+/* Campo read-only no padrão do SystemModal (label + valor com cara de input). */
+function InfoField({ label, children }) {
+  return (
+    <Field label={label}>
+      <div style={{
+        fontFamily: 'var(--font-mono)', fontSize: '0.76rem', color: 'var(--text-primary)',
+        padding: '9px 11px', background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.07)', borderRadius: 7,
+        wordBreak: 'break-word', whiteSpace: 'pre-wrap', minHeight: 18,
+      }}>
+        {children}
+      </div>
+    </Field>
   );
 }
 
@@ -162,12 +196,14 @@ export default function FinanceiroDashboard() {
   const [chargeTemplate, setChargeTemplate] = useState('');
   const [chargingInst,   setChargingInst  ] = useState(null);
 
+  /* Registro da empresa a excluir (modal de confirmação) / a visualizar */
+  const [deletingRec, setDeletingRec] = useState(null);
+  const [viewingRec,  setViewingRec ] = useState(null);
+
   const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
-  /* Company filters */
-  const [compPeriod,     setCompPeriod    ] = useState('this_year');
-  const [compDateFrom,   setCompDateFrom  ] = useState('');
-  const [compDateTo,     setCompDateTo    ] = useState('');
+  /* Company filters — alinhados ao Dashboard/Parcelas: mês + ano (default = mês corrente) */
+  const [compMonth,      setCompMonth     ] = useState(CUR_MM);
   const [compTypeFilter, setCompTypeFilter] = useState('');
   const [compCatFilter,  setCompCatFilter ] = useState('');
 
@@ -201,17 +237,11 @@ export default function FinanceiroDashboard() {
   async function loadCompany() {
     setLoadingComp(true);
     try {
+      // Carrega o ANO inteiro; os filtros de mês/tipo/categoria são aplicados
+      // client-side (compRecordsFiltered). Assim o Dashboard, que também lê
+      // companyRecords pro gráfico mensal, continua com os dados do ano todo.
       const params = new URLSearchParams();
-      if (compPeriod && compPeriod !== 'custom') params.set('period', compPeriod);
-      if (compPeriod === 'custom') {
-        if (compDateFrom) params.set('dateFrom', compDateFrom);
-        if (compDateTo) params.set('dateTo', compDateTo);
-      }
-      if (!compPeriod) {
-        if (filterYear) params.set('year', filterYear);
-      }
-      if (compTypeFilter) params.set('type', compTypeFilter);
-      if (compCatFilter) params.set('categoryId', compCatFilter);
+      if (filterYear) params.set('year', filterYear);
       console.log('[INFO][Frontend:Financeiro] Buscando registros da empresa', { endpoint: '/api/financeiro/company' });
       const j = await fetch(`/api/financeiro/company?${params}`).then(r => r.json());
       if (!j.success) throw new Error(j.error);
@@ -244,7 +274,29 @@ export default function FinanceiroDashboard() {
   }
 
   useEffect(() => { loadInstallments(); loadCategories(); loadChargeConfig(); }, []);
-  useEffect(() => { loadCompany(); }, [compPeriod, compDateFrom, compDateTo, compTypeFilter, compCatFilter, filterYear]);
+  useEffect(() => { loadCompany(); }, [filterYear]);
+
+  /* Revalida ao voltar o foco pra esta aba/janela — pega contratos/parcelas
+     criados em outro lugar (ex: ficha do cliente) sem precisar dar F5 e sem
+     polling. Throttle de 3s evita refetch duplicado (focus + visibilitychange). */
+  const refetchRef = useRef(() => {});
+  refetchRef.current = () => { loadInstallments(); loadCompany(); };
+  const lastFocusFetch = useRef(0);
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastFocusFetch.current < 3000) return;
+      lastFocusFetch.current = now;
+      refetchRef.current();
+    }
+    window.addEventListener('focus', onVisible);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', onVisible);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
 
   /* Toggle installment */
   async function toggleInst(inst) {
@@ -329,8 +381,14 @@ export default function FinanceiroDashboard() {
     finally { setSavingComp(false); }
   }
 
-  async function handleDeleteComp(id) {
-    if (!confirm('Excluir este registro?')) return;
+  function handleDeleteComp(id) {
+    const rec = companyRecords.find(r => r.id === id) || { id };
+    setDeletingRec(rec);
+  }
+
+  async function confirmDeleteComp() {
+    const id = deletingRec?.id;
+    if (!id) return;
     try {
       console.log('[INFO][Frontend:Financeiro] Excluindo registro financeiro', { id });
       const res = await fetch('/api/financeiro/company', {
@@ -342,6 +400,7 @@ export default function FinanceiroDashboard() {
       console.log('[SUCESSO][Frontend:Financeiro] Registro financeiro excluído', { id });
       notify('Registro excluído com sucesso', 'success');
       setCompanyRecords(p => p.filter(r => r.id !== id));
+      setDeletingRec(null);
     } catch (err) {
       console.error('[ERRO][Frontend:Financeiro] Falha ao excluir registro financeiro', { error: err.message });
       notify('Erro ao excluir registro financeiro', 'error');
@@ -367,7 +426,7 @@ export default function FinanceiroDashboard() {
     };
   }, [installments, filterYear, filterDashMonth]);
 
-  /* Company KPIs — filtered by year+month */
+  /* Company KPIs (Dashboard) — filtered by year+month do dashboard */
   const compKpis = useMemo(() => {
     const prefix = filterDashMonth ? `${filterYear}-${filterDashMonth}` : filterYear;
     const filtered = companyRecords.filter(r => r.date && r.date.split('T')[0].slice(0, 7).startsWith(prefix));
@@ -375,6 +434,27 @@ export default function FinanceiroDashboard() {
     const exp = filtered.filter(r => r.type === 'expense').reduce((s, r) => s + parseFloat(r.value), 0);
     return { income: inc, expense: exp, profit: inc - exp };
   }, [companyRecords, filterYear, filterDashMonth]);
+
+  /* Registros da tab Custos & Ganhos — filtro client-side por mês/tipo/categoria.
+     compMonth vazio = ano inteiro (já que companyRecords vem filtrado por ano). */
+  const compRecordsFiltered = useMemo(() => {
+    return companyRecords.filter(r => {
+      if (compMonth) {
+        const m = r.date ? r.date.split('T')[0].slice(5, 7) : '';
+        if (m !== compMonth) return false;
+      }
+      if (compTypeFilter && r.type !== compTypeFilter) return false;
+      if (compCatFilter && r.category_id !== compCatFilter) return false;
+      return true;
+    });
+  }, [companyRecords, compMonth, compTypeFilter, compCatFilter]);
+
+  /* KPIs da tab Custos & Ganhos — refletem o mês/filtros selecionados nela */
+  const compKpisFiltered = useMemo(() => {
+    const inc = compRecordsFiltered.filter(r => r.type === 'income').reduce((s, r) => s + parseFloat(r.value), 0);
+    const exp = compRecordsFiltered.filter(r => r.type === 'expense').reduce((s, r) => s + parseFloat(r.value), 0);
+    return { income: inc, expense: exp, profit: inc - exp };
+  }, [compRecordsFiltered]);
 
   /* Chart: Entrada × Despesa por mês */
   const chartEntradaDespesa = useMemo(() => {
@@ -734,7 +814,7 @@ export default function FinanceiroDashboard() {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                           <thead>
                             <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                              {['Cliente', 'Parcela', 'Vencimento', 'Valor', 'Status', 'Pago em', ''].map(h => (
+                              {['Cliente', 'Serviços', 'Parcela', 'Vencimento', 'Valor', 'Status', 'Pago em', ''].map(h => (
                                 <th key={h} style={{
                                   padding: '9px 14px', textAlign: h === '' ? 'right' : 'left',
                                   fontFamily: 'var(--font-mono)', fontSize: '0.57rem', color: 'var(--text-muted)',
@@ -747,6 +827,7 @@ export default function FinanceiroDashboard() {
                             {insts.map(inst => {
                               const eff = effectiveStatus(inst);
                               const cfg = STATUS_CFG[eff];
+                              const svcs = serviceNames(inst.contract_services);
                               return (
                                 <tr key={inst.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.025)' }}>
                                   <td style={{ padding: '10px 14px' }}>
@@ -758,6 +839,28 @@ export default function FinanceiroDashboard() {
                                         </span>
                                       </div>
                                     </Link>
+                                  </td>
+                                  <td style={{ padding: '10px 14px' }}>
+                                    {svcs.length === 0 ? (
+                                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)' }}>—</span>
+                                    ) : (
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 230 }} title={svcs.join(' · ')}>
+                                        {svcs.slice(0, 2).map((s, i) => (
+                                          <span key={i} style={{
+                                            padding: '2px 7px', borderRadius: 4, whiteSpace: 'nowrap',
+                                            background: 'rgba(255,0,51,0.06)', border: '1px solid rgba(255,0,51,0.15)',
+                                            fontFamily: 'var(--font-mono)', fontSize: '0.55rem', color: '#ff6680',
+                                          }}>{s}</span>
+                                        ))}
+                                        {svcs.length > 2 && (
+                                          <span style={{
+                                            padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap',
+                                            background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+                                            fontFamily: 'var(--font-mono)', fontSize: '0.55rem', color: 'var(--text-muted)',
+                                          }}>+{svcs.length - 2}</span>
+                                        )}
+                                      </div>
+                                    )}
                                   </td>
                                   <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
                                     #{inst.installment_number}
@@ -827,38 +930,29 @@ export default function FinanceiroDashboard() {
       {/* ═══ TAB: CUSTOS & GANHOS DA EMPRESA ═══ */}
       {!loading && activeTab === 'empresa' && (
         <div>
-          {/* KPIs */}
+          {/* KPIs — refletem o mês/filtros selecionados nesta aba */}
           <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-            <KpiCard label="Receitas (extras)" value={fmtBRL(compKpis.income)} color="#22c55e" />
-            <KpiCard label="Despesas" value={fmtBRL(compKpis.expense)} color="#ff6680" />
-            <KpiCard label="Balanço" value={fmtBRL(compKpis.profit)}
-              color={compKpis.profit >= 0 ? '#22c55e' : '#ff6680'} />
+            <KpiCard label="Receitas (extras)" value={fmtBRL(compKpisFiltered.income)} color="#22c55e" />
+            <KpiCard label="Despesas" value={fmtBRL(compKpisFiltered.expense)} color="#ff6680" />
+            <KpiCard label="Balanço" value={fmtBRL(compKpisFiltered.profit)}
+              color={compKpisFiltered.profit >= 0 ? '#22c55e' : '#ff6680'} />
           </div>
 
           {/* Filtros */}
           <div className="glass-card" style={{ padding: '12px 16px', marginBottom: 16 }}>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <select value={compPeriod} onChange={e => setCompPeriod(e.target.value)} style={SEL}>
-                <option value="7d">Ultimos 7 dias</option>
-                <option value="30d">Ultimos 30 dias</option>
-                <option value="90d">Ultimos 90 dias</option>
-                <option value="this_month">Este mes</option>
-                <option value="last_month">Mes passado</option>
-                <option value="this_year">Este ano</option>
-                <option value="custom">Personalizado</option>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)' }}>Ano:</span>
+              <select value={filterYear} onChange={e => { setFilterYear(e.target.value); setFilterDashMonth(''); }} style={SEL}>
+                {years.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
-              {compPeriod === 'custom' && (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>De:</span>
-                    <input type="date" value={compDateFrom} onChange={e => setCompDateFrom(e.target.value)} style={{ ...INP, width: 140 }} />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>Ate:</span>
-                    <input type="date" value={compDateTo} onChange={e => setCompDateTo(e.target.value)} style={{ ...INP, width: 140 }} />
-                  </div>
-                </>
-              )}
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)' }}>Mês:</span>
+              <select value={compMonth} onChange={e => setCompMonth(e.target.value)} style={SEL}>
+                <option value="">Todos</option>
+                {MONTH_NAMES.map((name, i) => {
+                  const val = String(i + 1).padStart(2, '0');
+                  return <option key={val} value={val}>{name}</option>;
+                })}
+              </select>
               <select value={compTypeFilter} onChange={e => setCompTypeFilter(e.target.value)} style={SEL}>
                 <option value="">Todos os tipos</option>
                 <option value="income">Entradas</option>
@@ -879,8 +973,8 @@ export default function FinanceiroDashboard() {
                   return opts;
                 })()}
               </select>
-              {(compPeriod !== 'this_year' || compTypeFilter || compCatFilter) && (
-                <button onClick={() => { setCompPeriod('this_year'); setCompTypeFilter(''); setCompCatFilter(''); setCompDateFrom(''); setCompDateTo(''); }} style={{
+              {(compMonth !== CUR_MM || filterYear !== CUR_YEAR || compTypeFilter || compCatFilter) && (
+                <button onClick={() => { setCompMonth(CUR_MM); setFilterYear(CUR_YEAR); setCompTypeFilter(''); setCompCatFilter(''); }} style={{
                   padding: '6px 12px', borderRadius: 6, cursor: 'pointer',
                   border: '1px solid rgba(255,255,255,0.07)', background: 'transparent',
                   color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
@@ -1022,7 +1116,7 @@ export default function FinanceiroDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {companyRecords.map(rec => (
+                  {compRecordsFiltered.map(rec => (
                     <tr key={rec.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.025)' }}>
                       <td style={{ padding: '10px 14px' }}>
                         <span style={{
@@ -1070,6 +1164,13 @@ export default function FinanceiroDashboard() {
                       </td>
                       <td style={{ padding: '10px 14px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                          <button onClick={() => setViewingRec(rec)} style={{
+                            padding: '3px 8px', borderRadius: 4, cursor: 'pointer',
+                            border: '1px solid rgba(255,255,255,0.1)', background: 'transparent',
+                            color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '0.58rem',
+                          }}>
+                            Info
+                          </button>
                           <button onClick={() => openEditCompForm(rec)} style={{
                             padding: '3px 8px', borderRadius: 4, cursor: 'pointer',
                             border: '1px solid rgba(255,255,255,0.1)', background: 'transparent',
@@ -1090,9 +1191,9 @@ export default function FinanceiroDashboard() {
                   ))}
                 </tbody>
               </table>
-              {companyRecords.length === 0 && (
+              {compRecordsFiltered.length === 0 && (
                 <div style={{ padding: '32px 18px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                  Nenhum registro encontrado. Clique em "+ Adicionar" para lançar custos ou receitas.
+                  Nenhum registro neste período. Clique em "+ Adicionar" para lançar custos ou receitas.
                 </div>
               )}
             </div>
@@ -1111,6 +1212,67 @@ export default function FinanceiroDashboard() {
             notify('Cobrança enviada no WhatsApp', 'success');
           }}
         />
+      )}
+
+      {/* Confirmação de exclusão de registro da empresa */}
+      <ConfirmModal
+        open={!!deletingRec}
+        onClose={() => setDeletingRec(null)}
+        onConfirm={confirmDeleteComp}
+        variant="danger"
+        title="Excluir registro"
+        warningTitle="Tem certeza que deseja excluir"
+        warningHighlight={deletingRec?.description || 'este registro'}
+        warningText="O lançamento será removido do Financeiro permanentemente."
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+      />
+
+      {/* Visualização de despesa/ganho */}
+      {viewingRec && (
+        <SystemModal
+          open
+          onClose={() => setViewingRec(null)}
+          iconVariant={viewingRec.type === 'income' ? 'success' : 'danger'}
+          title={viewingRec.type === 'income' ? 'Receita' : 'Despesa'}
+          description="Detalhes do lançamento"
+          size="md"
+          hideActions
+        >
+          {/* Valor em destaque */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            padding: '16px 18px', borderRadius: 10, marginBottom: 18,
+            background: viewingRec.type === 'income' ? 'rgba(34,197,94,0.07)' : 'rgba(255,0,51,0.06)',
+            border: `1px solid ${viewingRec.type === 'income' ? 'rgba(34,197,94,0.25)' : 'rgba(255,0,51,0.22)'}`,
+          }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.52rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 5 }}>Valor</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.5rem', fontWeight: 700, lineHeight: 1, color: viewingRec.type === 'income' ? '#22c55e' : '#ff6680' }}>
+                {viewingRec.type === 'expense' ? '- ' : '+ '}{fmtBRL(viewingRec.value)}
+              </div>
+            </div>
+            <span style={{
+              padding: '4px 12px', borderRadius: 20, fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 700,
+              letterSpacing: '0.05em', textTransform: 'uppercase',
+              background: viewingRec.type === 'income' ? 'rgba(34,197,94,0.12)' : 'rgba(255,0,51,0.12)',
+              color: viewingRec.type === 'income' ? '#22c55e' : '#ff6680',
+            }}>
+              {viewingRec.type === 'income' ? 'Receita' : 'Despesa'}
+            </span>
+          </div>
+
+          {/* Campos */}
+          <Row2>
+            <InfoField label="Categoria">{viewingRec.category_name || viewingRec.category || '—'}</InfoField>
+            <InfoField label="Data">{fmtDate(viewingRec.date)}</InfoField>
+          </Row2>
+          <InfoField label="Descrição">{viewingRec.description || '—'}</InfoField>
+          {viewingRec.notes && <InfoField label="Observação">{viewingRec.notes}</InfoField>}
+          {viewingRec.created_at && (
+            <InfoField label="Lançado em">{new Date(viewingRec.created_at).toLocaleString('pt-BR')}</InfoField>
+          )}
+        </SystemModal>
       )}
     </DashboardLayout>
   );

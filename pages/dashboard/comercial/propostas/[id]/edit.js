@@ -24,7 +24,15 @@ const PROPOSAL_AI_PHASES = [
   { key: 'opportunity', label: 'Oportunidade' },
   { key: 'pillars',     label: 'Pilares' },
   { key: 'projection',  label: 'Projeção' },
+  { key: 'whatsapp',    label: 'Mensagem WhatsApp' },
 ];
+
+// Seções geradas no "Gerar tudo com IA" (a mensagem WhatsApp sai junto, no backend).
+const ALL_AI_SECTIONS = ['diagnostic', 'opportunity', 'pillars', 'projection'];
+
+// Fallback caso a proposta ainda não tenha mensagem gerada (mantém {nome}/{link}).
+const DEFAULT_WHATSAPP_MESSAGE = 'Olá {nome}, segue a proposta SIGMA personalizada para você. '
+  + 'Acesse pelo link: {link}';
 
 const ICON_AI = (
   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -40,6 +48,12 @@ const ICON_LOCK = (
   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="11" width="18" height="11" rx="2" />
     <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </svg>
+);
+const ICON_COPY = (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="9" y="9" width="13" height="13" rx="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
   </svg>
 );
 
@@ -67,7 +81,7 @@ export default function ProposalEditPage() {
   const [openSections, setOpenSections] = useState({
     cover: true, diagnostic: true, opportunity: true, pillars: true,
     scope: false, timeline: false, investment: true, projection: false,
-    next: false, message: false,
+    next: false, message: true,
   });
 
   // AI drawer state
@@ -146,6 +160,29 @@ export default function ProposalEditPage() {
     setOpenSections(s => ({ ...s, [key]: !s[key] }));
   }
 
+  // ── Mensagem WhatsApp pronta pra copiar ──
+  // Substitui {nome} pelo cliente e {link} pelo link público (slug já existe
+  // desde a criação, mesmo antes de publicar).
+  function buildWhatsappMessage() {
+    const template = (data.custom_message && data.custom_message.trim())
+      || DEFAULT_WHATSAPP_MESSAGE;
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const link = proposal?.slug ? `${origin}/proposta/${proposal.slug}` : '';
+    return template
+      .replace(/\{nome\}/gi, data.client_name || 'Cliente')
+      .replace(/\{link\}/gi, link);
+  }
+
+  function copyWhatsappMessage() {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      notify('Cópia indisponível neste navegador', 'warning');
+      return;
+    }
+    navigator.clipboard.writeText(buildWhatsappMessage())
+      .then(() => notify('Mensagem WhatsApp copiada', 'success', { duration: 1800 }))
+      .catch(() => notify('Falha ao copiar', 'error'));
+  }
+
   // ── Generate AI ──
   const streamUrl = useCallback(
     (jobId) => `/api/comercial/proposals/${id}/generate-ai-stream?jobId=${encodeURIComponent(jobId)}`,
@@ -218,7 +255,10 @@ export default function ProposalEditPage() {
     return <DashboardLayout activeTab="comercial/propostas">{loader}</DashboardLayout>;
   }
 
-  const aiPhasesForDrawer = aiSections.map(k => {
+  // Na geração completa, o backend também produz a mensagem WhatsApp — mostra a fase.
+  const isFullAiRun = ALL_AI_SECTIONS.every(s => aiSections.includes(s));
+  const drawerKeys = isFullAiRun ? [...aiSections, 'whatsapp'] : aiSections;
+  const aiPhasesForDrawer = drawerKeys.map(k => {
     const found = PROPOSAL_AI_PHASES.find(p => p.key === k);
     return found || { key: k, label: k };
   });
@@ -240,19 +280,18 @@ export default function ProposalEditPage() {
           </div>
           {data.ai_generated_at ? (
             <button
-              className="btn btn-secondary"
+              className={styles.aiBtnLocked}
               disabled
               title={`Geração IA já executada em ${new Date(data.ai_generated_at).toLocaleString('pt-BR')}. Edite manualmente para preservar tokens.`}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: 0.55, cursor: 'not-allowed' }}
             >
               {ICON_LOCK}
               IA já gerada · {new Date(data.ai_generated_at).toLocaleDateString('pt-BR')}
             </button>
           ) : (
             <button
-              className="btn btn-secondary"
+              className={`${styles.aiBtnMain} ${styles.aiBtnMainPulse}`}
               onClick={startGenerateAll}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              title="Gera diagnóstico, oportunidade, pilares, projeção e a mensagem de WhatsApp de uma vez"
             >
               {ICON_AI}
               Gerar tudo com IA
@@ -497,12 +536,16 @@ export default function ProposalEditPage() {
               open={openSections.message} onToggle={() => toggle('message')}
             >
               <div className={styles.field}>
-                <label className={styles.fieldLabel}>Variáveis: {'{nome}'}, {'{link}'}</label>
+                <label className={styles.fieldLabel}>Variáveis: {'{nome}'}, {'{link}'} — gerada junto com a IA, editável aqui</label>
                 <textarea className={styles.textarea} style={{ minHeight: 120 }}
                           value={data.custom_message || ''}
                           onChange={e => setField('custom_message', e.target.value)}
                           placeholder="Olá {nome}, segue a proposta SIGMA personalizada para você. Acesse pelo link: {link}" />
               </div>
+              <button type="button" className={styles.copyMsgBtn} onClick={copyWhatsappMessage}>
+                {ICON_COPY}
+                Copiar mensagem pronta
+              </button>
             </Section>
 
           </div>

@@ -102,6 +102,22 @@ export default function BulkImportPreview({
     setItems((prev) => prev.filter((it) => it._localId !== localId));
   }
 
+  function removeSubtask(localId, subIndex) {
+    setItems((prev) => prev.map((it) => (
+      it._localId === localId
+        ? { ...it, subtasks: (it.subtasks || []).filter((_, i) => i !== subIndex) }
+        : it
+    )));
+  }
+
+  const subLabel = (s) => (typeof s === 'string' ? s : (s?.title || ''));
+
+  // Resumo pro cabeçalho
+  const totalSubtasks = useMemo(
+    () => items.reduce((acc, it) => acc + (Array.isArray(it.subtasks) ? it.subtasks.length : 0), 0),
+    [items]
+  );
+
   function addItemForUser(userId) {
     setItems((prev) => [
       ...prev,
@@ -198,9 +214,12 @@ export default function BulkImportPreview({
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.header}>
           <div>
-            <h2 className={styles.headerTitle}>Revisar tarefas — Importação em massa</h2>
+            <h2 className={styles.headerTitle}>Revisar antes de criar</h2>
             <div className={styles.headerSubtitle}>
-              {meta?.model ? `Geradas via ${meta.model}` : 'Confira e edite antes de criar'}
+              {items.length} tarefa{items.length !== 1 ? 's' : ''}
+              {totalSubtasks > 0 ? ` · ${totalSubtasks} subtarefa${totalSubtasks !== 1 ? 's' : ''}` : ''}
+              {meetingItems.length > 0 ? ` · ${meetingItems.length} reuni${meetingItems.length !== 1 ? 'ões' : 'ão'}` : ''}
+              {' '}— confira e ajuste o que precisar
             </div>
           </div>
           <button className={styles.closeBtn} type="button" onClick={onClose} title="Fechar">
@@ -211,9 +230,9 @@ export default function BulkImportPreview({
         <div className={styles.body}>
           {warnings && warnings.length > 0 && (
             <div className={styles.warnings}>
-              <div className={styles.warningsTitle}>// Avisos da IA</div>
+              <div className={styles.warningsTitle}>⚠ Pontos pra conferir ({warnings.length})</div>
               <ul className={styles.warningsList}>
-                {warnings.map((w, i) => <li key={i}>· {w}</li>)}
+                {warnings.map((w, i) => <li key={i}>{w}</li>)}
               </ul>
             </div>
           )}
@@ -234,7 +253,8 @@ export default function BulkImportPreview({
               </div>
 
               {g.tasks.map((t) => (
-                <div key={t._localId} className={styles.previewRow}>
+                <div key={t._localId}>
+                  <div className={styles.previewRow}>
                   <input
                     type="text"
                     value={t.title || ''}
@@ -289,6 +309,22 @@ export default function BulkImportPreview({
                   >
                     <IconTrash />
                   </button>
+                  </div>
+                  {Array.isArray(t.subtasks) && t.subtasks.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, padding: '2px 0 9px 14px' }}>
+                      {t.subtasks.map((s, si) => (
+                        <span key={si} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 5,
+                          padding: '2px 8px', borderRadius: 12,
+                          background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.2)',
+                          fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-secondary)',
+                        }}>
+                          <span style={{ color: '#22c55e' }}>☑</span> {subLabel(s)}
+                          <span onClick={() => removeSubtask(t._localId, si)} style={{ cursor: 'pointer', opacity: 0.55, fontSize: '0.78rem', lineHeight: 1 }} title="Remover subtarefa">×</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
 

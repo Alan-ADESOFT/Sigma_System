@@ -86,6 +86,13 @@ const IconEmpty = () => (
 
 /* ── ChecklistRow — única renderização de linha ─────────────────────────── */
 
+/* Subtasks: JSONB pode vir como array ou string JSON. */
+function parseSubtasks(raw) {
+  let arr = raw;
+  if (typeof arr === 'string') { try { arr = JSON.parse(arr || '[]'); } catch { arr = []; } }
+  return Array.isArray(arr) ? arr.filter(Boolean) : [];
+}
+
 function ChecklistRow({
   task,
   showClient,
@@ -99,11 +106,20 @@ function ChecklistRow({
   const done = task.status === 'done';
   const pri = PRIORITY_BADGE[task.priority] || PRIORITY_BADGE.normal;
   const time = fmtTime(task.due_time);
+  const subs = parseSubtasks(task.subtasks);
+  const subDone = subs.filter((s) => s.done).length;
+  const subAllDone = subs.length === 0 || subDone === subs.length;
+  const subBlocked = task.subtasks_required && !subAllDone;
+  const depCount = task.dep_count || 0;
 
   function handleCheckbox(e) {
     e.stopPropagation();
     if (blocked) {
       notify && notify('Tarefa bloqueada por dependências pendentes', 'warning');
+      return;
+    }
+    if (!done && subBlocked) {
+      notify && notify(`Conclua as ${subs.length - subDone} subtarefa(s) obrigatória(s) antes de finalizar`, 'warning');
       return;
     }
     onToggle(task);
@@ -114,47 +130,92 @@ function ChecklistRow({
   }
 
   return (
-    <div className={styles.row} onClick={handleOpen}>
-      <button
-        type="button"
-        className={`${styles.checkbox} ${done ? styles.checkboxDone : ''} ${blocked ? styles.checkboxBlocked : ''}`}
-        onClick={handleCheckbox}
-        disabled={blocked}
-        title={blocked ? 'Aguardando dependências' : (done ? 'Reabrir tarefa' : 'Concluir tarefa')}
-      >
-        {done && <IconCheck />}
-      </button>
+    <div>
+      <div className={styles.row} onClick={handleOpen}>
+        <button
+          type="button"
+          className={`${styles.checkbox} ${done ? styles.checkboxDone : ''} ${(blocked || subBlocked) ? styles.checkboxBlocked : ''}`}
+          onClick={handleCheckbox}
+          disabled={blocked}
+          title={blocked ? 'Aguardando dependências' : (subBlocked ? 'Conclua as subtarefas obrigatórias' : (done ? 'Reabrir tarefa' : 'Concluir tarefa'))}
+        >
+          {done && <IconCheck />}
+        </button>
 
-      <span className={`${styles.rowTime} ${!time ? styles.rowTimeEmpty : ''}`}>
-        {blocked ? <span className={styles.badgeLocked}><IconLock /></span> : (time || '—')}
-      </span>
-
-      <span className={styles.rowText}>
-        <span className={`${styles.rowTitle} ${done ? styles.rowTitleDone : ''}`}>
-          {task.title}
+        <span className={`${styles.rowTime} ${!time ? styles.rowTimeEmpty : ''}`}>
+          {blocked ? <span className={styles.badgeLocked}><IconLock /></span> : (time || '—')}
         </span>
-        {(showClient && task.client_name) && (
-          <span className={styles.rowMeta}>
-            <span className={styles.rowMetaClient}>{task.client_name}</span>
-          </span>
-        )}
-      </span>
 
-      <span className={styles.rowBadges}>
-        {showRecurringBadge && task.recurrence_id && (
-          <span className={`${styles.badge} ${styles.badgeRecurring}`} title="Tarefa recorrente">
-            <IconRecurring />
+        <span className={styles.rowText}>
+          <span className={`${styles.rowTitle} ${done ? styles.rowTitleDone : ''}`}>
+            {task.title}
           </span>
-        )}
-        {pri.label && (
-          <span className={`${styles.badge} ${styles[pri.cls]}`}>{pri.label}</span>
-        )}
-        {showAvatar && task.assigned_to_name && (
-          <span className={styles.avatar} title={task.assigned_to_name}>
-            {getInitials(task.assigned_to_name)}
-          </span>
-        )}
-      </span>
+          {(showClient && task.client_name) && (
+            <span className={styles.rowMeta}>
+              <span className={styles.rowMetaClient}>{task.client_name}</span>
+            </span>
+          )}
+        </span>
+
+        <span className={styles.rowBadges}>
+          {subs.length > 0 && (
+            <span className={styles.badge} style={{
+              background: subAllDone ? 'rgba(34,197,94,0.1)' : (subBlocked ? 'rgba(249,115,22,0.1)' : 'rgba(255,255,255,0.05)'),
+              border: `1px solid ${subAllDone ? 'rgba(34,197,94,0.3)' : (subBlocked ? 'rgba(249,115,22,0.35)' : 'rgba(255,255,255,0.12)')}`,
+              color: subAllDone ? '#22c55e' : (subBlocked ? '#f97316' : 'var(--text-muted)'),
+            }} title={task.subtasks_required ? 'Subtarefas obrigatórias' : 'Subtarefas'}>
+              ☑ {subDone}/{subs.length}{task.subtasks_required ? '*' : ''}
+            </span>
+          )}
+          {depCount > 0 && (
+            <span className={styles.badge} style={{
+              background: blocked ? 'rgba(249,115,22,0.1)' : 'rgba(255,255,255,0.05)',
+              border: `1px solid ${blocked ? 'rgba(249,115,22,0.35)' : 'rgba(255,255,255,0.12)'}`,
+              color: blocked ? '#f97316' : 'var(--text-muted)',
+            }} title={blocked ? 'Bloqueada por dependências pendentes' : 'Depende de outras tarefas'}>
+              <IconLock /> {depCount}
+            </span>
+          )}
+          {showRecurringBadge && task.recurrence_id && (
+            <span className={`${styles.badge} ${styles.badgeRecurring}`} title="Tarefa recorrente">
+              <IconRecurring />
+            </span>
+          )}
+          {pri.label && (
+            <span className={`${styles.badge} ${styles[pri.cls]}`}>{pri.label}</span>
+          )}
+          {showAvatar && task.assigned_to_name && (
+            <span className={styles.avatar} title={task.assigned_to_name}>
+              {getInitials(task.assigned_to_name)}
+            </span>
+          )}
+        </span>
+      </div>
+
+      {/* Subtarefas encaixadas sob a task raiz */}
+      {subs.length > 0 && (
+        <div style={{ paddingLeft: 62, paddingBottom: 7, marginTop: -2, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {subs.map((s, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-mono)', fontSize: '0.66rem', lineHeight: 1.3 }}>
+              <span style={{
+                width: 13, height: 13, borderRadius: 3, flexShrink: 0,
+                border: `1px solid ${s.done ? 'rgba(34,197,94,0.5)' : 'rgba(255,255,255,0.18)'}`,
+                background: s.done ? 'rgba(34,197,94,0.18)' : 'transparent',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                color: '#22c55e', fontSize: '0.55rem', fontWeight: 700,
+              }}>{s.done ? '✓' : ''}</span>
+              <span style={{ color: s.done ? 'var(--text-muted)' : 'var(--text-secondary)', textDecoration: s.done ? 'line-through' : 'none' }}>
+                {s.title}
+              </span>
+            </div>
+          ))}
+          {subBlocked && (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.54rem', color: '#f97316', paddingLeft: 21 }}>
+              * todas obrigatórias para concluir a tarefa
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -395,6 +456,22 @@ export default function ChecklistView({
         onSelect={setActiveIso}
         isoDate={isoDate}
       />
+
+      {/* Barra de progresso do dia selecionado */}
+      {dayTasks.length > 0 && (() => {
+        const dayDone = dayTasks.filter((t) => t.status === 'done').length;
+        const dayPct = Math.round((dayDone / dayTasks.length) * 100);
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px 2px' }}>
+            <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+              <div style={{ width: `${dayPct}%`, height: '100%', background: '#22c55e', transition: 'width 0.3s' }} />
+            </div>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              {dayDone}/{dayTasks.length} concluídas{dayPct === 100 ? ' ✓' : ''}
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Filtros */}
       <div className={styles.filterBar}>

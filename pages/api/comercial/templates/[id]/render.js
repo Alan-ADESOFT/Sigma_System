@@ -15,7 +15,7 @@ function buildPublicUrl(slug) {
   if (!slug) return '';
   const base = process.env.NEXT_PUBLIC_BASE_URL
     || process.env.NEXT_PUBLIC_APP_URL
-    || 'http://localhost:3001';
+    || 'http://localhost:3002';
   return `${String(base).replace(/\/$/, '')}/proposta/${slug}`;
 }
 

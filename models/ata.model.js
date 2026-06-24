@@ -22,6 +22,16 @@ function afazerId() {
   return 'af_' + crypto.randomUUID().slice(0, 8);
 }
 
+function normalizeSubtasks(arr) {
+  if (typeof arr === 'string') { try { arr = JSON.parse(arr || '[]'); } catch { arr = []; } }
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((s) => (typeof s === 'string'
+      ? { title: s.trim(), done: false }
+      : { title: String(s?.title || '').trim(), done: Boolean(s?.done) }))
+    .filter((s) => s.title);
+}
+
 function normalizeAfazer(a = {}) {
   return {
     id: a.id || afazerId(),
@@ -32,28 +42,27 @@ function normalizeAfazer(a = {}) {
     due_date: a.due_date || null,           // 'YYYY-MM-DD' (o dia já resolvido)
     next_week: Boolean(a.next_week),
     task_id: a.task_id || null,
+    subtasks: normalizeSubtasks(a.subtasks),
+    subtasks_required: Boolean(a.subtasks_required),
   };
 }
 
-async function listAtas(tenantId, { folderId } = {}) {
-  const params = [tenantId];
-  let where = 'a.tenant_id = $1';
-  if (folderId === 'none') {
-    where += ' AND a.folder_id IS NULL';
-  } else if (folderId) {
-    params.push(folderId);
-    where += ` AND a.folder_id = $${params.length}`;
-  }
+async function listAtas(tenantId) {
+  // afazer_count = total de afazeres; afazer_done_count = afazeres cuja task está
+  // concluída (pra barra de %). CASE protege atas legadas com afazeres não-array.
   return query(
-    `SELECT a.id, a.title, a.reference_week, a.week_number, a.status, a.folder_id,
+    `SELECT a.id, a.title, a.reference_week, a.week_number, a.status,
             a.distributed_at, a.created_at, a.updated_at,
-            f.name AS folder_name, f.color AS folder_color,
-            jsonb_array_length(a.afazeres) AS afazer_count
+            COALESCE((SELECT count(*)::int FROM jsonb_array_elements(
+               CASE WHEN jsonb_typeof(a.afazeres) = 'array' THEN a.afazeres ELSE '[]'::jsonb END) e), 0) AS afazer_count,
+            COALESCE((SELECT count(*)::int FROM jsonb_array_elements(
+               CASE WHEN jsonb_typeof(a.afazeres) = 'array' THEN a.afazeres ELSE '[]'::jsonb END) e
+               JOIN client_tasks t ON t.id = (e->>'task_id')
+              WHERE t.tenant_id = $1 AND t.status = 'done'), 0) AS afazer_done_count
        FROM atas a
-       LEFT JOIN ata_folders f ON f.id = a.folder_id
-      WHERE ${where}
+      WHERE a.tenant_id = $1
       ORDER BY a.reference_week DESC NULLS LAST, a.created_at DESC`,
-    params
+    [tenantId]
   );
 }
 
@@ -66,15 +75,21 @@ async function getAtaWithStatus(id, tenantId) {
   const ata = await getAta(id, tenantId);
   if (!ata) return null;
   const tasks = await query(
-    `SELECT id, status, done FROM client_tasks WHERE ata_id = $1 AND tenant_id = $2`,
+    `SELECT id, status, subtasks, subtasks_required FROM client_tasks WHERE ata_id = $1 AND tenant_id = $2`,
     [id, tenantId]
   );
   const byId = {};
   for (const t of tasks) byId[t.id] = t;
-  const afazeres = (Array.isArray(ata.afazeres) ? ata.afazeres : []).map((a) => ({
-    ...a,
-    task_status: a.task_id && byId[a.task_id] ? byId[a.task_id].status : null,
-  }));
+  const afazeres = (Array.isArray(ata.afazeres) ? ata.afazeres : []).map((a) => {
+    const t = a.task_id ? byId[a.task_id] : null;
+    return {
+      ...a,
+      task_status: t ? t.status : null,
+      // Após distribuir, a VERDADE das subtarefas é a task (não o JSONB congelado).
+      subtasks: t ? normalizeSubtasks(t.subtasks) : a.subtasks,
+      subtasks_required: t ? Boolean(t.subtasks_required) : a.subtasks_required,
+    };
+  });
   return { ...ata, afazeres };
 }
 
@@ -82,12 +97,12 @@ async function createAta(tenantId, data = {}, createdBy = null) {
   const afazeres = Array.isArray(data.afazeres) ? data.afazeres.map(normalizeAfazer) : [];
   return queryOne(
     `INSERT INTO atas
-       (tenant_id, folder_id, title, reference_week, week_number, meeting_date,
+       (tenant_id, title, reference_week, week_number, meeting_date,
         meeting_time, responsible, participants, afazeres, notes, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$12)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11)
      RETURNING *`,
     [
-      tenantId, data.folder_id || null, (data.title || 'Ata semanal').trim(),
+      tenantId, (data.title || 'Ata semanal').trim(),
       data.reference_week || null, data.week_number || null, data.meeting_date || null,
       data.meeting_time || null, data.responsible || null,
       JSON.stringify(data.participants || []), JSON.stringify(afazeres),
@@ -98,26 +113,35 @@ async function createAta(tenantId, data = {}, createdBy = null) {
 
 /** Atualiza o cabeçalho + afazeres (rascunho). O editor manda o objeto completo. */
 async function updateAta(id, tenantId, patch = {}) {
-  const afazeresJson = patch.afazeres !== undefined
-    ? JSON.stringify((patch.afazeres || []).map(normalizeAfazer))
-    : null;
+  let afazeresJson = null;
+  if (patch.afazeres !== undefined) {
+    const incoming = (patch.afazeres || []).map(normalizeAfazer);
+    // task_id é VERDADE DO SERVIDOR (gravado na distribuição). Preserva por id
+    // pra um PUT com estado local desatualizado não apagar o vínculo nem causar
+    // redistribuição duplicada (corrida autosave × auto-distribuição).
+    const cur = await queryOne(`SELECT afazeres FROM atas WHERE id = $1 AND tenant_id = $2`, [id, tenantId]);
+    const curArr = Array.isArray(cur?.afazeres) ? cur.afazeres : [];
+    const taskById = {};
+    for (const a of curArr) { if (a && a.id && a.task_id) taskById[a.id] = a.task_id; }
+    for (const a of incoming) { if (!a.task_id && taskById[a.id]) a.task_id = taskById[a.id]; }
+    afazeresJson = JSON.stringify(incoming);
+  }
   return queryOne(
     `UPDATE atas SET
-       folder_id      = $3,
-       title          = COALESCE($4, title),
-       reference_week = $5,
-       week_number    = $6,
-       meeting_date   = $7,
-       meeting_time   = $8,
-       responsible    = $9,
-       participants   = COALESCE($10::jsonb, participants),
-       afazeres       = COALESCE($11::jsonb, afazeres),
-       notes          = $12,
+       title          = COALESCE($3, title),
+       reference_week = $4,
+       week_number    = $5,
+       meeting_date   = $6,
+       meeting_time   = COALESCE($7, meeting_time),
+       responsible    = COALESCE($8, responsible),
+       participants   = COALESCE($9::jsonb, participants),
+       afazeres       = COALESCE($10::jsonb, afazeres),
+       notes          = $11,
        updated_at     = now()
      WHERE id = $1 AND tenant_id = $2
      RETURNING *`,
     [
-      id, tenantId, patch.folder_id ?? null,
+      id, tenantId,
       patch.title != null ? String(patch.title).trim() : null,
       patch.reference_week ?? null, patch.week_number ?? null,
       patch.meeting_date ?? null, patch.meeting_time ?? null, patch.responsible ?? null,
@@ -154,6 +178,8 @@ async function distributeAta(id, tenantId, userId = null) {
     status: 'pending',
     created_by: userId || null,
     ata_id: id,
+    subtasks: normalizeSubtasks(a.subtasks),
+    subtasks_required: Boolean(a.subtasks_required),
   }));
 
   const { created, failed } = items.length
@@ -204,6 +230,8 @@ async function getCarryover(tenantId, sourceAtaId = null) {
         client_id: a.client_id, category_id: a.category_id,
         description: a.description, assigned_to: a.assigned_to,
         due_date: null, next_week: false, task_id: null,
+        subtasks: (a.subtasks || []).map((s) => ({ title: typeof s === 'string' ? s : s.title, done: false })),
+        subtasks_required: a.subtasks_required,
       }));
     }
   }

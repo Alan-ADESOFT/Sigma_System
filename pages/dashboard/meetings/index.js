@@ -13,6 +13,7 @@ import DashboardLayout from '../../../components/DashboardLayout';
 import styles from '../../../assets/style/meetings.module.css';
 import { useNotification } from '../../../context/NotificationContext';
 import { useAuth } from '../../../hooks/useAuth';
+import ConfirmModal from '../../../components/comercial/ConfirmModal';
 
 // react-datepicker (carregado client-side)
 const DatePicker = dynamic(() => import('react-datepicker'), { ssr: false });
@@ -140,30 +141,11 @@ function IconCalendar() {
   );
 }
 
-function IconUpload() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="17 8 12 3 7 8" />
-      <line x1="12" y1="3" x2="12" y2="15" />
-    </svg>
-  );
-}
-
 function IconTrash() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="3 6 5 6 21 6" />
       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-    </svg>
-  );
-}
-
-function IconLink() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </svg>
   );
 }
@@ -195,6 +177,7 @@ export default function MeetingsPage() {
   const [editingMeeting, setEditingMeeting] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   // Form fields — datetime e um Date object combinando data + horario
   const [form, setForm] = useState({
@@ -202,7 +185,6 @@ export default function MeetingsPage() {
     datetime: null,         // Date object (combina meeting_date + start_time)
     client_id: '',
     participants: [],
-    meet_link: '',
     obs: '',
   });
 
@@ -211,10 +193,6 @@ export default function MeetingsPage() {
   const [users, setUsers] = useState([]);
   const [loadingClients, setLoadingClients] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(false);
-
-  // File upload (ata)
-  const [minutesFile, setMinutesFile] = useState(null);
-  const [uploadingMinutes, setUploadingMinutes] = useState(false);
 
   /* ── Computed grids ── */
   const monthGrid = useMemo(
@@ -254,6 +232,22 @@ export default function MeetingsPage() {
   useEffect(() => {
     if (!authLoading && user) fetchMeetings();
   }, [fetchMeetings, authLoading, user]);
+
+  // Quando os usuários carregam (async) com o modal já aberto, re-resolve
+  // participantes que vieram como NOME → id, pra o chip aparecer destacado.
+  useEffect(() => {
+    if (!modalOpen || users.length === 0) return;
+    setForm(prev => {
+      let changed = false;
+      const next = prev.participants.map(p => {
+        if (users.some(u => (u.id || u.user_id) === p)) return p; // já é id
+        const u = users.find(x => x.name && String(p).toLowerCase() === x.name.toLowerCase());
+        if (u) { changed = true; return u.id || u.user_id; }
+        return p;
+      });
+      return changed ? { ...prev, participants: next } : prev;
+    });
+  }, [users, modalOpen]);
 
   /* ── Fetch clients + users (for modal) ── */
   const fetchClients = useCallback(async () => {
@@ -334,10 +328,8 @@ export default function MeetingsPage() {
       datetime: suggested,
       client_id: '',
       participants: [],
-      meet_link: '',
       obs: '',
     });
-    setMinutesFile(null);
     setModalOpen(true);
     fetchClients();
     fetchUsers();
@@ -356,11 +348,18 @@ export default function MeetingsPage() {
       title: meeting.title || '',
       datetime: dt,
       client_id: meeting.client_id || '',
-      participants: Array.isArray(meeting.participants) ? meeting.participants.map(p => p.id || p) : [],
-      meet_link: meeting.meet_link || '',
+      // Participantes vêm como nomes (texto). Resolve pra ID de usuário do sistema
+      // (por id ou por nome) pra o chip aparecer destacado/selecionado.
+      participants: Array.isArray(meeting.participants)
+        ? meeting.participants.map(p => {
+            const val = (p && p.id) ? p.id : p;
+            const u = users.find(x => (x.id || x.user_id) === val)
+              || users.find(x => x.name && String(val).toLowerCase() === x.name.toLowerCase());
+            return u ? (u.id || u.user_id) : val;
+          })
+        : [],
       obs: meeting.obs || '',
     });
-    setMinutesFile(null);
     setModalOpen(true);
     fetchClients();
     fetchUsers();
@@ -397,8 +396,11 @@ export default function MeetingsPage() {
         meeting_date,
         start_time,
         client_id: form.client_id || null,
-        participants: form.participants,
-        meet_link: form.meet_link || null,
+        // Salva participantes como NOMES (formato canônico usado no display/IA).
+        participants: form.participants.map(p => {
+          const u = users.find(x => (x.id || x.user_id) === p);
+          return u ? (u.name || u.email || p) : p;
+        }),
         obs: form.obs || null,
       };
 
@@ -417,14 +419,6 @@ export default function MeetingsPage() {
         throw new Error(json.error || 'Erro ao salvar reunião');
       }
 
-      const savedMeeting = json.meeting || json;
-
-      // Upload ata se selecionada
-      if (minutesFile && (isEdit || savedMeeting?.id)) {
-        const meetingId = isEdit ? editingMeeting.id : savedMeeting.id;
-        await uploadMinutes(meetingId);
-      }
-
       notify(isEdit ? 'Reunião atualizada' : 'Reunião criada', 'success');
       closeModal();
       fetchMeetings();
@@ -438,39 +432,18 @@ export default function MeetingsPage() {
   /* ── Delete meeting ── */
   async function handleDelete() {
     if (!editingMeeting) return;
-    if (!confirm('Excluir esta reuniao?')) return;
-
     setDeleting(true);
     try {
       const res = await fetch(`/api/meetings/${editingMeeting.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Erro ao excluir');
-      notify('Reuniao excluida', 'success');
+      notify('Reunião excluída', 'success');
+      setConfirmDeleteOpen(false);
       closeModal();
       fetchMeetings();
     } catch (err) {
       notify(err.message, 'error');
     } finally {
       setDeleting(false);
-    }
-  }
-
-  /* ── Upload ata ── */
-  async function uploadMinutes(meetingId) {
-    if (!minutesFile) return;
-    setUploadingMinutes(true);
-    try {
-      const fd = new FormData();
-      fd.append('file', minutesFile);
-      const res = await fetch(`/api/meetings/${meetingId}/minutes`, {
-        method: 'POST',
-        body: fd,
-      });
-      if (!res.ok) throw new Error('Erro ao enviar ata');
-      notify('Ata enviada', 'success');
-    } catch (err) {
-      notify(err.message, 'error');
-    } finally {
-      setUploadingMinutes(false);
     }
   }
 
@@ -880,18 +853,6 @@ export default function MeetingsPage() {
                     </div>
                   </div>
 
-                  {/* Link da chamada */}
-                  <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
-                    <label className={styles.formLabel}>Link da chamada</label>
-                    <input
-                      className="sigma-input"
-                      type="url"
-                      value={form.meet_link}
-                      onChange={e => updateField('meet_link', e.target.value)}
-                      placeholder="https://meet.google.com/..."
-                    />
-                  </div>
-
                   {/* Observacoes */}
                   <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
                     <label className={styles.formLabel}>Observações</label>
@@ -905,50 +866,6 @@ export default function MeetingsPage() {
                     />
                   </div>
 
-                  {/* Upload de Ata (somente edicao) */}
-                  {editingMeeting && (
-                    <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
-                      <label className={styles.formLabel}>Upload de Ata</label>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <label className={styles.uploadBtn}>
-                          <IconUpload />
-                          Selecionar arquivo
-                          <input
-                            type="file"
-                            accept=".pdf,.doc,.docx,.txt"
-                            style={{ display: 'none' }}
-                            onChange={e => {
-                              if (e.target.files && e.target.files[0]) {
-                                setMinutesFile(e.target.files[0]);
-                              }
-                            }}
-                          />
-                        </label>
-                        {minutesFile && (
-                          <span className={styles.formHint} style={{ opacity: 1 }}>
-                            {minutesFile.name}
-                          </span>
-                        )}
-                        {editingMeeting.minutes_url && !minutesFile && (
-                          <a
-                            href={editingMeeting.minutes_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              fontSize: '0.7rem',
-                              color: '#ff6680',
-                              fontFamily: 'var(--font-mono)',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                            }}
-                          >
-                            <IconLink /> Ver ata atual
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* Footer */}
@@ -958,7 +875,7 @@ export default function MeetingsPage() {
                       <button
                         type="button"
                         className={styles.deleteBtn}
-                        onClick={handleDelete}
+                        onClick={() => setConfirmDeleteOpen(true)}
                         disabled={deleting}
                       >
                         <IconTrash />
@@ -990,6 +907,20 @@ export default function MeetingsPage() {
           </div>
         )}
       </div>
+
+      {/* Excluir reunião — modal padrão do sistema */}
+      <ConfirmModal
+        open={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        onConfirm={handleDelete}
+        variant="danger"
+        title="Excluir reunião"
+        warningTitle="Tem certeza que deseja excluir"
+        warningHighlight={editingMeeting?.title || 'esta reunião'}
+        warningText="A reunião será removida do calendário. Esta ação não pode ser desfeita."
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+      />
     </DashboardLayout>
   );
 }

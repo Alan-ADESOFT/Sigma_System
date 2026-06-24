@@ -13,6 +13,7 @@ import dynamic from 'next/dynamic';
 import DashboardLayout from '../../../components/DashboardLayout';
 import { useNotification } from '../../../context/NotificationContext';
 import { Skeleton, SkeletonCard } from '../../../components/Skeleton';
+import ConfirmModal from '../../../components/comercial/ConfirmModal';
 import rs from '../../../assets/style/clientRespostas.module.css';
 
 const StageModal = dynamic(() => import('../../../components/StageModal'), { loading: () => null, ssr: false });
@@ -1593,7 +1594,7 @@ function TabInfo({ client, onSave }) {
   /* ── Serviços: toggle format ── */
   const [customSvc, setCustomSvc] = useState('');
   const [services, setServices] = useState(() => {
-    const existingNames = (client.services || []).map(s => typeof s === 'string' ? s : s.name);
+    const existingNames = serviceNames(client.services);
     const merged = DEFAULT_SERVICES.map((name, i) => ({ id: `svc-${i}`, name, selected: existingNames.includes(name) }));
     existingNames.forEach((name, idx) => {
       if (!DEFAULT_SERVICES.includes(name)) merged.push({ id: `custom-${idx}`, name, selected: true });
@@ -2523,6 +2524,21 @@ function fmtDate(d) {
   return `${day}/${m}/${y}`;
 }
 
+/* Normaliza services (JSONB pode vir como array de strings, de objetos {id,name},
+   como string JSON, ou conter nulls de dados legados) → array limpo de nomes únicos. */
+function serviceNames(raw) {
+  let arr = raw;
+  if (typeof arr === 'string') {
+    try { arr = JSON.parse(arr || '[]'); } catch { arr = []; }
+  }
+  if (!Array.isArray(arr)) return [];
+  const names = arr
+    .map(s => (typeof s === 'string' ? s : (s && typeof s === 'object' ? s.name : null)))
+    .filter(s => typeof s === 'string' && s.trim())
+    .map(s => s.trim());
+  return [...new Set(names)];
+}
+
 function TabFinanceiro({ clientId, clientServices }) {
   const { notify } = useNotification();
   const [contracts, setContracts] = useState([]);
@@ -2531,6 +2547,7 @@ function TabFinanceiro({ clientId, clientServices }) {
   const [saving,    setSaving   ] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+  const [deletingContract, setDeletingContract] = useState(null);
 
   const EMPTY_FORM = {
     monthly_value: '', num_installments: '12',
@@ -2538,12 +2555,14 @@ function TabFinanceiro({ clientId, clientServices }) {
     different_first_due: false, regular_due_day: '10',
   };
   const [form, setForm] = useState(EMPTY_FORM);
+  const [customSvc, setCustomSvc] = useState('');
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
 
   function effectiveStatus(inst) {
     if (inst.status === 'paid') return 'paid';
-    if (new Date(inst.due_date) < today) return 'overdue';
+    // Âncora meio-dia: evita marcar atrasada 1 dia cedo em fuso negativo (Brasil).
+    if (new Date(String(inst.due_date).split('T')[0] + 'T12:00:00') < today) return 'overdue';
     return 'pending';
   }
 
@@ -2583,10 +2602,25 @@ function TabFinanceiro({ clientId, clientServices }) {
     });
   }
 
+  function addFormService(name) {
+    const n = (name || '').trim();
+    if (!n) return;
+    setForm(f => (f.services.includes(n) ? f : { ...f, services: [...f.services, n] }));
+    setCustomSvc('');
+  }
+
   function openNewForm() {
-    const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(1);
-    const nextFirstDue = d.toISOString().split('T')[0];
-    setForm({ ...EMPTY_FORM, first_due_date: nextFirstDue, services: (clientServices || []).map(s => s.name) });
+    const nextFirstDue = new Date().toISOString().split('T')[0]; // data atual (hoje)
+    // Pré-seleção dos serviços do contrato:
+    //  - se o cadastro do cliente tem ao menos 1 serviço PADRÃO, confia nele;
+    //  - se não tem nenhum padrão (cadastro vazio ou só com serviços fora da
+    //    lista da agência), cai nos serviços PADRÃO — igual à etapa 2 do
+    //    "Novo Cliente". Evita um contrato nascer com serviços fora do padrão.
+    const clientSvc = serviceNames(clientServices);
+    const hasStandard = clientSvc.some(s => DEFAULT_SERVICES.includes(s));
+    const preselect = hasStandard ? clientSvc : [...DEFAULT_SERVICES];
+    setForm({ ...EMPTY_FORM, first_due_date: nextFirstDue, services: preselect });
+    setCustomSvc('');
     setEditingId(null);
     setShowForm(true);
   }
@@ -2602,10 +2636,11 @@ function TabFinanceiro({ clientId, clientServices }) {
       num_installments: String(c.num_installments || 12),
       first_due_date: startDate,
       notes: c.notes || '',
-      services: Array.isArray(c.services) ? c.services : (typeof c.services === 'string' ? JSON.parse(c.services || '[]') : []),
+      services: serviceNames(c.services),
       different_first_due: !!hasDifferentFirstDue,
       regular_due_day: String(contractDueDay || 10),
     });
+    setCustomSvc('');
     setEditingId(c.id);
     setShowForm(true);
   }
@@ -2665,8 +2700,9 @@ function TabFinanceiro({ clientId, clientServices }) {
     finally { setSaving(false); }
   }
 
-  async function handleDeleteContract(contractId) {
-    if (!confirm('Tem certeza que deseja excluir este contrato e todas as suas parcelas?')) return;
+  async function confirmDeleteContract() {
+    const contractId = deletingContract?.id;
+    if (!contractId) return;
     try {
       console.log('[INFO][Frontend:ClientDetail] Excluindo contrato', { clientId, contractId });
       const res = await fetch(`/api/clients/${clientId}/contracts`, {
@@ -2676,6 +2712,7 @@ function TabFinanceiro({ clientId, clientServices }) {
       const j = await res.json();
       if (!j.success) throw new Error(j.error);
       setContracts(p => p.filter(c => c.id !== contractId));
+      setDeletingContract(null);
       console.log('[SUCESSO][Frontend:ClientDetail] Contrato excluído', { contractId });
       notify('Contrato excluído com sucesso', 'success');
     } catch (err) {
@@ -2696,7 +2733,7 @@ function TabFinanceiro({ clientId, clientServices }) {
       if (!j.success) throw new Error(j.error);
       setContracts(p => p.map(c => {
         if (c.id !== contractId) return c;
-        return { ...c, installments: c.installments.map(i => i.id === inst.id ? j.installment : i) };
+        return { ...c, installments: (c.installments || []).map(i => i.id === inst.id ? j.installment : i) };
       }));
       console.log('[SUCESSO][Frontend:ClientDetail] Parcela atualizada', { installmentId: inst.id, status: newStatus });
       notify(newStatus === 'paid' ? 'Parcela marcada como paga' : 'Pagamento da parcela desfeito', 'success');
@@ -2717,8 +2754,10 @@ function TabFinanceiro({ clientId, clientServices }) {
   const numP = parseInt(form.num_installments) || 0;
   const totalPreview = rawMonthly * numP;
 
-  /* ── Available service names from client ── */
-  const availableServices = (clientServices || []).map(s => s.name);
+  /* ── Serviços disponíveis: os PADRÃO da agência (sempre presentes) + os
+        fechados do cliente + qualquer serviço já vinculado a este contrato
+        (inclusive personalizados criados na hora) ── */
+  const availableServices = [...new Set([...DEFAULT_SERVICES, ...serviceNames(clientServices), ...form.services])];
 
   /* ── KPIs globais ── */
   const allInstallments = contracts.flatMap(c => c.installments || []);
@@ -2735,6 +2774,18 @@ function TabFinanceiro({ clientId, clientServices }) {
 
   return (
     <div>
+      <ConfirmModal
+        open={!!deletingContract}
+        onClose={() => setDeletingContract(null)}
+        onConfirm={confirmDeleteContract}
+        variant="danger"
+        title="Excluir contrato"
+        warningTitle="Tem certeza que deseja excluir este contrato?"
+        warningText="Todas as parcelas vinculadas serão excluídas permanentemente."
+        warningCascade={deletingContract ? `${(deletingContract.installments || []).length} parcela(s)` : undefined}
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+      />
       <HowItWorks>
         Cada contrato é vinculado a serviços específicos. O total é calculado como <strong>valor da parcela × quantidade de parcelas</strong>.
         Você pode ter múltiplos contratos por cliente. Parcelas vencidas são marcadas como <strong style={{ color: '#f97316' }}>Atrasadas</strong> automaticamente.
@@ -2834,18 +2885,23 @@ function TabFinanceiro({ clientId, clientServices }) {
             {/* Serviços vinculados */}
             <div style={{ marginBottom: 14 }}>
               <Label>Serviços Vinculados</Label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--text-muted)', marginBottom: 6 }}>
+                Selecione quais serviços fechados pertencem a este contrato. Cada contrato pode ter serviços diferentes.
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
                 {availableServices.map(name => {
                   const sel = form.services.includes(name);
                   return (
                     <button key={name} type="button" onClick={() => toggleFormService(name)} style={{
-                      padding: '5px 10px', borderRadius: 6, cursor: 'pointer', transition: 'all 0.2s',
-                      background: sel ? 'rgba(255,0,51,0.1)' : 'rgba(17,17,17,0.6)',
-                      border: sel ? '1px solid rgba(255,0,51,0.4)' : '1px solid var(--border-default)',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '6px 12px', borderRadius: 20, cursor: 'pointer', transition: 'all 0.15s',
+                      background: sel ? 'rgba(255,0,51,0.1)' : 'rgba(255,255,255,0.02)',
+                      border: sel ? '1px solid rgba(255,0,51,0.4)' : '1px solid rgba(255,255,255,0.08)',
                       color: sel ? '#ff6680' : 'var(--text-muted)',
-                      fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+                      fontFamily: 'var(--font-mono)', fontSize: '0.68rem', fontWeight: sel ? 600 : 400,
                     }}>
-                      {sel ? '✓ ' : ''}{name}
+                      {sel && <span style={{ fontSize: '0.55rem' }}>✓</span>}
+                      {name}
                     </button>
                   );
                 })}
@@ -2854,6 +2910,25 @@ function TabFinanceiro({ clientId, clientServices }) {
                     Nenhum serviço cadastrado na aba Informações.
                   </span>
                 )}
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 }}>
+                <input
+                  value={customSvc}
+                  onChange={e => setCustomSvc(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addFormService(customSvc); } }}
+                  placeholder="Adicionar serviço a este contrato..."
+                  style={{ ...INP, flex: 1 }}
+                />
+                <button type="button" onClick={() => addFormService(customSvc)} style={{
+                  padding: '8px 14px', borderRadius: 6, cursor: 'pointer', whiteSpace: 'nowrap',
+                  border: '1px solid rgba(255,0,51,0.25)', background: 'rgba(255,0,51,0.06)',
+                  color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.66rem', fontWeight: 600,
+                }}>
+                  + Adicionar
+                </button>
+              </div>
+              <div style={{ marginTop: 8, fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+                {form.services.length} serviço(s) vinculado(s) a este contrato
               </div>
             </div>
 
@@ -2909,7 +2984,7 @@ function TabFinanceiro({ clientId, clientServices }) {
       )}
 
       {contracts.map(c => {
-        const svcs = Array.isArray(c.services) ? c.services : (typeof c.services === 'string' ? JSON.parse(c.services || '[]') : []);
+        const svcs = serviceNames(c.services);
         const insts = c.installments || [];
         const cPaid = insts.filter(i => i.status === 'paid').reduce((s, i) => s + parseFloat(i.value), 0);
         const cPending = insts.filter(i => i.status !== 'paid').reduce((s, i) => s + parseFloat(i.value), 0);
@@ -2967,7 +3042,7 @@ function TabFinanceiro({ clientId, clientServices }) {
                       background: 'rgba(255,0,51,0.06)', border: '1px solid rgba(255,0,51,0.15)',
                       fontFamily: 'var(--font-mono)', fontSize: '0.55rem', color: '#ff6680',
                     }}>
-                      {typeof s === 'string' ? s : s.name}
+                      {s}
                     </span>
                   ))}
                 </div>
@@ -2986,7 +3061,7 @@ function TabFinanceiro({ clientId, clientServices }) {
                   }}>
                     Editar
                   </button>
-                  <button onClick={e => { e.stopPropagation(); handleDeleteContract(c.id); }} style={{
+                  <button onClick={e => { e.stopPropagation(); setDeletingContract(c); }} style={{
                     padding: '5px 12px', borderRadius: 5, cursor: 'pointer',
                     border: '1px solid rgba(255,26,77,0.25)', background: 'rgba(255,26,77,0.05)',
                     color: '#ff6680', fontFamily: 'var(--font-mono)', fontSize: '0.62rem',

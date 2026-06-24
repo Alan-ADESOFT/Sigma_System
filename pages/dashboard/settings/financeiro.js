@@ -13,6 +13,7 @@ import DashboardLayout from '../../../components/DashboardLayout';
 import { useAuth } from '../../../hooks/useAuth';
 import { useNotification } from '../../../context/NotificationContext';
 import styles from '../../../assets/style/settingsFinanceiro.module.css';
+import ConfirmModal from '../../../components/comercial/ConfirmModal';
 
 /* ── Constantes ── */
 
@@ -127,6 +128,7 @@ export default function SettingsFinanceiro() {
 
   /* ── Categories state ── */
   const [categories, setCategories] = useState([]);
+  const [confirmState, setConfirmState] = useState(null); // { title, highlight, text, onConfirm }
   const [loadingCats, setLoadingCats] = useState(true);
   const [showCatModal, setShowCatModal] = useState(false);
   const [editingCat, setEditingCat] = useState(null);
@@ -220,20 +222,25 @@ export default function SettingsFinanceiro() {
     }
   }
 
-  async function handleDeleteCat(id) {
-    if (!confirm('Excluir esta categoria?')) return;
-    try {
-      const j = await fetch('/api/finance-categories', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      }).then(r => r.json());
-      if (!j.success) throw new Error(j.error);
-      notify('Categoria excluída', 'success');
-      loadCategories();
-    } catch (err) {
-      notify(err.message || 'Erro ao excluir', 'error');
-    }
+  function handleDeleteCat(id) {
+    setConfirmState({
+      title: 'Excluir categoria',
+      highlight: 'esta categoria',
+      text: 'A categoria será removida dos lançamentos futuros.',
+      onConfirm: async () => {
+        try {
+          const j = await fetch('/api/finance-categories', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+          }).then(r => r.json());
+          if (!j.success) throw new Error(j.error);
+          notify('Categoria excluída', 'success');
+          loadCategories();
+        } catch (err) { notify(err.message || 'Erro ao excluir', 'error'); }
+        setConfirmState(null);
+      },
+    });
   }
 
   /* ── Recurring costs CRUD ── */
@@ -291,16 +298,21 @@ export default function SettingsFinanceiro() {
     }
   }
 
-  async function handleDeleteRec(id) {
-    if (!confirm('Excluir este custo recorrente? Os lançamentos já feitos permanecem no Financeiro.')) return;
-    try {
-      const j = await fetch(`/api/financeiro/recurring/${id}`, { method: 'DELETE' }).then((r) => r.json());
-      if (!j.success) throw new Error(j.error);
-      notify('Custo recorrente excluído', 'success');
-      loadRecurring();
-    } catch (err) {
-      notify(err.message || 'Erro ao excluir', 'error');
-    }
+  function handleDeleteRec(id) {
+    setConfirmState({
+      title: 'Excluir custo recorrente',
+      highlight: 'este custo recorrente',
+      text: 'Os lançamentos já feitos permanecem no Financeiro.',
+      onConfirm: async () => {
+        try {
+          const j = await fetch(`/api/financeiro/recurring/${id}`, { method: 'DELETE' }).then((r) => r.json());
+          if (!j.success) throw new Error(j.error);
+          notify('Custo recorrente excluído', 'success');
+          loadRecurring();
+        } catch (err) { notify(err.message || 'Erro ao excluir', 'error'); }
+        setConfirmState(null);
+      },
+    });
   }
 
   async function toggleRecActive(rec) {
@@ -818,6 +830,19 @@ export default function SettingsFinanceiro() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={!!confirmState}
+        onClose={() => setConfirmState(null)}
+        onConfirm={confirmState?.onConfirm}
+        variant="danger"
+        title={confirmState?.title || 'Excluir'}
+        warningTitle="Tem certeza que deseja excluir"
+        warningHighlight={confirmState?.highlight}
+        warningText={confirmState?.text}
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+      />
     </DashboardLayout>
   );
 }

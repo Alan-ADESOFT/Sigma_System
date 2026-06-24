@@ -43,7 +43,7 @@ export default async function handler(req, res) {
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
       || process.env.NEXT_PUBLIC_APP_URL
-      || `http://localhost:3001`;
+      || `http://localhost:3002`;
     const publicUrl = `${baseUrl.replace(/\/$/, '')}/proposta/${updated.slug}`;
 
     const template = (data.custom_message && String(data.custom_message).trim())

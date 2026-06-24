@@ -60,6 +60,28 @@ async function register() {
   } catch (err) {
     console.error('[ERRO][instrumentation] copy export cleanup:', err.message);
   }
+
+  // Crons comerciais — rodam EM PROCESSO (1x ao boot, defasado, + a cada 24h):
+  //   · limpeza de listas de captação expiradas
+  //   · aviso 24h antes de propostas publicadas expirarem
+  // Os endpoints /api/cron/comercial-* continuam disponíveis pra Vercel Cron
+  // (multi-instance); aqui é o fallback single-instance (dev e prod single).
+  try {
+    const { runCleanupCycle } = require('./comercialCleanup');
+    const { notifyExpiringProposals } = require('../models/comercial/proposalExpiry');
+    const runComercialCrons = async () => {
+      try { await runCleanupCycle(); }
+      catch (err) { console.error('[ERRO][instrumentation] comercialCleanup:', err.message); }
+      try { await notifyExpiringProposals(); }
+      catch (err) { console.error('[ERRO][instrumentation] proposalsExpiring:', err.message); }
+    };
+    // Defasado em 6min pra não competir com startup nem com o cleanup de exports (5min)
+    setTimeout(runComercialCrons, 6 * 60_000);
+    setInterval(runComercialCrons, 24 * 60 * 60_000);
+    console.log('[INFO][instrumentation] crons comerciais agendados (24h)');
+  } catch (err) {
+    console.error('[ERRO][instrumentation] crons comerciais:', err.message);
+  }
 }
 
 module.exports = { register };

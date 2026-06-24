@@ -13,6 +13,7 @@
 
 const { resolveTenantId } = require('../../../infra/get-tenant-id');
 const { query, queryOne } = require('../../../infra/db');
+const { requireAdmin, handleAuthError } = require('../../../lib/api-auth');
 
 /* Cores semânticas dos status para o gráfico de pizza */
 const STATUS_PALETTE = {
@@ -59,6 +60,9 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Produtividade é restrita a admin/god.
+    await requireAdmin(req);
+
     const tenantId = await resolveTenantId(req);
     const period = req.query.period === 'month' ? 'month' : 'week';
     const { from, to } = resolveRange(period);
@@ -71,6 +75,7 @@ export default async function handler(req, res) {
       categoryRows,
       criticalTasks,
       meetingsRow,
+      ataStatsRow,
     ] = await Promise.all([
 
       /* ─── KPIs globais do time ─────────────────────────────────────────── */
@@ -220,6 +225,19 @@ export default async function handler(req, res) {
             AND status != 'cancelled'`,
         [tenantId, from, to]
       ),
+
+      /* ─── Afazeres vindos das Atas (tasks com ata_id) ──────────────────── */
+      queryOne(
+        `SELECT
+           COUNT(*)::int AS total,
+           COUNT(*) FILTER (WHERE status = 'done')::int AS done,
+           COUNT(*) FILTER (WHERE status != 'done' AND due_date IS NOT NULL AND due_date < CURRENT_DATE)::int AS overdue,
+           COUNT(*) FILTER (WHERE status != 'done' AND (due_date IS NULL OR due_date >= CURRENT_DATE))::int AS pending
+         FROM client_tasks
+         WHERE tenant_id = $1 AND ata_id IS NOT NULL
+           AND (due_date BETWEEN $2 AND $3 OR (due_date IS NULL AND created_at::date BETWEEN $2 AND $3))`,
+        [tenantId, from, to]
+      ),
     ]);
 
     /* ─── Pós-processamento ────────────────────────────────────────────── */
@@ -306,9 +324,16 @@ export default async function handler(req, res) {
           assigned_to_name: t.assigned_to_name,
           days_overdue:     Number(t.days_overdue) || 0,
         })),
+        ataStats: {
+          total:   ataStatsRow?.total   || 0,
+          done:    ataStatsRow?.done    || 0,
+          pending: ataStatsRow?.pending || 0,
+          overdue: ataStatsRow?.overdue || 0,
+        },
       },
     });
   } catch (err) {
+    if (handleAuthError(res, err)) return;
     console.error('[ERRO][API:dashboard/productivity]', { error: err.message, stack: err.stack });
     return res.status(500).json({ success: false, error: err.message });
   }

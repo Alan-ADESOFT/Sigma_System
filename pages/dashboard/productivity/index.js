@@ -19,9 +19,11 @@ import {
   BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
+import { useRouter } from 'next/router';
 import DashboardLayout from '../../../components/DashboardLayout';
 import TaskDetailModal from '../../../components/TaskDetailModal';
 import { useNotification } from '../../../context/NotificationContext';
+import { useAuth } from '../../../hooks/useAuth';
 import styles from '../../../assets/style/productivity.module.css';
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
@@ -196,6 +198,15 @@ function ChartSkeleton({ height = 240 }) {
 
 export default function ProductivityPage() {
   const { notify } = useNotification();
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const isAdmin = !!user && (user.role === 'admin' || user.role === 'god');
+
+  // Produtividade é restrita a admin/god — redireciona quem não tem acesso.
+  useEffect(() => {
+    if (!authLoading && user && !isAdmin) router.replace('/dashboard');
+  }, [authLoading, user, isAdmin, router]);
+
   const [period, setPeriod]   = useState('week');
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
@@ -236,8 +247,8 @@ export default function ProductivityPage() {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { fetchAux();  }, [fetchAux]);
+  useEffect(() => { if (isAdmin) fetchData(); }, [fetchData, isAdmin]);
+  useEffect(() => { if (isAdmin) fetchAux();  }, [fetchAux, isAdmin]);
 
   /* ── Derivados ───────────────────────────────────────────────────────── */
 
@@ -247,6 +258,7 @@ export default function ProductivityPage() {
   const status    = data?.statusDistribution  || [];
   const cats      = data?.categoryDistribution || [];
   const critical  = data?.criticalTasks       || [];
+  const ataStats  = data?.ataStats            || {};
 
   const completionTone = useMemo(() => {
     const r = stats.completionRate || 0;
@@ -261,6 +273,17 @@ export default function ProductivityPage() {
   );
 
   const periodLabel = period === 'month' ? 'Este mês' : 'Esta semana';
+
+  // Enquanto o auth carrega, evita flash de dados/skeletons; depois bloqueia não-admin.
+  if (authLoading || (user && !isAdmin)) {
+    return (
+      <DashboardLayout activeTab="productivity">
+        <div style={{ padding: '48px 24px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+          {authLoading ? 'carregando...' : 'Acesso restrito a administradores.'}
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout activeTab="productivity">
@@ -332,6 +355,16 @@ export default function ProductivityPage() {
             </>
           )}
         </div>
+
+        {/* Afazeres vindos das Atas Semanais (subconjunto) */}
+        {!loading && ataStats.total > 0 && (
+          <div className={styles.kpiGrid} style={{ marginTop: 14 }}>
+            <KpiCard label="AFAZERES DE ATAS" value={ataStats.total || 0} />
+            <KpiCard label="ATAS · CONCLUÍDOS" value={ataStats.done || 0} tone="success" />
+            <KpiCard label="ATAS · PENDENTES" value={ataStats.pending || 0} tone="info" />
+            <KpiCard label="ATAS · ATRASADOS" value={ataStats.overdue || 0} tone="error" pulse={(ataStats.overdue || 0) > 0} />
+          </div>
+        )}
 
         <div className="divider-sweep" style={{ margin: '28px 0' }} />
 

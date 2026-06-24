@@ -9,34 +9,7 @@
 import { query, queryOne } from '../../../../infra/db';
 import { getClientById } from '../../../../models/client.model';
 import { resolveTenantId } from '../../../../infra/get-tenant-id';
-
-function buildInstallments(contractId, clientId, monthlyValue, numInstallments, dueDay, startDate) {
-  const installments = [];
-  const base = new Date(startDate);
-
-  for (let i = 0; i < numInstallments; i++) {
-    let iso;
-    if (i === 0) {
-      // Primeira parcela sempre cai na data exata de startDate — permite
-      // que o usuario defina uma data diferente do dia-de-vencimento recorrente.
-      iso = base.toISOString().split('T')[0];
-    } else {
-      const d = new Date(base);
-      d.setMonth(d.getMonth() + i);
-      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-      d.setDate(Math.min(dueDay, lastDay));
-      iso = d.toISOString().split('T')[0];
-    }
-    installments.push({
-      contractId,
-      clientId,
-      num: i + 1,
-      dueDate: iso,
-      value: monthlyValue,
-    });
-  }
-  return installments;
-}
+import { createContractWithInstallments, buildInstallments, sanitizeServices } from '../../../../models/contract.model';
 
 export default async function handler(req, res) {
   console.log('[INFO][API:/api/clients/:id/contracts] Requisição recebida', { method: req.method, query: req.query });
@@ -75,33 +48,11 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: 'monthly_value e start_date são obrigatórios' });
       }
 
-      const mv = parseFloat(monthly_value);
-      const ni = parseInt(num_installments) || 12;
-      const totalValue = mv * ni;
-      const day = Math.min(Math.max(parseInt(due_day) || 10, 1), 31);
-
-      const contract = await queryOne(
-        `INSERT INTO client_contracts
-           (client_id, contract_value, monthly_value, num_installments, frequency, period_months, due_day, start_date, services, notes)
-         VALUES ($1, $2, $3, $4, 'monthly', $4, $5, $6, $7, $8) RETURNING *`,
-        [clientId, totalValue, mv, ni, day, start_date, JSON.stringify(services || []), notes || null]
-      );
-
-      const rows = buildInstallments(contract.id, clientId, mv, ni, day, start_date);
-      for (const r of rows) {
-        await queryOne(
-          `INSERT INTO client_installments (contract_id, client_id, installment_number, due_date, value)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [r.contractId, r.clientId, r.num, r.dueDate, r.value]
-        );
-      }
-
-      const installments = await query(
-        `SELECT * FROM client_installments WHERE contract_id = $1 ORDER BY installment_number ASC`,
-        [contract.id]
-      );
-      console.log('[SUCESSO][API:/api/clients/:id/contracts] Contrato criado', { clientId, contractId: contract.id, installmentCount: installments.length });
-      return res.json({ success: true, contract: { ...contract, installments } });
+      const contract = await createContractWithInstallments(clientId, {
+        monthly_value, num_installments, due_day, start_date, services, notes,
+      });
+      console.log('[SUCESSO][API:/api/clients/:id/contracts] Contrato criado', { clientId, contractId: contract.id, installmentCount: contract.installments.length });
+      return res.json({ success: true, contract });
     }
 
     /* ── PUT — edita contrato ── */
@@ -117,7 +68,9 @@ export default async function handler(req, res) {
       const mv = parseFloat(monthly_value) || parseFloat(existing.monthly_value) || parseFloat(existing.contract_value);
       const ni = parseInt(num_installments) || existing.num_installments || 12;
       const totalValue = mv * ni;
-      const day = due_day !== undefined ? Math.min(Math.max(parseInt(due_day), 1), 31) : existing.due_day;
+      const day = (due_day !== undefined && !isNaN(parseInt(due_day)))
+        ? Math.min(Math.max(parseInt(due_day), 1), 31)
+        : existing.due_day;
       const sd = start_date || existing.start_date;
 
       const contract = await queryOne(
@@ -133,7 +86,7 @@ export default async function handler(req, res) {
            updated_at      = now()
          WHERE id = $1 AND client_id = $10 RETURNING *`,
         [contractId, totalValue, mv, ni, day, sd, notes ?? null, status ?? null,
-         services !== undefined ? JSON.stringify(services) : null, clientId]
+         services !== undefined ? JSON.stringify(sanitizeServices(services)) : null, clientId]
       );
 
       if (needsRegenerate) {

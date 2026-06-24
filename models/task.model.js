@@ -76,6 +76,7 @@ async function getTasksByTenant(tenantId, filters = {}) {
            tn.name  AS assigned_to_name,
            mc.company_name AS client_name,
            (SELECT COUNT(*)::int FROM task_comments c WHERE c.task_id = t.id) AS comment_count,
+           (SELECT COUNT(*)::int FROM task_dependencies td2 WHERE td2.task_id = t.id) AS dep_count,
            EXISTS(
              SELECT 1 FROM task_dependencies td
               JOIN client_tasks dep ON dep.id = td.depends_on_id
@@ -100,6 +101,7 @@ async function getTasksByClient(clientId, tenantId) {
             tc.color AS category_color,
             tn.name  AS assigned_to_name,
             (SELECT COUNT(*)::int FROM task_comments c WHERE c.task_id = t.id) AS comment_count,
+            (SELECT COUNT(*)::int FROM task_dependencies td2 WHERE td2.task_id = t.id) AS dep_count,
             EXISTS(
               SELECT 1 FROM task_dependencies td
                JOIN client_tasks dep ON dep.id = td.depends_on_id
@@ -450,20 +452,16 @@ async function createMany(items, tenantId) {
     params
   );
 
-  // Activity log das tasks criadas (best-effort, não bloqueia)
-  for (const t of created) {
-    if (t.created_by) {
-      try {
-        await query(
-          `INSERT INTO task_activity_log (task_id, tenant_id, actor_id, action)
-           VALUES ($1, $2, $3, 'created')`,
-          [t.id, tenantId, t.created_by]
-        );
-      } catch (err) {
-        console.warn('[WARN][createMany] activity log falhou', { taskId: t.id, error: err.message });
-      }
-    }
-  }
+  // Activity log das tasks criadas (best-effort, em paralelo — evita N queries sequenciais)
+  await Promise.all(
+    created.filter((t) => t.created_by).map((t) =>
+      query(
+        `INSERT INTO task_activity_log (task_id, tenant_id, actor_id, action)
+         VALUES ($1, $2, $3, 'created')`,
+        [t.id, tenantId, t.created_by]
+      ).catch((err) => console.warn('[WARN][createMany] activity log falhou', { taskId: t.id, error: err.message }))
+    )
+  );
 
   console.log('[SUCESSO][createMany]', { created: created.length, failed: failed.length });
   return { created, failed };

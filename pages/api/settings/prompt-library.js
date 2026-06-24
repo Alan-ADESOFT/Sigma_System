@@ -28,6 +28,7 @@ const { DEFAULT_PROPOSAL_DIAGNOSTIC_SYSTEM } = require('../../../models/comercia
 const { DEFAULT_PROPOSAL_OPPORTUNITY_SYSTEM }= require('../../../models/comercial/prompts/proposalOpportunity');
 const { DEFAULT_PROPOSAL_PILLARS_SYSTEM }    = require('../../../models/comercial/prompts/proposalPillars');
 const { DEFAULT_PROPOSAL_PROJECTION_SYSTEM } = require('../../../models/comercial/prompts/proposalProjection');
+const { DEFAULT_PROPOSAL_WHATSAPP_SYSTEM }   = require('../../../models/comercial/prompts/proposalWhatsapp');
 const { DEFAULT_CALL_SCRIPT_SYSTEM }         = require('../../../models/comercial/prompts/callScript');
 const {
   DEFAULT_DIAGNOSIS_PROMPT: ADS_DEFAULT_DIAGNOSIS,
@@ -86,6 +87,7 @@ const COMERCIAL_PROMPTS = [
   { id: 'comercial_proposal_opportunity', title: 'Comercial — Oportunidade da Proposta', description: 'Gera a seção de oportunidade conectando gap → ação Sigma → resultado. Placeholders: {LEAD_CONTEXT}, {LEAD_ANALYSIS}, {DIAGNOSTIC_TEXT}',          defaultPrompt: DEFAULT_PROPOSAL_OPPORTUNITY_SYSTEM },
   { id: 'comercial_proposal_pillars',     title: 'Comercial — Pilares da Proposta',      description: 'Gera os 3 pilares (Estratégia, Conteúdo, Tráfego) personalizados em JSON. Placeholders: {LEAD_CONTEXT}, {LEAD_ANALYSIS}',                            defaultPrompt: DEFAULT_PROPOSAL_PILLARS_SYSTEM },
   { id: 'comercial_proposal_projection',  title: 'Comercial — Projeção da Proposta',     description: 'Gera os 4 cards de stats da seção de projeção em JSON. Placeholder: {LEAD_CONTEXT}',                                                                defaultPrompt: DEFAULT_PROPOSAL_PROJECTION_SYSTEM },
+  { id: 'comercial_proposal_whatsapp',    title: 'Comercial — Mensagem WhatsApp da Proposta', description: 'Gera a mensagem curta de WhatsApp pronta pra enviar com o link. Mantém os marcadores {nome} e {link}. Placeholders: {LEAD_CONTEXT}, {DIAGNOSTIC_TEXT}, {OPPORTUNITY_TEXT}', defaultPrompt: DEFAULT_PROPOSAL_WHATSAPP_SYSTEM },
   { id: 'comercial_call_script',          title: 'Comercial — Script de Cold Call',      description: 'Gera roteiro de ligação fria (abertura + âncora + bridge + CTA + objeções). Variantes: consultive/direct/curious. Placeholders: {LEAD_CONTEXT}, {LEAD_ANALYSIS}, {VARIANT}', defaultPrompt: DEFAULT_CALL_SCRIPT_SYSTEM },
 ];
 

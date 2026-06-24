@@ -1,5 +1,5 @@
 /**
- * pages/api/atas/index.js  — GET lista (opcional ?folderId=), POST cria.
+ * pages/api/atas/index.js  — GET lista (filtro por mês é client-side), POST cria.
  */
 const { requireAuth, handleAuthError } = require('../../../lib/api-auth');
 const model = require('../../../models/ata.model');
@@ -12,7 +12,7 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const atas = await model.listAtas(tenantId, { folderId: req.query.folderId || undefined });
+      const atas = await model.listAtas(tenantId);
       return res.json({ success: true, atas });
     }
     if (req.method === 'POST') {

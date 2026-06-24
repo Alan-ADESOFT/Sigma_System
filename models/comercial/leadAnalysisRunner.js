@@ -19,6 +19,7 @@ const { fetchUrlContent } = require('../../infra/api/scraper');
 const { getSetting } = require('../settings.model');
 const { DEFAULT_LEAD_ANALYSIS_SYSTEM } = require('./prompts/leadAnalysis');
 const { saveAnalysis } = require('./leadAnalysis.model');
+const { logUsage } = require('../copy/tokenUsage');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -153,7 +154,8 @@ async function runLeadAnalysis({ tenantId, lead, emitter, createdBy }) {
       const query = `${lead.company_name} ${lead.city || ''} ${lead.niche || ''}`.trim();
       const searchResult = await deepSearch(
         query,
-        'Resuma em até 800 palavras o que é a empresa, o que ela faz, presença digital (site, redes), e qualquer sinal de marketing/anúncios. Em português do Brasil.'
+        'Resuma em até 800 palavras o que é a empresa, o que ela faz, presença digital (site, redes), e qualquer sinal de marketing/anúncios. Em português do Brasil.',
+        { tenantId, operationType: 'comercial_deep_search', sessionId: lead.id }
       );
       collectedData.deepSearchResult = searchResult.text;
       citations = searchResult.citations || [];
@@ -196,6 +198,7 @@ async function runLeadAnalysis({ tenantId, lead, emitter, createdBy }) {
 
     let fullText = '';
     let modelUsed = '';
+    let usage = null;
 
     try {
       const userMsg = 'Gere a análise completa do lead seguindo exatamente a estrutura especificada (Resumo Executivo, Pontos Positivos, Negativos, de Ataque, Abordagem, Sigma Score).';
@@ -205,7 +208,7 @@ async function runLeadAnalysis({ tenantId, lead, emitter, createdBy }) {
         if (chunk.delta) {
           emit({ type: 'chunk', delta: chunk.delta, fullText });
         }
-        if (chunk.done) break;
+        if (chunk.done) { usage = chunk.usage || null; break; }
       }
     } catch (streamErr) {
       // Erro durante streaming → propaga com contexto claro
@@ -219,6 +222,19 @@ async function runLeadAnalysis({ tenantId, lead, emitter, createdBy }) {
 
     if (!fullText || fullText.trim().length < 50) {
       throw new Error('IA retornou resposta vazia. Tente novamente — se persistir, verifique a chave de API do modelo.');
+    }
+
+    // Tracking de tokens — streaming não auto-loga; registramos o usage do chunk final.
+    if (usage && modelUsed) {
+      logUsage({
+        tenantId,
+        modelUsed,
+        provider: modelUsed.toLowerCase().includes('claude') ? 'anthropic' : 'openai',
+        operationType: 'comercial_lead_analysis',
+        sessionId: lead?.id || null,
+        tokensInput:  usage.input  || 0,
+        tokensOutput: usage.output || 0,
+      });
     }
 
     // 6. Parse + save

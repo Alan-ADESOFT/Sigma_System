@@ -1096,19 +1096,11 @@ ALTER TABLE client_tasks ADD COLUMN IF NOT EXISTS ata_id TEXT REFERENCES atas(id
 CREATE INDEX IF NOT EXISTS idx_client_tasks_ata ON client_tasks(ata_id);
 
 -- ============================================================
--- 40. TASK_TEMPLATES (automação de tasks)
+-- 40. TASK_TEMPLATES — REMOVIDA (aba "Automação" descontinuada, jun/2026).
+-- A funcionalidade (templates manuais de tarefas) foi retirada. Mantido o DROP
+-- idempotente pra limpar a tabela órfã ao rodar o schema.
 -- ============================================================
-CREATE TABLE IF NOT EXISTS task_templates (
-    id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    name        TEXT NOT NULL,
-    trigger     TEXT NOT NULL,
-    tasks_json  JSONB NOT NULL DEFAULT '[]',
-    is_active   BOOLEAN NOT NULL DEFAULT true,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_task_templates_tenant ON task_templates(tenant_id);
+DROP TABLE IF EXISTS task_templates CASCADE;
 
 -- ============================================================
 -- 41. TASK_BOT_CONFIG (configuração do bot de lembrete)
@@ -1616,7 +1608,7 @@ BEGIN
         'onboarding_progress','onboarding_stage_responses',
         'client_form_summaries',
         'instagram_accounts','instagram_scheduled_posts',
-        'task_comments','meetings','task_templates','task_bot_config',
+        'task_comments','meetings','task_bot_config',
         'task_recurrences','user_task_preferences',
         'support_modules','support_lessons',
         'finance_categories','recurring_costs',

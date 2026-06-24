@@ -384,9 +384,12 @@ async function bulkImportFromList(tenantId, listId, leadIds, createdBy = null) {
   const start = await getColumnByRole(tenantId, 'start');
   if (!start) throw new Error('Coluna de início não encontrada após bootstrap');
 
+  // imported_to_pipeline = false evita criar card duplicado se o mesmo lead
+  // for importado 2x (duplo-clique ou import manual + "importar todos" concorrentes).
   const sourceLeads = await query(
     `SELECT * FROM comercial_leads
-      WHERE tenant_id = $1 AND list_id = $2 AND id = ANY($3::text[])`,
+      WHERE tenant_id = $1 AND list_id = $2 AND id = ANY($3::text[])
+        AND imported_to_pipeline = false`,
     [tenantId, listId, leadIds]
   );
 

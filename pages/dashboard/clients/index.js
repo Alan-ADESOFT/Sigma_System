@@ -314,10 +314,11 @@ function AddClientModal({ onClose, notify }) {
     DEFAULT_SERVICES.map((name, i) => ({ id: i, name, selected: true }))
   );
   const [customSvc, setCustomSvc] = useState('');
-  const [fin, setFin] = useState({
-    installment_value: '', num_installments: '12', first_due_date: '',
+  const [fin, setFin] = useState(() => ({
+    installment_value: '', num_installments: '12',
+    first_due_date: new Date().toISOString().split('T')[0], // default: hoje
     different_first_due: false, regular_due_day: '10',
-  });
+  }));
 
   const [errs,   setErrs  ] = useState({});
   const [saving, setSaving] = useState(false);
@@ -414,6 +415,7 @@ function AddClientModal({ onClose, notify }) {
           console.log('[SUCESSO][Frontend:Clients] Contrato criado com sucesso', { clientId, installment_value: val, total: val * nInst });
         } else {
           console.error('[ERRO][Frontend:Clients] Falha ao criar contrato', { error: contractJson.error });
+          notify('Cliente criado, mas o contrato não pôde ser gerado: ' + (contractJson.error || 'erro desconhecido'), 'error');
         }
       }
 

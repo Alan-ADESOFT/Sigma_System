@@ -13,6 +13,7 @@
 
 import { resolveTenantId } from '../../../../../../infra/get-tenant-id';
 const { verifyToken } = require('../../../../../../lib/auth');
+const { checkRateLimit, logRateLimitEvent } = require('../../../../../../infra/rateLimit');
 const { queryOne, query } = require('../../../../../../infra/db');
 const { createNotification } = require('../../../../../../models/clientForm');
 const planModel = require('../../../../../../models/contentPlanning/plan');
@@ -111,6 +112,19 @@ export default async function handler(req, res) {
     }
 
     const creativeCount = Math.max(3, Math.min(20, Number(req.body?.creativeCount) || 8));
+
+    // Rate limit — chamada de IA cara ('strong', 6000 tok). Evita disparo em loop.
+    const maxPerDay = Number(process.env.COMERCIAL_RATE_LIMIT_AUTO_PLAN_PER_DAY) || 20;
+    const rl = await checkRateLimit(tenantId, 'comercial_auto_plan', maxPerDay, 24 * 60);
+    if (!rl.ok) {
+      return res.status(429).json({
+        success: false,
+        error: `Limite diário (${maxPerDay} planejamentos/dia) atingido. Tente em ${Math.ceil(rl.resetIn / 60)} min.`,
+        retryAfter: rl.resetIn,
+      });
+    }
+    // Conta o evento já (o trabalho roda em background e pode demorar).
+    await logRateLimitEvent(tenantId, 'comercial_auto_plan', { leadId, creativeCount });
 
     // Resposta imediata — IA + persistência rodam em background
     res.status(202).json({ success: true, message: 'Geração em andamento', leadId });

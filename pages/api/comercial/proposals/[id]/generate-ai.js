@@ -66,16 +66,9 @@ export default async function handler(req, res) {
     const jobId = `proposal_${id}_${Date.now()}`;
     const emitter = createJobEmitter(jobId);
 
-    // Marca já como gerada (otimista). Se a geração falhar o usuário pode
-    // resetar o flag manualmente via PUT ou enviando { force: true }.
-    try {
-      await proposals.updateProposalData(id, tenantId, {
-        ai_generated_at: new Date().toISOString(),
-      });
-    } catch (markErr) {
-      console.warn('[WARN][generate-ai] não conseguiu marcar ai_generated_at', { error: markErr.message });
-    }
-
+    // O flag ai_generated_at é marcado APENAS quando a geração conclui com
+    // sucesso (dentro de generateProposalContent) — assim uma falha não trava
+    // a proposta. A trava anti-regeração continua valendo após o sucesso.
     setImmediate(() => {
       generateProposalContent({ tenantId, proposalId: id, prospect, leadAnalysisText, sections, emitter })
         .catch(err => console.error('[ERRO][generate-ai fire-and-forget]', { error: err.message }));

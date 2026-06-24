@@ -45,6 +45,16 @@ const OP_LABELS = {
   image_template_describe:                'Imagem — Vision (Template Inspiração)',
   image_template_categorize:              'Imagem — Auto-categorizador',
   image_ref_classifier:                   'Imagem — Classificador de Refs',
+  // ── Comercial — Propostas + Pipeline ──────────────────────────────────
+  comercial_lead_analysis:                'Comercial — Análise de Lead',
+  comercial_deep_search:                  'Comercial — Busca Web (Análise)',
+  comercial_proposal_diagnostic:          'Comercial — Diagnóstico (Proposta)',
+  comercial_proposal_opportunity:         'Comercial — Oportunidade (Proposta)',
+  comercial_proposal_pillars:             'Comercial — Pilares (Proposta)',
+  comercial_proposal_projection:          'Comercial — Projeção (Proposta)',
+  comercial_proposal_whatsapp:            'Comercial — Mensagem WhatsApp (Proposta)',
+  comercial_call_script:                  'Comercial — Script de Cold Call',
+  comercial_auto_plan:                    'Comercial — Auto-plano de Lead',
   general: 'Outros',
 };
 
@@ -79,6 +89,16 @@ const OP_COLORS = {
   image_template_describe:                { bg: 'rgba(20,184,166,0.08)',  color: '#14b8a6' },
   image_template_categorize:              { bg: 'rgba(20,184,166,0.05)',  color: '#0d9488' },
   image_ref_classifier:                   { bg: 'rgba(99,102,241,0.06)',  color: '#6366f1' },
+  // Comercial — proposta em tons de rosa/crimson; WhatsApp em verde; pipeline em âmbar
+  comercial_lead_analysis:                { bg: 'rgba(244,63,94,0.10)',   color: '#fb7185' },
+  comercial_deep_search:                  { bg: 'rgba(249,115,22,0.08)',  color: '#f97316' },
+  comercial_proposal_diagnostic:          { bg: 'rgba(244,63,94,0.08)',   color: '#f43f5e' },
+  comercial_proposal_opportunity:         { bg: 'rgba(244,63,94,0.06)',   color: '#e11d48' },
+  comercial_proposal_pillars:             { bg: 'rgba(244,63,94,0.05)',   color: '#be123c' },
+  comercial_proposal_projection:          { bg: 'rgba(251,113,133,0.07)', color: '#fb7185' },
+  comercial_proposal_whatsapp:            { bg: 'rgba(34,197,94,0.08)',   color: '#22c55e' },
+  comercial_call_script:                  { bg: 'rgba(245,158,11,0.06)',  color: '#f59e0b' },
+  comercial_auto_plan:                    { bg: 'rgba(245,158,11,0.04)',  color: '#d97706' },
   general: { bg: 'rgba(82,82,82,0.08)', color: '#525252' },
 };
 

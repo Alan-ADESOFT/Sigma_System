@@ -19,6 +19,12 @@ const { DEFAULT_PROPOSAL_DIAGNOSTIC_SYSTEM }  = require('./prompts/proposalDiagn
 const { DEFAULT_PROPOSAL_OPPORTUNITY_SYSTEM } = require('./prompts/proposalOpportunity');
 const { DEFAULT_PROPOSAL_PILLARS_SYSTEM }     = require('./prompts/proposalPillars');
 const { DEFAULT_PROPOSAL_PROJECTION_SYSTEM }  = require('./prompts/proposalProjection');
+const { DEFAULT_PROPOSAL_WHATSAPP_SYSTEM }    = require('./prompts/proposalWhatsapp');
+
+// Fallback de mensagem WhatsApp — usado se a IA falhar. Mantém {nome} e {link}.
+const WHATSAPP_FALLBACK = 'Olá {nome}, montei uma proposta SIGMA personalizada pro seu negócio. '
+  + 'Dá uma olhada com calma pelo link: {link}\n\n'
+  + 'Qualquer dúvida, é só me chamar por aqui.';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -100,6 +106,48 @@ async function generateProjection({ tenantId, leadContext }) {
   return { stats: parsed.stats, disclaimer: parsed.disclaimer || '' };
 }
 
+/**
+ * Limpa a saída de texto livre da IA: remove fences markdown e aspas que
+ * envolvem a mensagem inteira. Não toca nos marcadores {nome}/{link}.
+ */
+function sanitizePlainText(raw) {
+  let t = String(raw || '').trim();
+  t = t.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '').trim();
+  // Remove aspas que envolvem a mensagem inteira (a IA às vezes "cita" o texto)
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith('“') && t.endsWith('”'))) {
+    t = t.slice(1, -1).trim();
+  }
+  return t;
+}
+
+/**
+ * Gera a mensagem de WhatsApp pronta pra copiar. Mantém os marcadores
+ * {nome} e {link} no texto — substituídos na hora de copiar/publicar.
+ * Nunca lança: cai no fallback se a IA falhar ou devolver algo inválido.
+ */
+async function generateWhatsappMessage({ tenantId, leadContext, diagnosticText, opportunityText }) {
+  try {
+    const sys = await loadPromptOverride(tenantId, 'comercial_proposal_whatsapp', DEFAULT_PROPOSAL_WHATSAPP_SYSTEM);
+    const prompt = sys
+      .replace('{LEAD_CONTEXT}',     leadContext)
+      .replace('{DIAGNOSTIC_TEXT}',  diagnosticText  || '(diagnóstico indisponível)')
+      .replace('{OPPORTUNITY_TEXT}', opportunityText || '(oportunidade indisponível)');
+    const userMsg = 'Escreva a mensagem de WhatsApp. Mantenha {nome} e {link} literais. Apenas o texto.';
+    const result = await runCompletion('medium', prompt, userMsg, 400, { tenantId, operationType: 'comercial_proposal_whatsapp' });
+
+    let msg = sanitizePlainText(result.text);
+    if (!msg) return WHATSAPP_FALLBACK;
+    // Garante o link — se a IA esqueceu o marcador, anexa numa linha própria.
+    if (!/\{link\}/i.test(msg)) msg += `\n\nAcesse pelo link: {link}`;
+    // Garante saudação personalizável.
+    if (!/\{nome\}/i.test(msg)) msg = `Olá {nome},\n\n${msg}`;
+    return msg;
+  } catch (err) {
+    console.warn('[WARN][ProposalGenerator] WhatsApp via IA falhou — usando fallback', { error: err.message });
+    return WHATSAPP_FALLBACK;
+  }
+}
+
 // ─── Orquestrador ────────────────────────────────────────────────────────────
 
 const ALL_SECTIONS = ['diagnostic', 'opportunity', 'pillars', 'projection'];
@@ -115,7 +163,9 @@ async function generateProposalContent({
   }
 
   const leadContext = buildProspectContext(prospect);
-  const total = sections.length;
+  // Geração "completa" (botão Gerar tudo com IA) também produz a mensagem WhatsApp.
+  const isFullRun = ALL_SECTIONS.every(s => sections.includes(s));
+  const total = sections.length + (isFullRun ? 1 : 0);
   let step = 0;
   const result = {};
 
@@ -162,6 +212,25 @@ async function generateProposalContent({
       });
       emit({ type: 'phase_done', phase: 'projection', stats: proj.stats, disclaimer: proj.disclaimer });
     }
+
+    if (isFullRun) {
+      step++;
+      emit({ type: 'phase', phase: 'whatsapp', step, total, message: 'Gerando mensagem de WhatsApp...' });
+      const whatsappMessage = await generateWhatsappMessage({
+        tenantId, leadContext,
+        diagnosticText:  result.diagnostic_text  || '',
+        opportunityText: result.opportunity_text || '',
+      });
+      result.custom_message = whatsappMessage;
+      await updateProposalData(proposalId, tenantId, { custom_message: whatsappMessage });
+      emit({ type: 'phase_done', phase: 'whatsapp', custom_message: whatsappMessage });
+    }
+
+    // Marca como gerada SOMENTE após sucesso — preserva a trava anti-regeração
+    // (economia de tokens) sem prender a proposta se algo falhar no meio.
+    const generatedAt = new Date().toISOString();
+    result.ai_generated_at = generatedAt;
+    await updateProposalData(proposalId, tenantId, { ai_generated_at: generatedAt });
 
     emit({ type: 'done', proposalData: result });
     console.log('[SUCESSO][ProposalGenerator] Concluído', { proposalId });
@@ -221,4 +290,6 @@ module.exports = {
   generateProposalContent,
   // Helpers expostos pra reuso/teste
   safeParseJson,
+  generateWhatsappMessage,
+  WHATSAPP_FALLBACK,
 };

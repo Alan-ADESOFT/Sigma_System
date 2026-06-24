@@ -31,6 +31,21 @@ function resolveMessage(template, inst) {
   return msg;
 }
 
+/* Normaliza services do contrato (JSONB: array de strings, objetos {id,name},
+   string JSON, ou com nulls de dados legados) → array de nomes únicos. */
+function serviceNames(raw) {
+  let arr = raw;
+  if (typeof arr === 'string') {
+    try { arr = JSON.parse(arr || '[]'); } catch { arr = []; }
+  }
+  if (!Array.isArray(arr)) return [];
+  const names = arr
+    .map(s => (typeof s === 'string' ? s : (s && typeof s === 'object' ? s.name : null)))
+    .filter(s => typeof s === 'string' && s.trim())
+    .map(s => s.trim());
+  return [...new Set(names)];
+}
+
 const overlay = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)',
   display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16,
@@ -92,6 +107,21 @@ export default function ChargeModal({ installment, template, onClose, onSent }) 
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: 2 }}>
               {installment.company_name} · Parcela #{installment.installment_number}
             </div>
+            {(() => {
+              const svcs = serviceNames(installment.contract_services);
+              if (svcs.length === 0) return null;
+              return (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                  {svcs.map((s, i) => (
+                    <span key={i} style={{
+                      padding: '2px 7px', borderRadius: 4,
+                      background: 'rgba(255,0,51,0.06)', border: '1px solid rgba(255,0,51,0.15)',
+                      fontFamily: 'var(--font-mono)', fontSize: '0.55rem', color: '#ff6680',
+                    }}>{s}</span>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
           <button onClick={onClose} style={{
             border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer',

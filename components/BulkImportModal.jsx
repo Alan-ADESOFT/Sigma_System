@@ -54,8 +54,6 @@ export default function BulkImportModal({
   const { notify } = useNotification();
   const fileInputRef = useRef(null);
 
-  const [mode, setMode] = useState('paste'); // paste | file
-  const [text, setText] = useState('');
   const [file, setFile] = useState(null);
   const [referenceWeek, setReferenceWeek] = useState(currentWeekIso());
   const [loading, setLoading] = useState(false);
@@ -81,31 +79,17 @@ export default function BulkImportModal({
   }
 
   async function handleProcess() {
-    if (mode === 'paste' && !text.trim()) {
-      notify('Cole o texto ou anexe um arquivo', 'warning');
-      return;
-    }
-    if (mode === 'file' && !file) {
-      notify('Selecione um arquivo', 'warning');
+    if (!file) {
+      notify('Selecione um arquivo da ata', 'warning');
       return;
     }
 
     setLoading(true);
     try {
-      let res;
-      if (mode === 'paste') {
-        res = await fetch('/api/tasks/bulk-import/parse', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: text.trim(), referenceWeek }),
-        });
-      } else {
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('referenceWeek', referenceWeek);
-        if (text.trim()) fd.append('text', text.trim());
-        res = await fetch('/api/tasks/bulk-import/parse', { method: 'POST', body: fd });
-      }
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('referenceWeek', referenceWeek);
+      const res = await fetch('/api/tasks/bulk-import/parse', { method: 'POST', body: fd });
 
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Falha no parse');
@@ -151,7 +135,7 @@ export default function BulkImportModal({
           <div>
             <h2 className={styles.headerTitle}>Importar Ata — Distribuição via IA</h2>
             <div className={styles.headerSubtitle}>
-              Cole a ata ou anexe um arquivo. A IA distribui entre o time.
+              Anexe o arquivo da ata (.txt, .md, .docx, .pdf). A IA distribui entre o time.
             </div>
           </div>
           <button className={styles.closeBtn} type="button" onClick={onClose} disabled={loading} title="Fechar">
@@ -160,52 +144,22 @@ export default function BulkImportModal({
         </div>
 
         <div className={styles.body}>
-          <div className={styles.tabs}>
-            <button
-              type="button"
-              className={`${styles.tab} ${mode === 'paste' ? styles.tabActive : ''}`}
-              onClick={() => setMode('paste')}
-            >
-              Colar texto
-            </button>
-            <button
-              type="button"
-              className={`${styles.tab} ${mode === 'file' ? styles.tabActive : ''}`}
-              onClick={() => setMode('file')}
-            >
-              Enviar arquivo
-            </button>
-          </div>
-
-          {mode === 'paste' ? (
-            <div>
-              <label className={styles.label}>Texto bruto</label>
-              <textarea
-                className={styles.textarea}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Cole aqui a ata da reunião, lista de bullets, ou parágrafo livre…"
-                disabled={loading}
+          <div>
+            <label className={styles.label}>Arquivo da ata (.txt, .md, .docx, .pdf — máx 5MB)</label>
+            <div className={styles.fileBox} onClick={() => fileInputRef.current?.click()}>
+              <IconUpload />
+              <span className={styles.fileBoxLabel}>Clique para selecionar ou arraste o arquivo</span>
+              <span className={styles.fileBoxHint}>Aceita texto, markdown, docx, pdf</span>
+              {file && <span className={styles.fileBoxFile}>{file.name}</span>}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt,.md,.docx,.pdf"
+                style={{ display: 'none' }}
+                onChange={handleFilePick}
               />
             </div>
-          ) : (
-            <div>
-              <label className={styles.label}>Arquivo (.txt, .md, .docx, .pdf — máx 5MB)</label>
-              <div className={styles.fileBox} onClick={() => fileInputRef.current?.click()}>
-                <IconUpload />
-                <span className={styles.fileBoxLabel}>Clique para selecionar ou arraste o arquivo</span>
-                <span className={styles.fileBoxHint}>Aceita texto, markdown, docx, pdf</span>
-                {file && <span className={styles.fileBoxFile}>{file.name}</span>}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".txt,.md,.docx,.pdf"
-                  style={{ display: 'none' }}
-                  onChange={handleFilePick}
-                />
-              </div>
-            </div>
-          )}
+          </div>
 
           <div>
             <label className={styles.label}>Semana de referência</label>

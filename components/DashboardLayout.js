@@ -61,7 +61,9 @@ function canSeeItem(user, item) {
   if (!user) return false;
   if (user.role === 'god') return true;
   if (user.role === 'admin') return item.minRole !== 'god';
-  // role = 'user' → verifica cargo personalizado
+  // role = 'user' → cargo personalizado. Nunca vê páginas restritas a admin/god,
+  // mesmo que estejam em allowedPages (evita link visível que só redireciona).
+  if (item.minRole && item.minRole !== 'user') return false;
   if (!user.allowedPages || !Array.isArray(user.allowedPages)) return false;
   return user.allowedPages.includes(item.href);
 }
@@ -82,11 +84,10 @@ const NAV_SECTIONS = [
   {
     category: 'ORGANIZAÇÃO',
     items: [
-      { href: '/dashboard/productivity',         label: 'Produtividade',         tag: '03', icon: 'barChart',  minRole: 'user' },
+      { href: '/dashboard/productivity',         label: 'Produtividade',         tag: '03', icon: 'barChart',  minRole: 'admin' },
       { href: '/dashboard/tasks',                label: 'Tarefas',               tag: '04', icon: 'clipboard', minRole: 'user' },
       { href: '/dashboard/meetings',             label: 'Calendário',            tag: '05', icon: 'calendar',  minRole: 'user' },
       { href: '/dashboard/atas',                 label: 'Atas Semanais',         tag: '05b', icon: 'fileText', minRole: 'user' },
-      { href: '/dashboard/task-automation',      label: 'Automação',             tag: '06', icon: 'zap',       minRole: 'admin' },
     ],
   },
   {
