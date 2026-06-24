@@ -2,6 +2,8 @@
 
 Sistema completo de marketing estrategico alimentado por agentes de IA. Gera diagnosticos, analises de concorrentes, perfis de publico, avatares e posicionamento de marca de forma automatizada.
 
+> 🚧 **Em desenvolvimento ativo — ainda vamos finalizar.** Esta versão no GitHub é um snapshot de trabalho (não a versão final); mais alterações e ajustes estão a caminho.
+
 ---
 
 ## Arquitetura
